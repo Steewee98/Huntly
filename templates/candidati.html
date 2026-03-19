@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Inserimento Candidati — SABIA{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">Inserimento Manuale Candidati</h1>
+    <p class="page-subtitle">Aggiungi un nuovo candidato al database</p>
+</div>
+
+<div class="card" style="max-width: 700px;">
+    <div class="card-body">
+        <form method="POST" action="{{ url_for('candidati.inserisci') }}" id="form-candidato">
+
+            <!-- Nome e Cognome -->
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label" for="nome">Nome <span class="required">*</span></label>
+                    <input type="text" id="nome" name="nome" class="form-input"
+                           placeholder="Es. Mario" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="cognome">Cognome <span class="required">*</span></label>
+                    <input type="text" id="cognome" name="cognome" class="form-input"
+                           placeholder="Es. Rossi" required>
+                </div>
+            </div>
+
+            <!-- Ruolo e Azienda -->
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label" for="ruolo_attuale">Ruolo Attuale</label>
+                    <input type="text" id="ruolo_attuale" name="ruolo_attuale" class="form-input"
+                           placeholder="Es. Private Banker">
+                </div>
+                <div class="form-group">
+                    <label class="form-label" for="azienda">Azienda</label>
+                    <input type="text" id="azienda" name="azienda" class="form-input"
+                           placeholder="Es. Banca XYZ">
+                </div>
+            </div>
+
+            <!-- Anni esperienza -->
+            <div class="form-group" style="max-width: 200px;">
+                <label class="form-label" for="anni_esperienza">Anni di Esperienza</label>
+                <input type="number" id="anni_esperienza" name="anni_esperienza"
+                       class="form-input" min="0" max="50" placeholder="0">
+            </div>
+
+            <!-- Tipo profilo -->
+            <div class="form-group">
+                <label class="form-label">Tipo di Profilo</label>
+                <div class="profilo-toggle">
+                    <label class="toggle-option selected" id="label-profilo-a">
+                        <input type="radio" name="tipo_profilo" value="A" checked>
+                        <div class="toggle-content">
+                            <span class="toggle-badge">Profilo A</span>
+                            <span class="toggle-desc">40–65 anni · Consulenza · P.IVA</span>
+                        </div>
+                    </label>
+                    <label class="toggle-option" id="label-profilo-b">
+                        <input type="radio" name="tipo_profilo" value="B">
+                        <div class="toggle-content">
+                            <span class="toggle-badge">Profilo B</span>
+                            <span class="toggle-desc">Under 35 · Esperienza Bancaria</span>
+                        </div>
+                    </label>
+                </div>
+            </div>
+
+            <!-- Note -->
+            <div class="form-group">
+                <label class="form-label" for="note">Note</label>
+                <textarea id="note" name="note" class="form-textarea" rows="4"
+                          placeholder="Note aggiuntive sul candidato, fonti di provenienza, ecc."></textarea>
+            </div>
+
+            <div class="form-actions">
+                <button type="submit" class="btn btn-primary btn-lg">
+                    Salva e Vai alla Valutazione &#8594;
+                </button>
+                <a href="{{ url_for('pipeline.index') }}" class="btn btn-outline">
+                    Vai alla Pipeline
+                </a>
+            </div>
+
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Gestione toggle selezione tipo profilo
+document.querySelectorAll('input[name="tipo_profilo"]').forEach(radio => {
+    radio.addEventListener('change', function() {
+        document.querySelectorAll('.toggle-option').forEach(el => el.classList.remove('selected'));
+        this.closest('.toggle-option').classList.add('selected');
+    });
+});
+</script>
+{% endblock %}

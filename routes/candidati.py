@@ -1,0 +1,95 @@
+"""
+Modulo 2 — Inserimento Manuale Candidati.
+Form per aggiungere candidati al database.
+"""
+
+import json
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+from database import get_db
+
+# Blueprint per il modulo inserimento candidati
+candidati_bp = Blueprint("candidati", __name__)
+
+
+@candidati_bp.route("/candidati")
+def index():
+    """Pagina del form di inserimento manuale."""
+    return render_template("candidati.html")
+
+
+@candidati_bp.route("/candidati/inserisci", methods=["POST"])
+def inserisci():
+    """Salva il nuovo candidato nel database e reindirizza alla valutazione."""
+    nome = request.form.get("nome", "").strip()
+    cognome = request.form.get("cognome", "").strip()
+    ruolo_attuale = request.form.get("ruolo_attuale", "").strip()
+    azienda = request.form.get("azienda", "").strip()
+    anni_esperienza = request.form.get("anni_esperienza", 0)
+    note = request.form.get("note", "").strip()
+    tipo_profilo = request.form.get("tipo_profilo", "A")
+
+    if not nome or not cognome:
+        flash("Nome e cognome sono obbligatori.", "errore")
+        return redirect(url_for("candidati.index"))
+
+    db = get_db()
+    cur = db.execute(
+        """INSERT INTO candidati
+           (nome, cognome, ruolo_attuale, azienda, anni_esperienza, note, tipo_profilo)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        (nome, cognome, ruolo_attuale, azienda, anni_esperienza, note, tipo_profilo),
+    )
+    db.commit()
+    nuovo_id = cur.lastrowid
+    db.close()
+
+    # Passa automaticamente al modulo valutazione con i dati del candidato
+    return redirect(url_for("valutazione.index", candidato_id=nuovo_id))
+
+
+@candidati_bp.route("/candidati/da_cronologia", methods=["POST"])
+def da_cronologia():
+    """
+    Salva un candidato partendo da una valutazione in cronologia.
+    Restituisce JSON — usato via AJAX dalla pagina valutazione.
+    """
+    dati = request.get_json()
+    nome = dati.get("nome", "").strip()
+    cognome = dati.get("cognome", "").strip()
+    ruolo_attuale = dati.get("ruolo_attuale", "").strip()
+    azienda = dati.get("azienda", "").strip()
+    anni_esperienza = dati.get("anni_esperienza") or 0
+    note = dati.get("note", "").strip()
+    tipo_profilo = dati.get("tipo_profilo", "A")
+    valutazione_id = dati.get("valutazione_id")
+
+    if not nome or not cognome:
+        return jsonify({"errore": "Nome e cognome sono obbligatori"}), 400
+
+    db = get_db()
+
+    # Recupera i dati della valutazione per copiarli sul candidato
+    val = None
+    if valutazione_id:
+        val = db.execute(
+            "SELECT * FROM valutazioni WHERE id = ?", (valutazione_id,)
+        ).fetchone()
+
+    cur = db.execute(
+        """INSERT INTO candidati
+           (nome, cognome, ruolo_attuale, azienda, anni_esperienza, note, tipo_profilo,
+            punteggio, analisi, spunti, messaggio_outreach)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (
+            nome, cognome, ruolo_attuale, azienda, anni_esperienza, note, tipo_profilo,
+            val["punteggio"] if val else None,
+            val["analisi"] if val else None,
+            val["spunti"] if val else None,
+            val["messaggio_outreach"] if val else None,
+        ),
+    )
+    db.commit()
+    nuovo_id = cur.lastrowid
+    db.close()
+
+    return jsonify({"successo": True, "candidato_id": nuovo_id})

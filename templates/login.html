@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login — Recruiter Assistant</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background: var(--grigio-bg);
+        }
+
+        .login-box {
+            background: white;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow-lg);
+            padding: 2.5rem 2rem;
+            width: 100%;
+            max-width: 400px;
+        }
+
+        .login-logo {
+            display: flex;
+            align-items: center;
+            gap: 0.875rem;
+            margin-bottom: 2rem;
+            justify-content: center;
+        }
+
+        .login-logo-icon {
+            width: 46px;
+            height: 46px;
+            background: var(--azzurro);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 1.4rem;
+            color: white;
+        }
+
+        .login-logo-text .logo-title {
+            display: block;
+            font-weight: 700;
+            font-size: 1.15rem;
+            color: var(--blu-scuro);
+        }
+
+        .login-logo-text .logo-sub {
+            display: block;
+            font-size: 0.75rem;
+            color: var(--grigio-testo);
+        }
+
+        .login-title {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--blu-scuro);
+            margin-bottom: 0.25rem;
+            text-align: center;
+        }
+
+        .login-sub {
+            font-size: 0.875rem;
+            color: var(--grigio-testo);
+            text-align: center;
+            margin-bottom: 1.75rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-box">
+        <div class="login-logo">
+            <div class="login-logo-icon">R</div>
+            <div class="login-logo-text">
+                <span class="logo-title">Recruiter</span>
+                <span class="logo-sub">Assistant</span>
+            </div>
+        </div>
+
+        <h1 class="login-title">Accedi</h1>
+        <p class="login-sub">Inserisci le tue credenziali per continuare</p>
+
+        {% if errore %}
+        <div class="alert alert-errore">{{ errore }}</div>
+        {% endif %}
+
+        <form method="POST">
+            <div class="form-group">
+                <label class="form-label" for="username">Username</label>
+                <input type="text" id="username" name="username" class="form-input"
+                       placeholder="Username" autofocus autocomplete="username">
+            </div>
+            <div class="form-group">
+                <label class="form-label" for="password">Password</label>
+                <input type="password" id="password" name="password" class="form-input"
+                       placeholder="Password" autocomplete="current-password">
+            </div>
+            <div class="form-actions" style="margin-top:1.5rem;">
+                <button type="submit" class="btn btn-primary btn-lg" style="width:100%;justify-content:center;">
+                    Accedi
+                </button>
+            </div>
+        </form>
+    </div>
+
+    <script>
+        // Submit con Enter
+        document.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') {
+                e.target.closest('form')?.submit();
+            }
+        });
+    </script>
+</body>
+</html>

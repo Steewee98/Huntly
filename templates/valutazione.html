@@ -1,0 +1,750 @@
+{% extends "base.html" %}
+{% block title %}Valutazione Candidati — SABIA{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">Valutazione Candidati</h1>
+    <p class="page-subtitle">Analizza un profilo LinkedIn con intelligenza artificiale</p>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <!-- Dati candidato precompilati (se si arriva dal modulo inserimento) -->
+        {% if candidato %}
+        <div class="alert alert-info">
+            <strong>Candidato:</strong> {{ candidato.nome }} {{ candidato.cognome }}
+            {% if candidato.ruolo_attuale %} — {{ candidato.ruolo_attuale }}{% endif %}
+            {% if candidato.azienda %} @ {{ candidato.azienda }}{% endif %}
+        </div>
+        <input type="hidden" id="candidato-id" value="{{ candidato.id }}">
+        {% endif %}
+
+        <!-- Selezione tipo profilo -->
+        <div class="form-group">
+            <label class="form-label">Tipo di Profilo Target</label>
+            <div class="profilo-toggle">
+                <label class="toggle-option {% if not candidato or candidato.tipo_profilo == 'A' %}selected{% endif %}" id="label-profilo-a">
+                    <input type="radio" name="tipo_profilo" value="A"
+                           {% if not candidato or candidato.tipo_profilo == 'A' %}checked{% endif %}>
+                    <div class="toggle-content">
+                        <span class="toggle-badge">Profilo A</span>
+                        <span class="toggle-desc">40–65 anni · Consulenza · P.IVA</span>
+                    </div>
+                </label>
+                <label class="toggle-option {% if candidato and candidato.tipo_profilo == 'B' %}selected{% endif %}" id="label-profilo-b">
+                    <input type="radio" name="tipo_profilo" value="B"
+                           {% if candidato and candidato.tipo_profilo == 'B' %}checked{% endif %}>
+                    <div class="toggle-content">
+                        <span class="toggle-badge">Profilo B</span>
+                        <span class="toggle-desc">Under 35 · Esperienza Bancaria</span>
+                    </div>
+                </label>
+            </div>
+        </div>
+
+        <!-- Toggle modalità input -->
+        <div class="form-group">
+            <div style="display:flex;gap:0.5rem;margin-bottom:1.25rem;">
+                <button id="tab-testo" class="btn btn-primary btn-sm" onclick="switchTab('testo')">
+                    &#128203; Incolla testo
+                </button>
+                <button id="tab-nome" class="btn btn-secondary btn-sm" onclick="switchTab('nome')">
+                    &#128269; Cerca per nome
+                </button>
+            </div>
+
+            <!-- Tab: incolla testo -->
+            <div id="panel-testo">
+                <label class="form-label" for="testo-profilo">Testo Profilo LinkedIn</label>
+                <textarea id="testo-profilo" class="form-textarea"
+                          placeholder="Incolla qui il testo del profilo LinkedIn del candidato...
+
+Includi: nome, titolo, descrizione, esperienze lavorative, formazione, competenze."
+                          rows="12"></textarea>
+            </div>
+
+            <!-- Tab: cerca per nome -->
+            <div id="panel-nome" class="hidden">
+                <div class="form-row" style="margin-bottom:0.75rem;">
+                    <div class="form-group">
+                        <label class="form-label">Nome</label>
+                        <input type="text" id="cerca-nome" class="form-input" placeholder="es. Mario">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Cognome</label>
+                        <input type="text" id="cerca-cognome" class="form-input" placeholder="es. Rossi">
+                    </div>
+                </div>
+                <button class="btn btn-outline" id="btn-cerca-nome" onclick="cercaPerNome()">
+                    <span id="cerca-nome-testo">&#128269; Trova su LinkedIn</span>
+                    <span id="cerca-nome-loading" class="hidden"><span class="spinner" style="border-top-color:var(--azzurro);border-color:rgba(46,124,246,0.3)"></span> Ricerca in corso...</span>
+                </button>
+
+                <!-- Risultati ricerca per nome -->
+                <div id="risultati-nome" class="hidden" style="margin-top:1.25rem;">
+                    <p style="font-size:0.85rem;color:var(--grigio-testo);margin-bottom:0.75rem;">
+                        Seleziona il profilo corretto:
+                    </p>
+                    <div id="lista-profili-nome" style="display:flex;flex-direction:column;gap:0.75rem;"></div>
+                </div>
+                <div id="nessun-profilo-nome" class="hidden alert alert-info" style="margin-top:1rem;">
+                    Nessun profilo trovato. Prova con un nome diverso.
+                </div>
+            </div>
+        </div>
+
+        <button id="btn-analizza" class="btn btn-primary btn-lg" onclick="avviaAnalisi()">
+            <span id="btn-testo">&#9733; Analizza Profilo</span>
+            <span id="btn-loading" class="hidden">
+                <span class="spinner"></span> Analisi in corso...
+            </span>
+        </button>
+    </div>
+</div>
+
+<!-- Risultati analisi (visibili dopo l'analisi) -->
+<div id="risultati" class="hidden">
+
+    <!-- Punteggio -->
+    <div class="results-grid">
+        <div class="card result-card score-card">
+            <div class="card-body text-center">
+                <div class="score-circle" id="score-circle">
+                    <span id="score-value">—</span>
+                </div>
+                <p class="score-label">Compatibilità</p>
+            </div>
+        </div>
+
+        <!-- Analisi percorso -->
+        <div class="card result-card">
+            <div class="card-header">
+                <h3>Analisi del Percorso</h3>
+            </div>
+            <div class="card-body">
+                <p id="analisi-percorso" class="result-text"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Spunti per il contatto -->
+    <div class="card">
+        <div class="card-header">
+            <h3>Spunti per il Primo Contatto</h3>
+        </div>
+        <div class="card-body">
+            <ul id="spunti-lista" class="spunti-list"></ul>
+        </div>
+    </div>
+
+    <!-- Messaggio outreach -->
+    <div class="card">
+        <div class="card-header">
+            <h3>Bozza Messaggio di Outreach</h3>
+            <div style="display:flex;gap:0.5rem;">
+                <button class="btn btn-outline btn-sm" onclick="rigeneraMessaggio()">
+                    <span id="btn-rigenera-testo">&#8635; Nuova versione</span>
+                    <span id="btn-rigenera-loading" class="hidden"><span class="spinner" style="border-top-color:var(--azzurro);border-color:rgba(46,124,246,0.3)"></span></span>
+                </button>
+                <button class="btn btn-outline btn-sm" onclick="copiaMessaggio()">Copia</button>
+            </div>
+        </div>
+        <div class="card-body">
+            <div id="messaggio-outreach" class="outreach-box"></div>
+            <p class="char-count"><span id="char-count">0</span> / 300 caratteri</p>
+
+            <!-- Sezione prompt personalizzato -->
+            <div class="riscrivi-section">
+                <label class="form-label" style="margin-bottom:0.5rem;">
+                    Riscrivi con istruzioni personalizzate
+                </label>
+                <div class="riscrivi-row">
+                    <textarea id="prompt-riscrivi" class="form-textarea"
+                              rows="2"
+                              placeholder="Es: rendi il tono più diretto, aggiungi un riferimento al settore bancario, inizia con una domanda..."></textarea>
+                    <button class="btn btn-primary" id="btn-riscrivi" onclick="riscriviMessaggio()">
+                        <span id="btn-riscrivi-testo">Riscrivi</span>
+                        <span id="btn-riscrivi-loading" class="hidden"><span class="spinner"></span></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- Errore -->
+<div id="errore-box" class="hidden alert alert-errore"></div>
+
+<!-- Cronologia valutazioni -->
+{% if cronologia %}
+<div class="card" style="margin-top: 2rem;">
+    <div class="card-header">
+        <h3>Cronologia Valutazioni</h3>
+        <span class="text-muted" style="font-size:0.82rem;">Ultime {{ cronologia|length }}</span>
+    </div>
+    <div class="table-responsive">
+        <table class="data-table" id="cronologia-tabella">
+            <thead>
+                <tr>
+                    <th>Data</th>
+                    <th>Contatto</th>
+                    <th>Profilo</th>
+                    <th>Anteprima</th>
+                    <th>Punteggio</th>
+                    <th>Azione</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for v in cronologia %}
+                <tr>
+                    <td style="white-space:nowrap;">
+                        <div>{{ v.data_valutazione[:10] }}</div>
+                        <div class="candidato-meta">{{ v.data_valutazione[11:16] }}</div>
+                    </td>
+                    <td><strong>{{ v.nome_contatto or '—' }}</strong></td>
+                    <td>
+                        <span class="badge badge-profilo-{{ v.tipo_profilo|lower }}">
+                            Profilo {{ v.tipo_profilo }}
+                        </span>
+                    </td>
+                    <td>
+                        <span style="font-size:0.85rem; color:var(--grigio-testo);">
+                            {{ v.anteprima_testo }}…
+                        </span>
+                    </td>
+                    <td>
+                        <span class="score-badge score-badge-{{ 'alto' if v.punteggio >= 8 else ('medio' if v.punteggio >= 5 else 'basso') }}">
+                            {{ v.punteggio }}/10
+                        </span>
+                    </td>
+                    <td>
+                        <div style="display:flex;gap:0.4rem;flex-wrap:wrap;">
+                            <button class="btn btn-outline btn-xs"
+                                    onclick="mostraDettaglioCronologia({{ v.id }})">
+                                Vedi Report
+                            </button>
+                            <button class="btn btn-secondary btn-xs"
+                                    onclick="apriModalCandidato({{ v.id }})">
+                                + Candidato
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+
+<!-- Modale dettaglio cronologia -->
+<div id="modal-cronologia" class="modal-overlay hidden" onclick="if(event.target===this)nascondi('modal-cronologia')">
+    <div class="modal">
+        <div class="modal-header">
+            <h3>Report Valutazione</h3>
+            <button class="modal-close" onclick="nascondi('modal-cronologia')">&times;</button>
+        </div>
+        <div class="modal-body" id="modal-cronologia-body"></div>
+    </div>
+</div>
+
+<!-- Modale salva candidato da cronologia -->
+<div id="modal-salva-candidato" class="modal-overlay hidden"
+     onclick="if(event.target===this)nascondi('modal-salva-candidato')">
+    <div class="modal">
+        <div class="modal-header">
+            <h3>Salva come Candidato</h3>
+            <button class="modal-close" onclick="nascondi('modal-salva-candidato')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <input type="hidden" id="sc-valutazione-id">
+            <input type="hidden" id="sc-tipo-profilo">
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Nome <span class="required">*</span></label>
+                    <input type="text" id="sc-nome" class="form-input" placeholder="Nome">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Cognome <span class="required">*</span></label>
+                    <input type="text" id="sc-cognome" class="form-input" placeholder="Cognome">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Ruolo Attuale</label>
+                    <input type="text" id="sc-ruolo" class="form-input" placeholder="Es. Private Banker">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Azienda</label>
+                    <input type="text" id="sc-azienda" class="form-input" placeholder="Es. Banca XYZ">
+                </div>
+            </div>
+            <div class="form-group" style="max-width:180px;">
+                <label class="form-label">Anni di Esperienza</label>
+                <input type="number" id="sc-anni" class="form-input" min="0" max="50" placeholder="0">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Note</label>
+                <textarea id="sc-note" class="form-textarea" rows="2"
+                          placeholder="Note aggiuntive..."></textarea>
+            </div>
+
+            <div id="sc-errore" class="hidden alert alert-errore"></div>
+            <div id="sc-successo" class="hidden alert alert-successo"></div>
+
+            <div class="form-actions">
+                <button class="btn btn-primary" onclick="salvaCandidatoDaCronologia()">
+                    <span id="sc-btn-testo">Salva Candidato</span>
+                    <span id="sc-btn-loading" class="hidden"><span class="spinner"></span></span>
+                </button>
+                <button class="btn btn-outline" onclick="nascondi('modal-salva-candidato')">Annulla</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Dati cronologia per JS -->
+<script id="cronologia-data" type="application/json">
+{{ cronologia | tojson }}
+</script>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ---- Auto-avvio da ricerca candidati ----
+(function() {
+    const testo = sessionStorage.getItem('profilo_da_analizzare');
+    if (testo) {
+        sessionStorage.removeItem('profilo_da_analizzare');
+        document.getElementById('testo-profilo').value = testo;
+        // Avvia analisi automaticamente dopo che la pagina è pronta
+        setTimeout(avviaAnalisi, 300);
+    }
+})();
+
+// ---- Tab incolla/cerca ----
+function switchTab(tab) {
+    const isProfilo = tab === 'testo';
+    document.getElementById('panel-testo').classList.toggle('hidden', !isProfilo);
+    document.getElementById('panel-nome').classList.toggle('hidden', isProfilo);
+    document.getElementById('tab-testo').className = 'btn btn-sm ' + (isProfilo ? 'btn-primary' : 'btn-secondary');
+    document.getElementById('tab-nome').className  = 'btn btn-sm ' + (!isProfilo ? 'btn-primary' : 'btn-secondary');
+}
+
+async function cercaPerNome() {
+    const nome    = document.getElementById('cerca-nome').value.trim();
+    const cognome = document.getElementById('cerca-cognome').value.trim();
+    if (!nome && !cognome) { alert('Inserisci almeno nome o cognome.'); return; }
+
+    document.getElementById('cerca-nome-testo').classList.add('hidden');
+    document.getElementById('cerca-nome-loading').classList.remove('hidden');
+    document.getElementById('btn-cerca-nome').disabled = true;
+    document.getElementById('risultati-nome').classList.add('hidden');
+    document.getElementById('nessun-profilo-nome').classList.add('hidden');
+
+    try {
+        // Avvia la run Apify
+        const resp = await fetch('/valutazione/cerca_per_nome', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nome, cognome })
+        });
+        const dati = await resp.json();
+        if (dati.errore) { alert('Errore: ' + dati.errore); return; }
+
+        // Polling ogni 5 secondi fino a completamento
+        const profili = await pollFinoAlCompletamento(dati.run_id);
+        if (!profili) return;
+
+        if (profili.length === 0) {
+            document.getElementById('nessun-profilo-nome').classList.remove('hidden');
+        } else {
+            renderProfilieNome(profili);
+        }
+    } catch(e) {
+        alert('Errore: ' + e);
+    } finally {
+        document.getElementById('cerca-nome-testo').classList.remove('hidden');
+        document.getElementById('cerca-nome-loading').classList.add('hidden');
+        document.getElementById('btn-cerca-nome').disabled = false;
+    }
+}
+
+async function pollFinoAlCompletamento(runId) {
+    // Massimo 40 tentativi × 5s = 200 secondi
+    for (let i = 0; i < 40; i++) {
+        await new Promise(r => setTimeout(r, 5000));
+        const r = await fetch('/valutazione/poll_run/' + runId);
+        const d = await r.json();
+        if (d.errore) { alert('Errore: ' + d.errore); return null; }
+        if (d.status === 'done') return d.profili;
+        // se status === 'running', continua il loop
+    }
+    alert('Timeout: ricerca troppo lenta. Riprova.');
+    return null;
+}
+
+function renderProfilieNome(profili) {
+    const lista = document.getElementById('lista-profili-nome');
+    lista.innerHTML = '';
+    profili.forEach(function(p) {
+        const nomeCompleto = [p.nome, p.cognome].filter(Boolean).join(' ') || '—';
+        const linkedinLink = p.linkedin
+            ? `<a href="${p.linkedin}" target="_blank" style="font-size:0.78rem;color:var(--azzurro);">LinkedIn ↗</a>`
+            : '';
+        const div = document.createElement('div');
+        div.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:0.875rem 1rem;border:1.5px solid var(--grigio-bordo);border-radius:8px;background:white;gap:1rem;';
+        div.innerHTML = `
+            <div style="flex:1;min-width:0;">
+                <div style="font-weight:600;font-size:0.9rem;">${nomeCompleto}</div>
+                ${p.headline ? `<div style="font-size:0.82rem;color:var(--grigio-testo);margin-top:2px;">${p.headline}</div>` : ''}
+                ${p.azienda  ? `<div style="font-size:0.8rem;color:var(--grigio-testo);">${p.azienda}${p.location ? ' · ' + p.location : ''}</div>` : ''}
+                ${linkedinLink}
+            </div>
+            <button class="btn btn-primary btn-sm" onclick='selezionaProfilo(${JSON.stringify(p).replace(/'/g,"&#39;")})'>
+                Seleziona
+            </button>`;
+        lista.appendChild(div);
+    });
+    document.getElementById('risultati-nome').classList.remove('hidden');
+}
+
+function selezionaProfilo(p) {
+    // Pre-compila il textarea con il testo profilo costruito da Apify
+    document.getElementById('testo-profilo').value = p.testo_profilo || '';
+    // Torna al tab testo e scorre all'area di analisi
+    switchTab('testo');
+    document.getElementById('testo-profilo').scrollIntoView({ behavior: 'smooth' });
+    document.getElementById('testo-profilo').focus();
+}
+
+// ---- Tipo profilo toggle ----
+document.querySelectorAll('input[name="tipo_profilo"]').forEach(radio => {
+    radio.addEventListener('change', function() {
+        document.querySelectorAll('.toggle-option').forEach(el => el.classList.remove('selected'));
+        this.closest('.toggle-option').classList.add('selected');
+    });
+});
+
+async function avviaAnalisi() {
+    const testo = document.getElementById('testo-profilo').value.trim();
+    const tipoProfilo = document.querySelector('input[name="tipo_profilo"]:checked').value;
+    const candidatoId = document.getElementById('candidato-id')?.value || null;
+    const nomeContatto = '';
+
+    if (!testo) {
+        mostraErrore('Inserire il testo del profilo LinkedIn prima di procedere.');
+        return;
+    }
+
+    // Salva il testo per eventuali rigenerazioni successive
+    testoProfiloCorrente = testo;
+
+    // Mostra stato caricamento
+    impostaCaricamento(true);
+    nascondi('risultati');
+    nascondi('errore-box');
+
+    try {
+        const risposta = await fetch('/valutazione/analizza', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                testo_profilo: testo,
+                tipo_profilo: tipoProfilo,
+                candidato_id: candidatoId
+            })
+        });
+
+        const dati = await risposta.json();
+
+        if (!risposta.ok) {
+            throw new Error(dati.errore || 'Errore durante l\'analisi');
+        }
+
+        mostraRisultati(dati);
+        // Il nome contatto viene estratto da Claude e restituito nel JSON
+        aggiornaCronologia(dati, tipoProfilo, testo, dati.nome_contatto || '');
+        document.getElementById('testo-profilo').value = '';
+
+    } catch (err) {
+        mostraErrore('Errore: ' + err.message);
+    } finally {
+        impostaCaricamento(false);
+    }
+}
+
+function mostraRisultati(dati) {
+    // Punteggio con colore dinamico
+    const score = dati.punteggio;
+    const scoreEl = document.getElementById('score-value');
+    const circleEl = document.getElementById('score-circle');
+    scoreEl.textContent = score;
+    circleEl.className = 'score-circle ' + getScoreClass(score);
+
+    // Analisi percorso
+    document.getElementById('analisi-percorso').textContent = dati.analisi_percorso;
+
+    // Spunti
+    const lista = document.getElementById('spunti-lista');
+    lista.innerHTML = '';
+    (dati.spunti_contatto || []).forEach(spunto => {
+        const li = document.createElement('li');
+        li.className = 'spunto-item';
+        li.textContent = spunto;
+        lista.appendChild(li);
+    });
+
+    // Messaggio outreach
+    const msg = dati.messaggio_outreach || '';
+    document.getElementById('messaggio-outreach').textContent = msg;
+    document.getElementById('char-count').textContent = msg.length;
+
+    // Mostra sezione risultati
+    mostra('risultati');
+    document.getElementById('risultati').scrollIntoView({ behavior: 'smooth' });
+}
+
+// Testo profilo salvato dopo l'analisi (serve per rigenerare il messaggio)
+let testoProfiloCorrente = '';
+
+async function rigeneraMessaggio() {
+    await chiamaRigenera('');
+}
+
+async function riscriviMessaggio() {
+    const istruzioni = document.getElementById('prompt-riscrivi').value.trim();
+    if (!istruzioni) {
+        document.getElementById('prompt-riscrivi').focus();
+        return;
+    }
+    await chiamaRigenera(istruzioni);
+}
+
+async function chiamaRigenera(istruzioni) {
+    const messaggioAttuale = document.getElementById('messaggio-outreach').textContent.trim();
+    if (!messaggioAttuale) return;
+
+    const isRiscrivi = istruzioni.length > 0;
+    const btnLoadingId = isRiscrivi ? 'btn-riscrivi-loading' : 'btn-rigenera-loading';
+    const btnTestoId   = isRiscrivi ? 'btn-riscrivi-testo'   : 'btn-rigenera-testo';
+    const btnId        = isRiscrivi ? 'btn-riscrivi'          : null;
+
+    // Stato caricamento
+    document.getElementById(btnLoadingId).classList.remove('hidden');
+    document.getElementById(btnTestoId).classList.add('hidden');
+    if (btnId) document.getElementById(btnId).disabled = true;
+
+    try {
+        const risposta = await fetch('/valutazione/rigenera_messaggio', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                testo_profilo: testoProfiloCorrente,
+                messaggio_attuale: messaggioAttuale,
+                istruzioni: istruzioni
+            })
+        });
+
+        const dati = await risposta.json();
+        if (!risposta.ok) throw new Error(dati.errore || 'Errore');
+
+        // Aggiorna il messaggio con animazione breve
+        const box = document.getElementById('messaggio-outreach');
+        box.style.opacity = '0.4';
+        setTimeout(() => {
+            box.textContent = dati.messaggio;
+            document.getElementById('char-count').textContent = dati.messaggio.length;
+            box.style.opacity = '1';
+        }, 200);
+
+        // Svuota il campo istruzioni dopo la riscrittura
+        if (isRiscrivi) document.getElementById('prompt-riscrivi').value = '';
+
+    } catch (err) {
+        mostraErrore('Errore rigenerazione: ' + err.message);
+    } finally {
+        document.getElementById(btnLoadingId).classList.add('hidden');
+        document.getElementById(btnTestoId).classList.remove('hidden');
+        if (btnId) document.getElementById(btnId).disabled = false;
+    }
+}
+
+function copiaMessaggio() {
+    const testo = document.getElementById('messaggio-outreach').textContent;
+    navigator.clipboard.writeText(testo).then(() => {
+        const btn = event.target;
+        btn.textContent = 'Copiato!';
+        setTimeout(() => btn.textContent = 'Copia', 2000);
+    });
+}
+
+function getScoreClass(score) {
+    if (score >= 8) return 'score-alto';
+    if (score >= 5) return 'score-medio';
+    return 'score-basso';
+}
+
+function apriModalCandidato(valutazioneId) {
+    const tutti = JSON.parse(document.getElementById('cronologia-data').textContent);
+    const v = tutti.find(x => x.id === valutazioneId);
+
+    // Pre-compila tutti i campi con i dati estratti da Claude
+    const nomeCompleto = (v && v.nome_contatto) ? v.nome_contatto : '';
+    const parti = nomeCompleto.trim().split(' ');
+    document.getElementById('sc-nome').value = parti[0] || '';
+    document.getElementById('sc-cognome').value = parti.slice(1).join(' ') || '';
+    document.getElementById('sc-ruolo').value = (v && v.ruolo_attuale) ? v.ruolo_attuale : '';
+    document.getElementById('sc-azienda').value = (v && v.azienda) ? v.azienda : '';
+    document.getElementById('sc-anni').value = (v && v.anni_esperienza) ? v.anni_esperienza : '';
+    document.getElementById('sc-note').value = '';
+    document.getElementById('sc-valutazione-id').value = valutazioneId;
+    document.getElementById('sc-tipo-profilo').value = v ? v.tipo_profilo : 'A';
+    nascondi('sc-errore');
+    nascondi('sc-successo');
+    document.querySelector('#modal-salva-candidato .btn-primary').disabled = false;
+
+    mostra('modal-salva-candidato');
+    document.getElementById('sc-nome').focus();
+}
+
+async function salvaCandidatoDaCronologia() {
+    const nome = document.getElementById('sc-nome').value.trim();
+    const cognome = document.getElementById('sc-cognome').value.trim();
+
+    if (!nome || !cognome) {
+        document.getElementById('sc-errore').textContent = 'Nome e cognome sono obbligatori.';
+        mostra('sc-errore');
+        return;
+    }
+
+    nascondi('sc-errore');
+    document.getElementById('sc-btn-testo').classList.add('hidden');
+    document.getElementById('sc-btn-loading').classList.remove('hidden');
+
+    try {
+        const risposta = await fetch('/candidati/da_cronologia', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                nome,
+                cognome,
+                ruolo_attuale: document.getElementById('sc-ruolo').value.trim(),
+                azienda: document.getElementById('sc-azienda').value.trim(),
+                anni_esperienza: parseInt(document.getElementById('sc-anni').value) || 0,
+                note: document.getElementById('sc-note').value.trim(),
+                tipo_profilo: document.getElementById('sc-tipo-profilo').value,
+                valutazione_id: parseInt(document.getElementById('sc-valutazione-id').value)
+            })
+        });
+
+        const dati = await risposta.json();
+        if (!risposta.ok) throw new Error(dati.errore || 'Errore');
+
+        // Mostra conferma con link alla pipeline
+        document.getElementById('sc-successo').innerHTML =
+            `Candidato salvato! <a href="/pipeline" style="color:var(--azzurro);font-weight:600;">Vai alla Pipeline →</a>`;
+        mostra('sc-successo');
+
+        // Disabilita il tasto salva per evitare doppi invii
+        document.querySelector('#modal-salva-candidato .btn-primary').disabled = true;
+
+    } catch (err) {
+        document.getElementById('sc-errore').textContent = 'Errore: ' + err.message;
+        mostra('sc-errore');
+    } finally {
+        document.getElementById('sc-btn-testo').classList.remove('hidden');
+        document.getElementById('sc-btn-loading').classList.add('hidden');
+    }
+}
+
+function aggiornaCronologia(dati, tipoProfilo, testoOriginale, nomeContatto) {
+    // Aggiunge dinamicamente la nuova riga in cima alla tabella cronologia
+    const tbody = document.querySelector('#cronologia-tabella tbody');
+    if (!tbody) return; // la sezione non esiste ancora (nessuna cronologia precedente)
+
+    const ora = new Date();
+    const data = ora.toISOString().slice(0, 10);
+    const orario = ora.toTimeString().slice(0, 5);
+    const anteprima = testoOriginale.replace(/\n/g, ' ').slice(0, 120);
+    const score = dati.punteggio;
+    const scoreClass = score >= 8 ? 'alto' : (score >= 5 ? 'medio' : 'basso');
+    const badgeClass = tipoProfilo === 'A' ? 'badge-profilo-a' : 'badge-profilo-b';
+
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+        <td style="white-space:nowrap;">
+            <div>${data}</div>
+            <div class="candidato-meta">${orario}</div>
+        </td>
+        <td><strong>${nomeContatto || '—'}</strong></td>
+        <td><span class="badge ${badgeClass}">Profilo ${tipoProfilo}</span></td>
+        <td><span style="font-size:0.85rem;color:var(--grigio-testo);">${anteprima}…</span></td>
+        <td><span class="score-badge score-badge-${scoreClass}">${score}/10</span></td>
+        <td><button class="btn btn-outline btn-xs" onclick="mostraDettaglioInline(this, ${JSON.stringify(dati).replace(/"/g, '&quot;')})">Vedi Report</button></td>
+    `;
+    tbody.insertBefore(tr, tbody.firstChild);
+}
+
+function mostraDettaglioInline(btn, dati) {
+    // Riusa la funzione mostraDettaglioCronologia con dati diretti
+    mostraReportNelModal(dati);
+}
+
+function mostraDettaglioCronologia(id) {
+    const tutti = JSON.parse(document.getElementById('cronologia-data').textContent);
+    const v = tutti.find(x => x.id === id);
+    if (!v) return;
+
+    let spunti = v.spunti || [];
+    if (typeof spunti === 'string') { try { spunti = JSON.parse(spunti); } catch { spunti = []; } }
+
+    mostraReportNelModal({
+        punteggio: v.punteggio,
+        analisi_percorso: v.analisi,
+        spunti_contatto: spunti,
+        messaggio_outreach: v.messaggio_outreach
+    });
+}
+
+function mostraReportNelModal(dati) {
+    const spuntiHtml = (dati.spunti_contatto || [])
+        .map(s => `<li class="spunto-item">${s}</li>`).join('');
+    const scoreClass = dati.punteggio >= 8 ? 'score-alto' : (dati.punteggio >= 5 ? 'score-medio' : 'score-basso');
+
+    document.getElementById('modal-cronologia-body').innerHTML = `
+        <div class="report-sezione">
+            <div class="report-score ${scoreClass}">${dati.punteggio}/10</div>
+        </div>
+        <div class="report-sezione">
+            <h4>Analisi del Percorso</h4>
+            <p>${dati.analisi_percorso || '—'}</p>
+        </div>
+        <div class="report-sezione">
+            <h4>Spunti per il Contatto</h4>
+            <ul>${spuntiHtml}</ul>
+        </div>
+        <div class="report-sezione">
+            <h4>Messaggio di Outreach</h4>
+            <div class="outreach-box">${dati.messaggio_outreach || '—'}</div>
+        </div>
+    `;
+    mostra('modal-cronologia');
+}
+
+function impostaCaricamento(attivo) {
+    const btn = document.getElementById('btn-analizza');
+    btn.disabled = attivo;
+    document.getElementById('btn-testo').classList.toggle('hidden', attivo);
+    document.getElementById('btn-loading').classList.toggle('hidden', !attivo);
+}
+
+function mostraErrore(msg) {
+    const el = document.getElementById('errore-box');
+    el.textContent = msg;
+    mostra('errore-box');
+}
+</script>
+{% endblock %}

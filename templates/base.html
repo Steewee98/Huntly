@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}SABIA Recruiting Tool{% endblock %}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+
+<!-- Sidebar di navigazione -->
+<aside class="sidebar">
+    <div class="sidebar-header">
+        <div class="logo-icon">R</div>
+        <div class="logo-text">
+            <span class="logo-title">Recruiter</span>
+            <span class="logo-sub">Assistant</span>
+        </div>
+    </div>
+
+    <div class="sidebar-user">
+        <span class="sidebar-username">{{ session.get('username', '') }}</span>
+        <a href="{{ url_for('auth.logout') }}" class="btn-logout" title="Logout">&#10148;</a>
+    </div>
+
+    <nav class="sidebar-nav">
+
+        <!-- Gruppo Candidati (espandibile) -->
+        {% set candidati_attivo = request.blueprint in ['valutazione', 'ricerca'] %}
+        <div class="nav-group">
+            <button class="nav-group-header {% if candidati_attivo %}open{% endif %}"
+                    onclick="toggleGroup(this)">
+                <span class="nav-icon">&#128100;</span>
+                <span>Candidati</span>
+                <span class="nav-arrow">&#9660;</span>
+            </button>
+            <div class="nav-group-items {% if candidati_attivo %}open{% endif %}">
+                <a href="{{ url_for('valutazione.index') }}"
+                   class="nav-subitem {% if request.blueprint == 'valutazione' %}active{% endif %}">
+                    <span class="nav-icon">&#9733;</span>
+                    <span>Valutazione</span>
+                </a>
+                <a href="{{ url_for('ricerca.index') }}"
+                   class="nav-subitem {% if request.blueprint == 'ricerca' %}active{% endif %}">
+                    <span class="nav-icon">&#128269;</span>
+                    <span>Ricerca LinkedIn</span>
+                </a>
+            </div>
+        </div>
+
+        <a href="{{ url_for('pipeline.index') }}"
+           class="nav-item {% if request.blueprint == 'pipeline' %}active{% endif %}">
+            <span class="nav-icon">&#9776;</span>
+            <span>Pipeline Candidati</span>
+        </a>
+        <a href="{{ url_for('contenuti.index') }}"
+           class="nav-item {% if request.blueprint == 'contenuti' %}active{% endif %}">
+            <span class="nav-icon">&#9998;</span>
+            <span>Contenuti LinkedIn</span>
+        </a>
+    </nav>
+
+
+</aside>
+
+<!-- Contenuto principale -->
+<main class="main-content">
+    <!-- Messaggi flash (errori / conferme) -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for categoria, messaggio in messages %}
+                <div class="alert alert-{{ categoria }}">{{ messaggio }}</div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    {% block content %}{% endblock %}
+</main>
+
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

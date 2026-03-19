@@ -1,0 +1,331 @@
+{% extends "base.html" %}
+{% block title %}Pipeline Candidati — SABIA{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">Pipeline Candidati</h1>
+    <p class="page-subtitle">{{ candidati|length }} candidati nel database</p>
+</div>
+
+{% if not candidati %}
+<div class="empty-state">
+    <div class="empty-icon">&#128100;</div>
+    <h3>Nessun candidato ancora inserito</h3>
+    <p>Inizia aggiungendo il tuo primo candidato.</p>
+    <a href="{{ url_for('candidati.index') }}" class="btn btn-primary">
+        + Inserisci Candidato
+    </a>
+</div>
+{% else %}
+
+<!-- Tabella candidati -->
+<div class="card table-card">
+    <div class="card-header">
+        <span>Tutti i candidati</span>
+        <a href="{{ url_for('candidati.index') }}" class="btn btn-primary btn-sm">+ Aggiungi</a>
+    </div>
+    <div class="table-responsive">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Candidato</th>
+                    <th>Ruolo / Azienda</th>
+                    <th>Profilo</th>
+                    <th>Punteggio</th>
+                    <th>Stato</th>
+                    <th>Azioni</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in candidati %}
+                <tr id="row-{{ c.id }}">
+                    <td>
+                        <div class="candidato-nome">{{ c.nome }} {{ c.cognome }}</div>
+                        <div class="candidato-meta">{{ c.data_inserimento[:10] if c.data_inserimento else '' }}</div>
+                    </td>
+                    <td>
+                        <div>{{ c.ruolo_attuale or '—' }}</div>
+                        <div class="candidato-meta">{{ c.azienda or '' }}</div>
+                    </td>
+                    <td>
+                        <span class="badge badge-profilo-{{ c.tipo_profilo|lower }}">
+                            Profilo {{ c.tipo_profilo }}
+                        </span>
+                    </td>
+                    <td>
+                        {% if c.punteggio %}
+                            <span class="score-badge score-badge-{{ 'alto' if c.punteggio >= 8 else ('medio' if c.punteggio >= 5 else 'basso') }}">
+                                {{ c.punteggio }}/10
+                            </span>
+                        {% else %}
+                            <span class="text-muted">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <select class="stato-select" data-id="{{ c.id }}"
+                                onchange="aggiornaStato(this)">
+                            {% for stato in stati %}
+                            <option value="{{ stato }}"
+                                    {% if c.stato == stato %}selected{% endif %}>
+                                {{ stato }}
+                            </option>
+                            {% endfor %}
+                        </select>
+                    </td>
+                    <td>
+                        <div class="azioni-group">
+                            {% if c.analisi %}
+                            <button class="btn btn-outline btn-xs"
+                                    onclick="mostraReport({{ c.id }})">
+                                Report
+                            </button>
+                            {% else %}
+                            <a href="{{ url_for('valutazione.index', candidato_id=c.id) }}"
+                               class="btn btn-outline btn-xs">Valuta</a>
+                            {% endif %}
+                            <button class="btn btn-secondary btn-xs"
+                                    onclick="generaFollowup({{ c.id }}, '{{ c.nome }} {{ c.cognome }}')">
+                                Follow-up
+                            </button>
+                            <button class="btn btn-danger btn-xs"
+                                    onclick="eliminaCandidato({{ c.id }}, '{{ c.nome }} {{ c.cognome }}')">
+                                &#215;
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% endif %}
+
+<!-- Modale Report -->
+<div id="modal-report" class="modal-overlay hidden" onclick="chiudiModal(event)">
+    <div class="modal">
+        <div class="modal-header">
+            <h3 id="modal-titolo">Report Candidato</h3>
+            <button class="modal-close" onclick="chiudiModal()">&times;</button>
+        </div>
+        <div class="modal-body" id="modal-body"></div>
+    </div>
+</div>
+
+<!-- Modale Follow-up -->
+<div id="modal-followup" class="modal-overlay hidden" onclick="chiudiModalFollowup(event)">
+    <div class="modal">
+        <div class="modal-header">
+            <h3 id="followup-titolo">Messaggio Follow-up</h3>
+            <button class="modal-close" onclick="chiudiModalFollowup()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div id="followup-loading" class="text-center">
+                <span class="spinner"></span> Generazione in corso...
+            </div>
+            <div id="followup-content" class="hidden">
+                <div id="followup-testo" class="outreach-box"></div>
+                <button class="btn btn-primary" onclick="copiaFollowup()" style="margin-top:1rem">
+                    Copia Messaggio
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Dati candidati per JS (report) -->
+<script id="candidati-data" type="application/json">
+{{ candidati | tojson }}
+</script>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Carica i dati dei candidati
+const candidatiData = JSON.parse(document.getElementById('candidati-data').textContent);
+
+async function aggiornaStato(select) {
+    const id = select.dataset.id;
+    const stato = select.value;
+
+    const risposta = await fetch('/pipeline/aggiorna_stato', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id, stato })
+    });
+
+    if (risposta.ok) {
+        // Feedback visivo breve
+        select.classList.add('select-saved');
+        setTimeout(() => select.classList.remove('select-saved'), 1500);
+    }
+}
+
+function mostraReport(id) {
+    const c = candidatiData.find(x => x.id === id);
+    if (!c) return;
+
+    document.getElementById('modal-titolo').textContent =
+        `Report: ${c.nome} ${c.cognome}`;
+
+    let spunti = c.spunti || [];
+    if (typeof spunti === 'string') {
+        try { spunti = JSON.parse(spunti); } catch { spunti = []; }
+    }
+
+    const spuntiHtml = spunti.map(s => `<li class="spunto-item">${s}</li>`).join('');
+
+    document.getElementById('modal-body').innerHTML = `
+        <div class="report-sezione">
+            <div class="report-score ${getScoreClass(c.punteggio)}">
+                ${c.punteggio}/10
+            </div>
+        </div>
+        <div class="report-sezione">
+            <h4>Analisi del Percorso</h4>
+            <p>${c.analisi || '—'}</p>
+        </div>
+        <div class="report-sezione">
+            <h4>Spunti per il Contatto</h4>
+            <ul>${spuntiHtml}</ul>
+        </div>
+        <div class="report-sezione">
+            <h4>Messaggio di Outreach</h4>
+            <div class="outreach-box">${c.messaggio_outreach || '—'}</div>
+        </div>
+    `;
+
+    mostra('modal-report');
+}
+
+// ID candidato corrente nel modal follow-up
+let followupCandidatoId = null;
+
+async function generaFollowup(id, nome) {
+    followupCandidatoId = id;
+    document.getElementById('followup-titolo').textContent = `Follow-up: ${nome}`;
+    document.getElementById('prompt-followup').value = '';
+    nascondi('followup-content');
+    mostra('followup-loading');
+    mostra('modal-followup');
+
+    try {
+        const risposta = await fetch(`/pipeline/followup/${id}`, { method: 'POST' });
+        const dati = await risposta.json();
+
+        if (risposta.ok) {
+            impostaTestoFollowup(dati.messaggio);
+            nascondi('followup-loading');
+            mostra('followup-content');
+        } else {
+            document.getElementById('followup-testo').textContent = 'Errore: ' + dati.errore;
+        }
+    } catch (err) {
+        nascondi('followup-loading');
+        mostra('followup-content');
+        document.getElementById('followup-testo').textContent = 'Errore di rete.';
+    }
+}
+
+function impostaTestoFollowup(testo) {
+    const box = document.getElementById('followup-testo');
+    box.textContent = testo;
+    document.getElementById('followup-char-count').textContent = testo.length;
+}
+function copiaFollowup() {
+    const testo = document.getElementById('followup-testo').textContent;
+    navigator.clipboard.writeText(testo).then(() => {
+        const btn = event.target;
+        const orig = btn.textContent;
+        btn.textContent = 'Copiato!';
+        setTimeout(() => btn.textContent = orig, 2000);
+    });
+}
+
+
+async function rigeneraFollowup() {
+    await chiamaRigeneraFollowup('');
+}
+
+async function riscriviFollowup() {
+    const istruzioni = document.getElementById('prompt-followup').value.trim();
+    if (!istruzioni) {
+        document.getElementById('prompt-followup').focus();
+        return;
+    }
+    await chiamaRigeneraFollowup(istruzioni);
+}
+
+async function chiamaRigeneraFollowup(istruzioni) {
+    const messaggioAttuale = document.getElementById('followup-testo').textContent.trim();
+    if (!messaggioAttuale || !followupCandidatoId) return;
+
+    const isRiscrivi = istruzioni.length > 0;
+    const btnLoadingId = isRiscrivi ? 'btn-riscrivi-fu-loading' : 'btn-rigenera-fu-loading';
+    const btnTestoId   = isRiscrivi ? 'btn-riscrivi-fu-testo'   : 'btn-rigenera-fu-testo';
+    const btnId        = isRiscrivi ? 'btn-riscrivi-fu'          : null;
+
+    document.getElementById(btnLoadingId).classList.remove('hidden');
+    document.getElementById(btnTestoId).classList.add('hidden');
+    if (btnId) document.getElementById(btnId).disabled = true;
+
+    try {
+        const risposta = await fetch(`/pipeline/rigenera_followup/${followupCandidatoId}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ messaggio_attuale: messaggioAttuale, istruzioni })
+        });
+        const dati = await risposta.json();
+        if (!risposta.ok) throw new Error(dati.errore || 'Errore');
+
+        const box = document.getElementById('followup-testo');
+        box.style.opacity = '0.4';
+        setTimeout(() => {
+            impostaTestoFollowup(dati.messaggio);
+            box.style.opacity = '1';
+        }, 200);
+
+        if (isRiscrivi) document.getElementById('prompt-followup').value = '';
+
+    } catch (err) {
+        alert('Errore: ' + err.message);
+    } finally {
+        document.getElementById(btnLoadingId).classList.add('hidden');
+        document.getElementById(btnTestoId).classList.remove('hidden');
+        if (btnId) document.getElementById(btnId).disabled = false;
+    }
+}
+
+async function eliminaCandidato(id, nome) {
+    if (!confirm(`Eliminare ${nome} dalla pipeline?`)) return;
+
+    const risposta = await fetch(`/pipeline/elimina/${id}`, { method: 'DELETE' });
+    if (risposta.ok) {
+        const row = document.getElementById(`row-${id}`);
+        row.style.opacity = '0';
+        setTimeout(() => row.remove(), 300);
+    }
+}
+
+
+
+function chiudiModal(event) {
+    if (!event || event.target === document.getElementById('modal-report')) {
+        nascondi('modal-report');
+    }
+}
+
+function chiudiModalFollowup(event) {
+    if (!event || event.target === document.getElementById('modal-followup')) {
+        nascondi('modal-followup');
+    }
+}
+
+function getScoreClass(score) {
+    if (score >= 8) return 'score-alto';
+    if (score >= 5) return 'score-medio';
+    return 'score-basso';
+}
+</script>
+{% endblock %}

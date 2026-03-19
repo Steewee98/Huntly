@@ -1,0 +1,276 @@
+{% extends "base.html" %}
+{% block title %}Ricerca Candidati — SABIA{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">&#128269; Ricerca Automatica Candidati</h1>
+    <p class="page-subtitle">Trova figure professionali su LinkedIn tramite Apify e importale nella pipeline</p>
+</div>
+
+<!-- Form di ricerca -->
+<div class="card">
+    <div class="card-header">
+        <h3>Parametri di ricerca</h3>
+    </div>
+    <div class="card-body">
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label">Ruolo / Titolo</label>
+                <input type="text" id="ruolo" class="form-input" placeholder="es. Software Engineer, Sales Director...">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Parole chiave (headline)</label>
+                <input type="text" id="parole_chiave" class="form-input" placeholder="es. SaaS, B2B, startup, Python...">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label">Città / Location</label>
+                <input type="text" id="citta" class="form-input" placeholder="es. Milan, Rome, Italy, United States...">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Azienda attuale (opzionale)</label>
+                <input type="text" id="azienda" class="form-input" placeholder="es. Google, Ferrari...">
+            </div>
+        </div>
+        <div class="form-row">
+            <div class="form-group">
+                <label class="form-label">Pagine di risultati</label>
+                <select id="num_pagine" class="form-input form-select">
+                    <option value="1" selected>1 pagina (~10 profili)</option>
+                    <option value="2">2 pagine (~20 profili)</option>
+                    <option value="3">3 pagine (~30 profili)</option>
+                </select>
+            </div>
+            <div class="form-group"></div>
+        </div>
+        <div class="form-actions">
+            <button class="btn btn-primary btn-lg" id="btn-cerca" onclick="cercaFigure()">
+                &#128269; Cerca Candidati
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- Risultati -->
+<div id="risultati-section" class="hidden">
+    <div class="card table-card">
+        <div class="card-header">
+            <h3 id="risultati-titolo">Risultati</h3>
+            <div style="display:flex;gap:0.5rem;align-items:center;">
+                <button id="btn-altri" class="btn btn-secondary btn-sm hidden" onclick="caricaAltri()">
+                    Carica altri &#8594;
+                </button>
+            </div>
+        </div>
+        <div class="table-responsive">
+            <table class="data-table">
+                <thead>
+                    <tr>
+                        <th>Nome</th>
+                        <th>Ruolo</th>
+                        <th>Azienda</th>
+                        <th>Location</th>
+                        <th>LinkedIn</th>
+                        <th>Azioni</th>
+                    </tr>
+                </thead>
+                <tbody id="risultati-tbody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Nessun risultato -->
+<div id="nessun-risultato" class="hidden">
+    <div class="card">
+        <div class="card-body">
+            <div class="empty-state">
+                <div class="empty-icon">&#128269;</div>
+                <h3>Nessun risultato trovato</h3>
+                <p>Prova a modificare i parametri di ricerca o verifica la chiave API Proxycurl.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: scelta tipo profilo prima di importare -->
+<div id="modal-import" class="modal-overlay hidden">
+    <div class="modal">
+        <div class="modal-header">
+            <h3>Importa Candidato</h3>
+            <button class="modal-close" onclick="chiudiModal()">&#215;</button>
+        </div>
+        <div class="modal-body">
+            <p style="margin-bottom:1.25rem;color:var(--grigio-testo);font-size:0.9rem;">
+                Seleziona il tipo di profilo per <strong id="modal-nome"></strong>
+            </p>
+            <input type="hidden" id="modal-dati">
+            <div class="profilo-toggle">
+                <label class="toggle-option selected" id="toggle-a" onclick="selezionaTipo('A')">
+                    <input type="radio" name="tipo_profilo_modal" value="A" checked>
+                    <span class="toggle-badge">Profilo A</span>
+                    <span class="toggle-desc">Figure commerciali, vendite, business</span>
+                </label>
+                <label class="toggle-option" id="toggle-b" onclick="selezionaTipo('B')">
+                    <input type="radio" name="tipo_profilo_modal" value="B">
+                    <span class="toggle-badge">Profilo B</span>
+                    <span class="toggle-desc">Figure tecniche, IT, engineering</span>
+                </label>
+            </div>
+            <div class="form-actions" style="margin-top:1.5rem;">
+                <button class="btn btn-primary" onclick="confermaImport()">&#43; Importa nella Pipeline</button>
+                <button class="btn btn-secondary" onclick="chiudiModal()">Annulla</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let tipoProfiloSelezionato = 'A';
+
+function cercaFigure() {
+    const ruolo = document.getElementById('ruolo').value.trim();
+    const parole_chiave = document.getElementById('parole_chiave').value.trim();
+
+    if (!ruolo && !parole_chiave) {
+        alert('Inserisci almeno il ruolo o delle parole chiave.');
+        return;
+    }
+
+    document.getElementById('risultati-tbody').innerHTML = '';
+    document.getElementById('risultati-section').classList.add('hidden');
+    document.getElementById('nessun-risultato').classList.add('hidden');
+    document.getElementById('btn-altri').classList.add('hidden');
+
+    const btn = document.getElementById('btn-cerca');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Ricerca in corso...';
+
+    fetch('/ricerca/cerca', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            ruolo: ruolo,
+            parole_chiave: parole_chiave,
+            citta: document.getElementById('citta').value.trim(),
+            paese: '',
+            azienda: document.getElementById('azienda').value.trim(),
+            num_pagine: parseInt(document.getElementById('num_pagine').value),
+        })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        btn.disabled = false;
+        btn.innerHTML = '&#128269; Cerca Candidati';
+
+        if (data.errore) {
+            alert('Errore: ' + data.errore);
+            return;
+        }
+        if (!data.persone || data.persone.length === 0) {
+            document.getElementById('nessun-risultato').classList.remove('hidden');
+            return;
+        }
+        renderRisultati(data.persone, data.totale);
+    })
+    .catch(function(err) {
+        btn.disabled = false;
+        btn.innerHTML = '&#128269; Cerca Candidati';
+        alert('Errore di connessione: ' + err);
+    });
+}
+
+function renderRisultati(persone, totale) {
+    const tbody = document.getElementById('risultati-tbody');
+    tbody.innerHTML = '';
+
+    persone.forEach(function(p) {
+        const nomeCompleto = [p.nome, p.cognome].filter(Boolean).join(' ') || '—';
+        const location = p.location || '—';
+        const linkedinBtn = p.linkedin
+            ? '<a href="' + escHtml(p.linkedin) + '" target="_blank" class="btn btn-outline btn-xs">LinkedIn</a>'
+            : '<span class="text-muted">—</span>';
+        const headline = p.headline
+            ? '<div class="candidato-meta">' + escHtml(p.headline.substring(0, 70)) + (p.headline.length > 70 ? '...' : '') + '</div>'
+            : '';
+
+        tbody.innerHTML += '<tr>' +
+            '<td><div class="candidato-nome">' + escHtml(nomeCompleto) + '</div>' + headline + '</td>' +
+            '<td>' + escHtml(p.ruolo || '—') + '</td>' +
+            '<td>' + escHtml(p.azienda || '—') + '</td>' +
+            '<td>' + escHtml(location) + '</td>' +
+            '<td>' + linkedinBtn + '</td>' +
+            '<td style="display:flex;gap:0.4rem;">' +
+            '<button class="btn btn-primary btn-xs" onclick=\'apriModal(' + JSON.stringify(p) + ')\'>&#43; Importa</button>' +
+            '<button class="btn btn-outline btn-xs" onclick=\'analizzaProfilo(' + JSON.stringify(p) + ')\'>&#9733; Analizza</button>' +
+            '</td>' +
+            '</tr>';
+    });
+
+    document.getElementById('risultati-titolo').textContent = totale + ' risultati trovati';
+    document.getElementById('risultati-section').classList.remove('hidden');
+}
+
+function apriModal(persona) {
+    tipoProfiloSelezionato = 'A';
+    document.getElementById('modal-nome').textContent =
+        ([persona.nome, persona.cognome].filter(Boolean).join(' ')) || 'questo candidato';
+    document.getElementById('modal-dati').value = JSON.stringify(persona);
+    document.getElementById('toggle-a').classList.add('selected');
+    document.getElementById('toggle-b').classList.remove('selected');
+    document.getElementById('modal-import').classList.remove('hidden');
+}
+
+function chiudiModal() {
+    document.getElementById('modal-import').classList.add('hidden');
+}
+
+function selezionaTipo(tipo) {
+    tipoProfiloSelezionato = tipo;
+    document.getElementById('toggle-a').classList.toggle('selected', tipo === 'A');
+    document.getElementById('toggle-b').classList.toggle('selected', tipo === 'B');
+}
+
+function confermaImport() {
+    const persona = JSON.parse(document.getElementById('modal-dati').value);
+    persona.tipo_profilo = tipoProfiloSelezionato;
+
+    fetch('/ricerca/importa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(persona)
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        chiudiModal();
+        if (data.successo) {
+            alert('Candidato importato con successo nella pipeline!');
+        } else {
+            alert('Errore: ' + (data.errore || 'sconosciuto'));
+        }
+    })
+    .catch(function(err) { alert('Errore: ' + err); });
+}
+
+function analizzaProfilo(p) {
+    // Salva il testo profilo in sessionStorage e reindirizza alla valutazione
+    sessionStorage.setItem('profilo_da_analizzare', p.testo_profilo || '');
+    window.location.href = '/valutazione';
+}
+
+function escHtml(str) {
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
+document.getElementById('modal-import').addEventListener('click', function(e) {
+    if (e.target === this) chiudiModal();
+});
+</script>
+{% endblock %}
