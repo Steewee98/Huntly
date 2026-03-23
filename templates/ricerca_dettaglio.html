@@ -35,7 +35,13 @@
             </div>
             <div>
                 <div style="font-size:0.78rem;color:var(--grigio-testo);margin-bottom:0.2rem;">Profili trovati</div>
-                <div style="font-size:1.5rem;font-weight:700;color:var(--blu-scuro);">{{ ricerca.profili_trovati }}</div>
+                <a href="#sezione-profili"
+                   style="font-size:1.5rem;font-weight:700;color:var(--blu-scuro);
+                          text-decoration:none;border-bottom:2px dashed var(--blu-scuro);
+                          cursor:pointer;"
+                   title="Clicca per vedere tutti i profili trovati">
+                    {{ ricerca.profili_trovati }}
+                </a>
             </div>
             <div>
                 <div style="font-size:0.78rem;color:var(--grigio-testo);margin-bottom:0.2rem;">Analizzati / Importati</div>
@@ -75,7 +81,7 @@
 </div>
 
 <!-- Tabella profili -->
-<div class="card">
+<div class="card" id="sezione-profili">
     <div class="card-header">
         <h3>
             Profili Trovati
