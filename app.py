@@ -4,9 +4,9 @@ Entry point dell'app, registra tutti i blueprint e inizializza il database.
 """
 
 import os
-from flask import Flask, redirect, url_for
+from flask import Flask, redirect, url_for, jsonify
 from dotenv import load_dotenv
-from database import init_db
+from database import init_db, get_db
 from routes.auth import auth_bp, login_required
 from routes.valutazione import valutazione_bp
 from routes.candidati import candidati_bp
@@ -48,6 +48,35 @@ def home():
 # Inizializza il database all'avvio dell'app
 with app.app_context():
     init_db()
+
+
+@app.route("/admin/init-db")
+def admin_init_db():
+    """
+    Esegue init_db() manualmente e crea tutte le tabelle mancanti.
+    Sicuro da chiamare più volte (usa IF NOT EXISTS ovunque).
+    Utile dopo aver aggiunto il database PostgreSQL su Railway.
+    """
+    try:
+        init_db()
+        # Verifica quali tabelle esistono dopo l'inizializzazione
+        db = get_db()
+        tabelle = db.execute(
+            "SELECT table_name FROM information_schema.tables "
+            "WHERE table_schema = 'public' ORDER BY table_name"
+        ).fetchall()
+        db.close()
+        nomi = [t["table_name"] for t in tabelle]
+        return jsonify({
+            "successo": True,
+            "messaggio": "Database inizializzato correttamente.",
+            "tabelle_create": nomi
+        })
+    except Exception as e:
+        return jsonify({
+            "successo": False,
+            "errore": str(e)
+        }), 500
 
 
 if __name__ == "__main__":
