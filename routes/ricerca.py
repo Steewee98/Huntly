@@ -71,44 +71,72 @@ def cerca_apify(ruolo, citta="", paese="", azienda="", parole_chiave="", num_pag
         return None, f"Errore di connessione: {str(e)}"
 
 
+def _str(val) -> str:
+    """
+    Converte qualsiasi valore in stringa sicura per il database.
+    Gestisce i casi in cui Apify restituisce oggetti annidati invece di stringhe:
+    - dict con chiave "linkedinText", "name", "text" → estrae il testo
+    - list → join con virgola
+    - None / bool → stringa vuota o repr
+    """
+    if val is None:
+        return ""
+    if isinstance(val, str):
+        return val
+    if isinstance(val, dict):
+        # Apify spesso restituisce {"linkedinText": "...", "text": "..."}
+        for key in ("linkedinText", "text", "name", "value", "title"):
+            if val.get(key) and isinstance(val[key], str):
+                return val[key]
+        return ""
+    if isinstance(val, list):
+        return ", ".join(_str(v) for v in val if v)
+    return str(val)
+
+
 def _costruisci_testo_profilo(p):
     """Costruisce il testo completo del profilo da usare per l'analisi AI e per la visualizzazione."""
     parti = [
-        f"Nome: {p.get('nome', '')} {p.get('cognome', '')}".strip(),
-        f"Ruolo: {p.get('ruolo', '')}",
-        f"Azienda: {p.get('azienda', '')}",
-        f"Location: {p.get('location', '')}",
+        f"Nome: {_str(p.get('nome'))} {_str(p.get('cognome'))}".strip(),
+        f"Ruolo: {_str(p.get('ruolo'))}",
+        f"Azienda: {_str(p.get('azienda'))}",
+        f"Location: {_str(p.get('location'))}",
     ]
     if p.get("sommario"):
-        parti.append(f"Sommario: {p['sommario']}")
+        parti.append(f"Sommario: {_str(p['sommario'])}")
     if p.get("linkedin"):
-        parti.append(f"LinkedIn: {p['linkedin']}")
+        parti.append(f"LinkedIn: {_str(p['linkedin'])}")
     return "\n".join(parti)
 
 
 def normalizza_profilo(p):
-    """Estrae i campi utili da un profilo restituito dall'actor."""
-    # L'actor può usare campi leggermente diversi a seconda della versione
-    nome    = p.get("firstName") or p.get("first_name") or ""
-    cognome = p.get("lastName")  or p.get("last_name")  or ""
-    ruolo   = (p.get("headline") or p.get("title") or p.get("occupation") or "")
+    """
+    Estrae i campi utili da un profilo restituito dall'actor Apify.
+    Usa _str() per garantire che tutti i valori siano stringhe,
+    anche quando Apify restituisce oggetti annidati.
+    """
+    nome    = _str(p.get("firstName") or p.get("first_name") or "")
+    cognome = _str(p.get("lastName")  or p.get("last_name")  or "")
+    ruolo   = _str(p.get("headline") or p.get("title") or p.get("occupation") or "")
 
-    # Azienda corrente
+    # Azienda corrente: può essere in una lista di posizioni
     azienda = ""
     posizione_corrente = p.get("currentPositions") or p.get("positions") or []
     if posizione_corrente and isinstance(posizione_corrente, list):
-        prima = posizione_corrente[0]
-        azienda = prima.get("companyName") or prima.get("company") or ""
+        prima = posizione_corrente[0] if isinstance(posizione_corrente[0], dict) else {}
+        azienda = _str(prima.get("companyName") or prima.get("company") or "")
         if not ruolo:
-            ruolo = prima.get("title") or ""
+            ruolo = _str(prima.get("title") or "")
 
     # Fallback azienda da campo diretto
     if not azienda:
-        azienda = p.get("companyName") or p.get("company") or ""
+        azienda = _str(p.get("companyName") or p.get("company") or "")
 
-    location = p.get("location") or p.get("geoLocation") or ""
-    linkedin  = p.get("linkedinUrl") or p.get("profileUrl") or p.get("url") or ""
-    summary   = (p.get("summary") or p.get("about") or "")[:200]
+    # location può essere {"linkedinText": "Milan, Italy"} o stringa diretta
+    location = _str(p.get("location") or p.get("geoLocation") or "")
+    linkedin  = _str(p.get("linkedinUrl") or p.get("profileUrl") or p.get("url") or "")
+    summary_raw = p.get("summary") or p.get("about") or ""
+    summary   = _str(summary_raw)[:200]
 
     return {
         "nome":     nome,
@@ -313,19 +341,18 @@ def automatica():
 
         # Valutazione AI con i parametri delle impostazioni
         try:
-            risultato = analizza_profilo_linkedin(testo, tipo_profilo, imp)
-            punteggio = risultato.get("punteggio")
-            spunti_json = json.dumps(risultato.get("spunti_contatto", []), ensure_ascii=False)
+            risultato   = analizza_profilo_linkedin(testo, tipo_profilo, imp)
+            punteggio   = int(risultato.get("punteggio") or 0) or None
+            spunti_raw  = risultato.get("spunti_contatto", [])
+            spunti_json = json.dumps(spunti_raw if isinstance(spunti_raw, list) else [], ensure_ascii=False)
+            analisi_str  = str(risultato.get("analisi_percorso") or "")
+            messaggio_str = str(risultato.get("messaggio_outreach") or "")
             db.execute(
                 """UPDATE candidati SET
                    punteggio=?, analisi=?, spunti=?, messaggio_outreach=?,
                    stato='Da contattare', data_aggiornamento=CURRENT_TIMESTAMP
                    WHERE id=?""",
-                (punteggio,
-                 risultato.get("analisi_percorso", ""),
-                 spunti_json,
-                 risultato.get("messaggio_outreach", ""),
-                 candidato_id)
+                (punteggio, analisi_str, spunti_json, messaggio_str, candidato_id)
             )
             # Salva nella cronologia valutazioni con fonte 'ricerca_automatica'
             nome_completo = f"{p['nome']} {p['cognome']}".strip() or None
@@ -338,9 +365,7 @@ def automatica():
                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (nome_completo, p['ruolo'] or None, p['azienda'] or None,
                  tipo_profilo, anteprima, punteggio,
-                 risultato.get("analisi_percorso", ""),
-                 spunti_json,
-                 risultato.get("messaggio_outreach", ""),
+                 analisi_str, spunti_json, messaggio_str,
                  candidato_id, 'ricerca_automatica')
             )
             db.commit()
@@ -348,7 +373,8 @@ def automatica():
             if punteggio:
                 punteggi.append(punteggio)
         except Exception:
-            pass  # continua anche se l'analisi AI fallisce per un singolo candidato
+            import logging
+            logging.getLogger(__name__).exception("Errore analisi AI in automatica() per %s %s", p.get('nome'), p.get('cognome'))
 
     punteggio_medio = round(sum(punteggi) / len(punteggi), 1) if punteggi else None
 
@@ -494,11 +520,25 @@ def analizza_candidato():
         db.close()
         return jsonify({"errore": str(e)}), 500
 
-    punteggio     = risultato.get("punteggio")
-    nome_contatto = risultato.get("nome_contatto") or f"{nome} {cognome}".strip() or None
-    ruolo_ai      = risultato.get("ruolo_attuale") or ruolo or None
-    azienda_ai    = risultato.get("azienda") or azienda or None
-    spunti_json   = json.dumps(risultato.get("spunti_contatto", []), ensure_ascii=False)
+    # Coercion tipi: ogni valore dal risultato AI deve essere del tipo giusto per PostgreSQL
+    def _s(v, fallback=None):
+        """Stringa o None."""
+        if v in (None, "", {}, []):
+            return fallback
+        return str(v) if not isinstance(v, str) else (v or fallback)
+    def _i(v):
+        """Intero o None."""
+        try: return int(v) if v not in (None, "", {}, []) else None
+        except (TypeError, ValueError): return None
+
+    punteggio     = _i(risultato.get("punteggio"))
+    nome_contatto = _s(risultato.get("nome_contatto"), f"{nome} {cognome}".strip() or None)
+    ruolo_ai      = _s(risultato.get("ruolo_attuale"), ruolo or None)
+    azienda_ai    = _s(risultato.get("azienda"), azienda or None)
+    spunti_raw    = risultato.get("spunti_contatto", [])
+    spunti_json   = json.dumps(spunti_raw if isinstance(spunti_raw, list) else [], ensure_ascii=False)
+    analisi_str   = _s(risultato.get("analisi_percorso"), "") or ""
+    messaggio_str = _s(risultato.get("messaggio_outreach"), "") or ""
     anteprima     = testo_profilo[:120].replace("\n", " ").strip()
 
     e_candidato_nuovo = not candidato_id  # True se stiamo creando un nuovo record
@@ -510,8 +550,7 @@ def analizza_candidato():
                punteggio=?, analisi=?, spunti=?, messaggio_outreach=?,
                stato='Da contattare', data_aggiornamento=CURRENT_TIMESTAMP
                WHERE id=?""",
-            (punteggio, risultato.get("analisi_percorso", ""),
-             spunti_json, risultato.get("messaggio_outreach", ""), candidato_id)
+            (punteggio, analisi_str, spunti_json, messaggio_str, candidato_id)
         )
     else:
         # Crea nuovo candidato direttamente in pipeline come "Da contattare"
@@ -522,8 +561,8 @@ def analizza_candidato():
                 messaggio_outreach, ricerca_id)
                VALUES (?, ?, ?, ?, ?, ?, 'Da contattare', ?, ?, ?, ?, ?)""",
             (nome, cognome, ruolo_ai, azienda_ai, linkedin,
-             tipo_profilo, punteggio, risultato.get("analisi_percorso", ""),
-             spunti_json, risultato.get("messaggio_outreach", ""), ricerca_id)
+             tipo_profilo, punteggio, analisi_str,
+             spunti_json, messaggio_str, ricerca_id)
         )
         candidato_id = cur.lastrowid
 
@@ -538,8 +577,7 @@ def analizza_candidato():
             candidato_id, fonte)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (nome_contatto, ruolo_ai, azienda_ai, tipo_profilo, anteprima,
-         punteggio, risultato.get("analisi_percorso", ""), spunti_json,
-         risultato.get("messaggio_outreach", ""), candidato_id, fonte)
+         punteggio, analisi_str, spunti_json, messaggio_str, candidato_id, fonte)
     )
 
     # Incrementa profili_importati solo per nuovi candidati, non per ri-analisi

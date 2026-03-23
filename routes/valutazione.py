@@ -64,11 +64,17 @@ def analizza():
 
     db = get_db()
 
-    # Dati estratti da Claude
-    nome_contatto   = risultato.get("nome_contatto") or None
-    ruolo_attuale   = risultato.get("ruolo_attuale") or None
-    azienda         = risultato.get("azienda") or None
-    anni_esperienza = risultato.get("anni_esperienza") or None
+    # Dati estratti da Claude — forzati al tipo corretto per PostgreSQL
+    def _s(v):  # stringa o None
+        return str(v) if v not in (None, "", {}, []) else None
+    def _i(v):  # intero o None
+        try: return int(v) if v not in (None, "", {}, []) else None
+        except (TypeError, ValueError): return None
+
+    nome_contatto   = _s(risultato.get("nome_contatto"))
+    ruolo_attuale   = _s(risultato.get("ruolo_attuale"))
+    azienda         = _s(risultato.get("azienda"))
+    anni_esperienza = _i(risultato.get("anni_esperienza"))
 
     # Fallback nome dal DB se arriva da candidato registrato
     if not nome_contatto and candidato_id:
