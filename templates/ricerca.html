@@ -101,7 +101,19 @@
                     <option value="3">3 pagine (~30 profili)</option>
                 </select>
             </div>
-            <div class="form-group"></div>
+            <div class="form-group">
+                <label class="form-label">Tipo profilo da cercare</label>
+                <div class="profilo-toggle" style="margin-top:0.25rem;">
+                    <label class="toggle-option selected" id="toggle-cerca-a" onclick="selezionaTipoCerca('A')">
+                        <input type="radio" name="tipo_profilo_cerca" value="A" checked>
+                        <span class="toggle-badge">Profilo A</span>
+                    </label>
+                    <label class="toggle-option" id="toggle-cerca-b" onclick="selezionaTipoCerca('B')">
+                        <input type="radio" name="tipo_profilo_cerca" value="B">
+                        <span class="toggle-badge">Profilo B</span>
+                    </label>
+                </div>
+            </div>
         </div>
         <div class="form-actions">
             <button class="btn btn-primary btn-lg" id="btn-cerca" onclick="cercaFigure()">
@@ -249,8 +261,7 @@
                 </label>
                 <label class="toggle-option" id="toggle-b" onclick="selezionaTipo('B')">
                     <input type="radio" name="tipo_profilo_modal" value="B">
-                    <span class="toggle-badge">Profilo B</span>
-                    <span class="toggle-desc">Figure tecniche, IT, engineering</span>
+                    <span class="toggle-badge">Figure tecniche, IT, engineering</span>
                 </label>
             </div>
             <div class="form-actions" style="margin-top:1.5rem;">
@@ -260,11 +271,72 @@
         </div>
     </div>
 </div>
+
+<!-- Modal: analisi AI candidato dalla ricerca -->
+<div id="modal-analisi" class="modal-overlay hidden"
+     onclick="if(event.target===this)chiudiModalAnalisi()">
+    <div class="modal" style="max-width:680px;">
+        <div class="modal-header">
+            <h3>&#9733; Analisi AI Candidato</h3>
+            <button class="modal-close" onclick="chiudiModalAnalisi()">&#215;</button>
+        </div>
+        <div class="modal-body">
+            <!-- Step 1: selezione profilo -->
+            <div id="analisi-step1">
+                <p style="margin-bottom:1rem;color:var(--grigio-testo);font-size:0.9rem;">
+                    Avvia valutazione AI per <strong id="analisi-nome-candidato"></strong>
+                </p>
+                <div class="profilo-toggle" style="margin-bottom:1.5rem;">
+                    <label class="toggle-option selected" id="toggle-analisi-a" onclick="selezionaTipoAnalisi('A')">
+                        <input type="radio" name="tipo_profilo_analisi" value="A" checked>
+                        <span class="toggle-badge">Profilo A</span>
+                        <span class="toggle-desc">Figure commerciali, vendite, business</span>
+                    </label>
+                    <label class="toggle-option" id="toggle-analisi-b" onclick="selezionaTipoAnalisi('B')">
+                        <input type="radio" name="tipo_profilo_analisi" value="B">
+                        <span class="toggle-badge">Profilo B</span>
+                        <span class="toggle-desc">Figure tecniche, IT, engineering</span>
+                    </label>
+                </div>
+                <div class="form-actions">
+                    <button class="btn btn-primary" id="btn-avvia-analisi" onclick="avviaAnalisi()">
+                        &#9889; Avvia Analisi AI
+                    </button>
+                    <button class="btn btn-secondary" onclick="chiudiModalAnalisi()">Annulla</button>
+                </div>
+            </div>
+            <!-- Step 2: risultato analisi -->
+            <div id="analisi-risultato" class="hidden">
+                <div id="analisi-score-box" style="text-align:center;margin-bottom:1.5rem;"></div>
+                <div id="analisi-body"></div>
+                <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:var(--radius);
+                            padding:0.75rem 1rem;margin-top:1rem;font-size:0.88rem;color:#16a34a;">
+                    &#10003; Candidato salvato automaticamente in Pipeline e Cronologia Valutazioni
+                </div>
+                <div class="form-actions" style="margin-top:1.25rem;">
+                    <a id="link-pipeline" href="/pipeline" class="btn btn-primary btn-sm">&#9776; Vedi in Pipeline</a>
+                    <button class="btn btn-secondary btn-sm" onclick="chiudiModalAnalisi()">Chiudi</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-/* ---- Ricerca Automatica ---- */
+/* ------------------------------------------------------------------ */
+/* Stato globale                                                        */
+/* ------------------------------------------------------------------ */
+let tipoProfiloSelezionato = 'A';   // per modal importa
+let tipoCercaSelezionato   = 'A';   // per form ricerca manuale
+let tipoAnalisiSelezionato = 'A';   // per modal analisi AI
+let ricercaIdCorrente      = null;  // id del record ricerche_automatiche corrente
+let personaInAnalisi       = null;  // candidato che sta per essere analizzato
+
+/* ------------------------------------------------------------------ */
+/* Ricerca Automatica                                                   */
+/* ------------------------------------------------------------------ */
 function ricercaAutomatica(tipo) {
     const maxProfili = parseInt(document.getElementById('max-profili').value, 10) || 20;
     const btnA = document.getElementById('btn-auto-a');
@@ -287,10 +359,8 @@ function ricercaAutomatica(tipo) {
         {% if imp_b_configurato %}btnB.disabled = false;{% endif %}
         btn.innerHTML = '&#128100; Ricerca Automatica Profilo ' + tipo;
 
-        if (data.errore) {
-            alert('Errore: ' + data.errore);
-            return;
-        }
+        if (data.errore) { alert('Errore: ' + data.errore); return; }
+
         document.getElementById('auto-trovati').textContent   = data.trovati ?? '—';
         document.getElementById('auto-importati').textContent = data.importati ?? '—';
         document.getElementById('auto-valutati').textContent  = data.valutati ?? '—';
@@ -306,11 +376,20 @@ function ricercaAutomatica(tipo) {
     });
 }
 
-/* ---- Ricerca manuale ---- */
-let tipoProfiloSelezionato = 'A';
+/* ------------------------------------------------------------------ */
+/* Tipo profilo form ricerca                                            */
+/* ------------------------------------------------------------------ */
+function selezionaTipoCerca(tipo) {
+    tipoCercaSelezionato = tipo;
+    document.getElementById('toggle-cerca-a').classList.toggle('selected', tipo === 'A');
+    document.getElementById('toggle-cerca-b').classList.toggle('selected', tipo === 'B');
+}
 
+/* ------------------------------------------------------------------ */
+/* Ricerca manuale                                                      */
+/* ------------------------------------------------------------------ */
 function cercaFigure() {
-    const ruolo = document.getElementById('ruolo').value.trim();
+    const ruolo         = document.getElementById('ruolo').value.trim();
     const parole_chiave = document.getElementById('parole_chiave').value.trim();
 
     if (!ruolo && !parole_chiave) {
@@ -322,6 +401,7 @@ function cercaFigure() {
     document.getElementById('risultati-section').classList.add('hidden');
     document.getElementById('nessun-risultato').classList.add('hidden');
     document.getElementById('btn-altri').classList.add('hidden');
+    ricercaIdCorrente = null;
 
     const btn = document.getElementById('btn-cerca');
     btn.disabled = true;
@@ -331,12 +411,13 @@ function cercaFigure() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-            ruolo: ruolo,
+            ruolo:         ruolo,
             parole_chiave: parole_chiave,
-            citta: document.getElementById('citta').value.trim(),
-            paese: '',
-            azienda: document.getElementById('azienda').value.trim(),
-            num_pagine: parseInt(document.getElementById('num_pagine').value),
+            citta:         document.getElementById('citta').value.trim(),
+            paese:         '',
+            azienda:       document.getElementById('azienda').value.trim(),
+            num_pagine:    parseInt(document.getElementById('num_pagine').value),
+            tipo_profilo:  tipoCercaSelezionato,
         })
     })
     .then(function(r) { return r.json(); })
@@ -344,10 +425,10 @@ function cercaFigure() {
         btn.disabled = false;
         btn.innerHTML = '&#128269; Cerca Candidati';
 
-        if (data.errore) {
-            alert('Errore: ' + data.errore);
-            return;
-        }
+        if (data.errore) { alert('Errore: ' + data.errore); return; }
+
+        ricercaIdCorrente = data.ricerca_id || null;
+
         if (!data.persone || data.persone.length === 0) {
             document.getElementById('nessun-risultato').classList.remove('hidden');
             return;
@@ -382,8 +463,8 @@ function renderRisultati(persone, totale) {
             '<td>' + escHtml(location) + '</td>' +
             '<td>' + linkedinBtn + '</td>' +
             '<td style="display:flex;gap:0.4rem;">' +
-            '<button class="btn btn-primary btn-xs" onclick=\'apriModal(' + JSON.stringify(p) + ')\'>&#43; Importa</button>' +
-            '<button class="btn btn-outline btn-xs" onclick=\'analizzaProfilo(' + JSON.stringify(p) + ')\'>&#9733; Analizza</button>' +
+            '<button class="btn btn-outline btn-xs" onclick=\'apriModal(' + JSON.stringify(p) + ')\'>&#43; Importa</button>' +
+            '<button class="btn btn-primary btn-xs" onclick=\'apriModalAnalisi(' + JSON.stringify(p) + ')\'>&#9733; Analizza</button>' +
             '</td>' +
             '</tr>';
     });
@@ -392,6 +473,9 @@ function renderRisultati(persone, totale) {
     document.getElementById('risultati-section').classList.remove('hidden');
 }
 
+/* ------------------------------------------------------------------ */
+/* Modal Importa (solo pipeline, senza analisi AI)                     */
+/* ------------------------------------------------------------------ */
 function apriModal(persona) {
     tipoProfiloSelezionato = 'A';
     document.getElementById('modal-nome').textContent =
@@ -425,7 +509,7 @@ function confermaImport() {
     .then(function(data) {
         chiudiModal();
         if (data.successo) {
-            alert('Candidato importato con successo nella pipeline!');
+            alert('Candidato importato nella pipeline!');
         } else {
             alert('Errore: ' + (data.errore || 'sconosciuto'));
         }
@@ -433,12 +517,118 @@ function confermaImport() {
     .catch(function(err) { alert('Errore: ' + err); });
 }
 
-function analizzaProfilo(p) {
-    // Salva il testo profilo in sessionStorage e reindirizza alla valutazione
-    sessionStorage.setItem('profilo_da_analizzare', p.testo_profilo || '');
-    window.location.href = '/valutazione';
+document.getElementById('modal-import').addEventListener('click', function(e) {
+    if (e.target === this) chiudiModal();
+});
+
+/* ------------------------------------------------------------------ */
+/* Modal Analisi AI                                                     */
+/* ------------------------------------------------------------------ */
+function apriModalAnalisi(persona) {
+    personaInAnalisi       = persona;
+    tipoAnalisiSelezionato = tipoCercaSelezionato; // suggerisce il tipo della ricerca corrente
+
+    const nomeCompleto = [persona.nome, persona.cognome].filter(Boolean).join(' ') || 'questo candidato';
+    document.getElementById('analisi-nome-candidato').textContent = nomeCompleto;
+    document.getElementById('toggle-analisi-a').classList.toggle('selected', tipoAnalisiSelezionato === 'A');
+    document.getElementById('toggle-analisi-b').classList.toggle('selected', tipoAnalisiSelezionato === 'B');
+
+    // Reset allo step 1
+    document.getElementById('analisi-step1').classList.remove('hidden');
+    document.getElementById('analisi-risultato').classList.add('hidden');
+    document.getElementById('btn-avvia-analisi').disabled = false;
+    document.getElementById('btn-avvia-analisi').innerHTML = '&#9889; Avvia Analisi AI';
+
+    document.getElementById('modal-analisi').classList.remove('hidden');
 }
 
+function chiudiModalAnalisi() {
+    document.getElementById('modal-analisi').classList.add('hidden');
+}
+
+function selezionaTipoAnalisi(tipo) {
+    tipoAnalisiSelezionato = tipo;
+    document.getElementById('toggle-analisi-a').classList.toggle('selected', tipo === 'A');
+    document.getElementById('toggle-analisi-b').classList.toggle('selected', tipo === 'B');
+}
+
+function avviaAnalisi() {
+    const p = personaInAnalisi;
+    if (!p) return;
+
+    const btn = document.getElementById('btn-avvia-analisi');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Analisi in corso...';
+
+    // Costruisce testo profilo dai dati disponibili
+    const testo = [
+        'Nome: ' + [p.nome, p.cognome].filter(Boolean).join(' '),
+        'Ruolo: ' + (p.ruolo || ''),
+        'Azienda: ' + (p.azienda || ''),
+        'Location: ' + (p.location || ''),
+        'Sommario: ' + (p.sommario || ''),
+    ].join('\n');
+
+    fetch('/ricerca/analizza_candidato', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            testo_profilo: testo,
+            nome:          p.nome || '',
+            cognome:       p.cognome || '',
+            ruolo:         p.ruolo || '',
+            azienda:       p.azienda || '',
+            linkedin:      p.linkedin || '',
+            tipo_profilo:  tipoAnalisiSelezionato,
+            ricerca_id:    ricercaIdCorrente,
+        })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.errore) {
+            btn.disabled = false;
+            btn.innerHTML = '&#9889; Avvia Analisi AI';
+            alert('Errore analisi: ' + data.errore);
+            return;
+        }
+        mostraRisultatoAnalisi(data);
+    })
+    .catch(function(err) {
+        btn.disabled = false;
+        btn.innerHTML = '&#9889; Avvia Analisi AI';
+        alert('Errore di connessione: ' + err);
+    });
+}
+
+function mostraRisultatoAnalisi(data) {
+    const punteggio  = data.punteggio || 0;
+    const scoreClass = punteggio >= 8 ? 'score-alto' : (punteggio >= 5 ? 'score-medio' : 'score-basso');
+
+    let spunti = data.spunti_contatto || [];
+    if (typeof spunti === 'string') {
+        try { spunti = JSON.parse(spunti); } catch { spunti = []; }
+    }
+    const spuntiHtml = spunti.map(function(s) {
+        return '<li class="spunto-item">' + escHtml(s) + '</li>';
+    }).join('');
+
+    document.getElementById('analisi-score-box').innerHTML =
+        '<div class="report-score ' + scoreClass + '">' + punteggio + '/10</div>';
+
+    document.getElementById('analisi-body').innerHTML =
+        '<div class="report-sezione"><h4>Analisi del Percorso</h4>' +
+        '<p>' + escHtml(data.analisi_percorso || '—') + '</p></div>' +
+        (spuntiHtml ? '<div class="report-sezione"><h4>Spunti per il Contatto</h4><ul>' + spuntiHtml + '</ul></div>' : '') +
+        (data.messaggio_outreach ? '<div class="report-sezione"><h4>Messaggio di Outreach</h4>' +
+        '<div class="outreach-box">' + escHtml(data.messaggio_outreach) + '</div></div>' : '');
+
+    document.getElementById('analisi-step1').classList.add('hidden');
+    document.getElementById('analisi-risultato').classList.remove('hidden');
+}
+
+/* ------------------------------------------------------------------ */
+/* Utility                                                             */
+/* ------------------------------------------------------------------ */
 function escHtml(str) {
     return String(str)
         .replace(/&/g, '&amp;')
@@ -446,10 +636,5 @@ function escHtml(str) {
         .replace(/>/g, '&gt;')
         .replace(/"/g, '&quot;');
 }
-
-document.getElementById('modal-import').addEventListener('click', function(e) {
-    if (e.target === this) chiudiModal();
-});
-
 </script>
 {% endblock %}
