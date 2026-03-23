@@ -13,31 +13,70 @@ def get_client():
     return anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
 
 
-def analizza_profilo_linkedin(testo_profilo: str, tipo_profilo: str) -> dict:
+def analizza_profilo_linkedin(testo_profilo: str, tipo_profilo: str, impostazioni: dict = None) -> dict:
     """
     Analizza un profilo LinkedIn e restituisce valutazione strutturata.
 
-    tipo_profilo: 'A' = 40-65 anni, consulenza, P.IVA
-                  'B' = under 35, esperienza bancaria
+    tipo_profilo: 'A' = Senior, 'B' = Under 35
+    impostazioni: dict con i parametri configurati nella pagina Impostazioni (opzionale)
     """
     client = get_client()
 
-    if tipo_profilo == "A":
-        descrizione_profilo = (
-            "Profilo A: professionista senior tra 40 e 65 anni, "
-            "con esperienza in consulenza, libero professionista o con P.IVA, "
-            "orientato all'autonomia e alla gestione clienti."
+    if impostazioni:
+        # Usa i parametri personalizzati dell'utente
+        if tipo_profilo == "A":
+            descrizione_profilo = (
+                f"Profilo A (Senior): età tra {impostazioni.get('eta_min', 40)} e "
+                f"{impostazioni.get('eta_max', 65)} anni, almeno "
+                f"{impostazioni.get('anni_esperienza_min', 5)} anni di esperienza nel settore. "
+                f"Settori di provenienza accettati: {impostazioni.get('settori', 'consulenza, bancario, finanziario')}. "
+                f"Ruoli target: {impostazioni.get('ruoli_target', '')}. "
+                f"Segnali positivi (favoriscono la valutazione): {impostazioni.get('keyword_positive', '')}. "
+                f"Segnali negativi (penalizzano la valutazione): {impostazioni.get('keyword_negative', '')}."
+            )
+        else:
+            descrizione_profilo = (
+                f"Profilo B (Under 35): età tra {impostazioni.get('eta_min', 22)} e "
+                f"{impostazioni.get('eta_max', 35)} anni, almeno "
+                f"{impostazioni.get('anni_esperienza_min', 2)} anni di esperienza bancaria. "
+                f"Istituti di provenienza preferiti: {impostazioni.get('istituti', 'banche, assicurazioni, SIM')}. "
+                f"Ruoli target: {impostazioni.get('ruoli_target', '')}. "
+                f"Segnali positivi (favoriscono la valutazione): {impostazioni.get('keyword_positive', '')}. "
+                f"Segnali negativi (penalizzano la valutazione): {impostazioni.get('keyword_negative', '')}."
+            )
+
+        p_eta  = impostazioni.get('peso_eta', 5)
+        p_esp  = impostazioni.get('peso_esperienza', 5)
+        p_set  = impostazioni.get('peso_settore', 5)
+        p_ruo  = impostazioni.get('peso_ruolo', 5)
+        p_kw   = impostazioni.get('peso_keyword', 5)
+        istr_punteggio = (
+            f"\nPer il punteggio finale (1-10) usa questi pesi (scala 0-10, 0=ignora, 10=determinante):\n"
+            f"- Età nel range target: {p_eta}/10\n"
+            f"- Anni di esperienza: {p_esp}/10\n"
+            f"- Settore/istituto di provenienza: {p_set}/10\n"
+            f"- Corrispondenza ruolo target: {p_ruo}/10\n"
+            f"- Parole chiave positive/negative: {p_kw}/10"
         )
     else:
-        descrizione_profilo = (
-            "Profilo B: professionista under 35 con esperienza bancaria, "
-            "orientato alla crescita professionale nel settore finanziario."
-        )
+        # Valori di default
+        if tipo_profilo == "A":
+            descrizione_profilo = (
+                "Profilo A: professionista senior tra 40 e 65 anni, "
+                "con esperienza in consulenza, libero professionista o con P.IVA, "
+                "orientato all'autonomia e alla gestione clienti."
+            )
+        else:
+            descrizione_profilo = (
+                "Profilo B: professionista under 35 con esperienza bancaria, "
+                "orientato alla crescita professionale nel settore finanziario."
+            )
+        istr_punteggio = ""
 
     prompt = f"""Sei un esperto recruiter nel settore della consulenza finanziaria e bancaria.
 Analizza il seguente profilo LinkedIn per valutarne la compatibilità con questo target:
 
-{descrizione_profilo}
+{descrizione_profilo}{istr_punteggio}
 
 PROFILO LINKEDIN:
 {testo_profilo}

@@ -856,6 +856,111 @@ body {
 .text-center { text-align: center; }
 
 /* =============================================
+   IMPOSTAZIONI — Slider pesi e tab
+   ============================================= */
+.tab-bar {
+    display: flex;
+    gap: 0.5rem;
+    border-bottom: 2px solid var(--grigio-bordo);
+    padding-bottom: 0;
+}
+
+.tab-btn {
+    background: none;
+    border: none;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -2px;
+    padding: 0.65rem 1.25rem;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--grigio-testo);
+    cursor: pointer;
+    transition: color 0.2s, border-color 0.2s;
+    font-family: var(--font);
+}
+
+.tab-btn:hover { color: var(--azzurro); }
+
+.tab-btn.active {
+    color: var(--azzurro);
+    border-bottom-color: var(--azzurro);
+}
+
+.slider-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 0.875rem;
+}
+
+.slider-label {
+    flex: 0 0 240px;
+    font-size: 0.875rem;
+    color: var(--testo);
+    font-weight: 500;
+}
+
+.slider-wrap {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex: 1;
+}
+
+.slider {
+    flex: 1;
+    -webkit-appearance: none;
+    height: 6px;
+    border-radius: 3px;
+    background: var(--grigio-bordo);
+    outline: none;
+    cursor: pointer;
+}
+
+.slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--azzurro);
+    cursor: pointer;
+    box-shadow: 0 1px 4px rgba(46,124,246,0.3);
+}
+
+.slider::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--azzurro);
+    cursor: pointer;
+    border: none;
+}
+
+.slider-val {
+    font-size: 0.9rem;
+    font-weight: 700;
+    color: var(--azzurro);
+    min-width: 1.5rem;
+    text-align: center;
+}
+
+.form-hint {
+    font-size: 0.78rem;
+    color: var(--grigio-testo);
+    font-weight: 400;
+}
+
+.kw-positive { border-left: 3px solid var(--verde); }
+.kw-negative { border-left: 3px solid var(--rosso); }
+
+.save-msg {
+    color: var(--verde);
+    font-weight: 600;
+    font-size: 0.9rem;
+    margin-left: 0.75rem;
+}
+
+/* =============================================
    RESPONSIVE
    ============================================= */
 @media (max-width: 900px) {

@@ -87,5 +87,27 @@ def init_db():
         )
     """)
 
+    # Tabella impostazioni profili A e B
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS impostazioni_profilo (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            profilo TEXT NOT NULL UNIQUE,
+            eta_min INTEGER DEFAULT 0,
+            eta_max INTEGER DEFAULT 99,
+            anni_esperienza_min INTEGER DEFAULT 0,
+            settori TEXT DEFAULT '',
+            istituti TEXT DEFAULT '',
+            ruoli_target TEXT DEFAULT '',
+            keyword_positive TEXT DEFAULT '',
+            keyword_negative TEXT DEFAULT '',
+            peso_eta INTEGER DEFAULT 5,
+            peso_esperienza INTEGER DEFAULT 5,
+            peso_settore INTEGER DEFAULT 5,
+            peso_ruolo INTEGER DEFAULT 5,
+            peso_keyword INTEGER DEFAULT 5,
+            data_aggiornamento TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
     conn.commit()
     conn.close()

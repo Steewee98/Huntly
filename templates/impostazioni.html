@@ -1,0 +1,254 @@
+{% extends "base.html" %}
+{% block title %}Impostazioni — Recruiter Assistant{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">&#9881; Impostazioni Profili</h1>
+    <p class="page-subtitle">Configura i criteri di valutazione per ogni profilo. I parametri vengono usati dall'AI durante l'analisi.</p>
+</div>
+
+<!-- Tab toggle -->
+<div class="tab-bar" style="margin-bottom:1.5rem;">
+    <button class="tab-btn active" id="tab-a-btn" onclick="switchTab('A')">
+        Profilo A &mdash; Senior (40-65 anni)
+    </button>
+    <button class="tab-btn" id="tab-b-btn" onclick="switchTab('B')">
+        Profilo B &mdash; Under 35
+    </button>
+</div>
+
+<!-- ===== PROFILO A ===== -->
+<div id="panel-A">
+    <form id="form-A" onsubmit="salvaImpostazioni(event,'A')">
+
+        <div class="card" style="margin-bottom:1.25rem;">
+            <div class="card-header"><h3>Dati anagrafici e di esperienza</h3></div>
+            <div class="card-body">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Età minima</label>
+                        <input type="number" name="eta_min" class="form-input"
+                               value="{{ imp_a.get('eta_min', 40) }}" min="18" max="99">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Età massima</label>
+                        <input type="number" name="eta_max" class="form-input"
+                               value="{{ imp_a.get('eta_max', 65) }}" min="18" max="99">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Anni minimi di esperienza nel settore</label>
+                        <input type="number" name="anni_esperienza_min" class="form-input"
+                               value="{{ imp_a.get('anni_esperienza_min', 5) }}" min="0" max="50">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Settori di provenienza accettati <span class="form-hint">(separati da virgola)</span></label>
+                    <input type="text" name="settori" class="form-input"
+                           placeholder="es. consulenza finanziaria, bancario, assicurativo, P.IVA..."
+                           value="{{ imp_a.get('settori', '') }}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Ruoli target <span class="form-hint">(separati da virgola)</span></label>
+                    <input type="text" name="ruoli_target" class="form-input"
+                           placeholder="es. Consulente finanziario, Private Banker, Promotore finanziario..."
+                           value="{{ imp_a.get('ruoli_target', '') }}">
+                </div>
+            </div>
+        </div>
+
+        <div class="card" style="margin-bottom:1.25rem;">
+            <div class="card-header"><h3>Parole chiave</h3></div>
+            <div class="card-body">
+                <div class="form-group">
+                    <label class="form-label">&#10003; Parole chiave positive <span class="form-hint">— segnali di apertura al cambiamento (separati da virgola)</span></label>
+                    <input type="text" name="keyword_positive" class="form-input kw-positive"
+                           placeholder="es. libero professionista, P.IVA, autonomia, gestione clienti..."
+                           value="{{ imp_a.get('keyword_positive', '') }}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">&#10007; Parole chiave negative <span class="form-hint">— segnali di disinteresse (separati da virgola)</span></label>
+                    <input type="text" name="keyword_negative" class="form-input kw-negative"
+                           placeholder="es. dipendente pubblico, pensionato, startup..."
+                           value="{{ imp_a.get('keyword_negative', '') }}">
+                </div>
+            </div>
+        </div>
+
+        <div class="card" style="margin-bottom:1.5rem;">
+            <div class="card-header"><h3>Pesi per la valutazione AI</h3></div>
+            <div class="card-body">
+                <p style="color:var(--grigio-testo);font-size:0.875rem;margin-bottom:1.25rem;">
+                    Definisci quanto conta ogni criterio nel punteggio finale (0 = non considerato, 10 = determinante).
+                </p>
+                {% set sliders_a = [
+                    ('peso_eta',         'Peso età nel range target',          imp_a.get('peso_eta', 5)),
+                    ('peso_esperienza',  'Peso anni di esperienza',            imp_a.get('peso_esperienza', 5)),
+                    ('peso_settore',     'Peso settore di provenienza',        imp_a.get('peso_settore', 5)),
+                    ('peso_ruolo',       'Peso corrispondenza ruolo target',   imp_a.get('peso_ruolo', 5)),
+                    ('peso_keyword',     'Peso parole chiave pos/neg',         imp_a.get('peso_keyword', 5)),
+                ] %}
+                {% for name, label, val in sliders_a %}
+                <div class="slider-row">
+                    <label class="slider-label">{{ label }}</label>
+                    <div class="slider-wrap">
+                        <input type="range" name="{{ name }}" min="0" max="10" value="{{ val }}"
+                               class="slider" oninput="this.nextElementSibling.textContent=this.value">
+                        <span class="slider-val">{{ val }}</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary btn-lg" id="btn-salva-A">
+                &#10003; Salva Profilo A
+            </button>
+            <span id="msg-A" class="save-msg hidden">Impostazioni salvate!</span>
+        </div>
+    </form>
+</div>
+
+<!-- ===== PROFILO B ===== -->
+<div id="panel-B" class="hidden">
+    <form id="form-B" onsubmit="salvaImpostazioni(event,'B')">
+
+        <div class="card" style="margin-bottom:1.25rem;">
+            <div class="card-header"><h3>Dati anagrafici e di esperienza</h3></div>
+            <div class="card-body">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label class="form-label">Età minima</label>
+                        <input type="number" name="eta_min" class="form-input"
+                               value="{{ imp_b.get('eta_min', 22) }}" min="18" max="99">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Età massima</label>
+                        <input type="number" name="eta_max" class="form-input"
+                               value="{{ imp_b.get('eta_max', 35) }}" min="18" max="99">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Anni minimi di esperienza bancaria</label>
+                        <input type="number" name="anni_esperienza_min" class="form-input"
+                               value="{{ imp_b.get('anni_esperienza_min', 2) }}" min="0" max="50">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Istituti bancari di provenienza preferiti <span class="form-hint">(separati da virgola)</span></label>
+                    <input type="text" name="istituti" class="form-input"
+                           placeholder="es. Intesa Sanpaolo, Unicredit, Mediobanca, BNL..."
+                           value="{{ imp_b.get('istituti', '') }}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Ruoli target <span class="form-hint">(separati da virgola)</span></label>
+                    <input type="text" name="ruoli_target" class="form-input"
+                           placeholder="es. Analista finanziario, Relationship Manager, Credit Analyst..."
+                           value="{{ imp_b.get('ruoli_target', '') }}">
+                </div>
+            </div>
+        </div>
+
+        <div class="card" style="margin-bottom:1.25rem;">
+            <div class="card-header"><h3>Parole chiave</h3></div>
+            <div class="card-body">
+                <div class="form-group">
+                    <label class="form-label">&#10003; Parole chiave positive <span class="form-hint">— segnali di apertura al cambiamento (separati da virgola)</span></label>
+                    <input type="text" name="keyword_positive" class="form-input kw-positive"
+                           placeholder="es. crescita professionale, open to work, banking, fintech..."
+                           value="{{ imp_b.get('keyword_positive', '') }}">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">&#10007; Parole chiave negative <span class="form-hint">— segnali di disinteresse (separati da virgola)</span></label>
+                    <input type="text" name="keyword_negative" class="form-input kw-negative"
+                           placeholder="es. CEO, founder, senior manager, direttore..."
+                           value="{{ imp_b.get('keyword_negative', '') }}">
+                </div>
+            </div>
+        </div>
+
+        <div class="card" style="margin-bottom:1.5rem;">
+            <div class="card-header"><h3>Pesi per la valutazione AI</h3></div>
+            <div class="card-body">
+                <p style="color:var(--grigio-testo);font-size:0.875rem;margin-bottom:1.25rem;">
+                    Definisci quanto conta ogni criterio nel punteggio finale (0 = non considerato, 10 = determinante).
+                </p>
+                {% set sliders_b = [
+                    ('peso_eta',         'Peso età nel range target',         imp_b.get('peso_eta', 5)),
+                    ('peso_esperienza',  'Peso anni di esperienza bancaria',  imp_b.get('peso_esperienza', 5)),
+                    ('peso_settore',     'Peso istituto di provenienza',      imp_b.get('peso_settore', 5)),
+                    ('peso_ruolo',       'Peso corrispondenza ruolo target',  imp_b.get('peso_ruolo', 5)),
+                    ('peso_keyword',     'Peso parole chiave pos/neg',        imp_b.get('peso_keyword', 5)),
+                ] %}
+                {% for name, label, val in sliders_b %}
+                <div class="slider-row">
+                    <label class="slider-label">{{ label }}</label>
+                    <div class="slider-wrap">
+                        <input type="range" name="{{ name }}" min="0" max="10" value="{{ val }}"
+                               class="slider" oninput="this.nextElementSibling.textContent=this.value">
+                        <span class="slider-val">{{ val }}</span>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn btn-primary btn-lg" id="btn-salva-B">
+                &#10003; Salva Profilo B
+            </button>
+            <span id="msg-B" class="save-msg hidden">Impostazioni salvate!</span>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function switchTab(p) {
+    document.getElementById('panel-A').classList.toggle('hidden', p !== 'A');
+    document.getElementById('panel-B').classList.toggle('hidden', p !== 'B');
+    document.getElementById('tab-a-btn').classList.toggle('active', p === 'A');
+    document.getElementById('tab-b-btn').classList.toggle('active', p === 'B');
+}
+
+function salvaImpostazioni(e, profilo) {
+    e.preventDefault();
+    const form = document.getElementById('form-' + profilo);
+    const btn  = document.getElementById('btn-salva-' + profilo);
+    const msg  = document.getElementById('msg-' + profilo);
+
+    const dati = { profilo: profilo };
+    form.querySelectorAll('[name]').forEach(function(el) {
+        dati[el.name] = el.type === 'range' || el.type === 'number'
+            ? parseInt(el.value, 10)
+            : el.value;
+    });
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Salvo...';
+    msg.classList.add('hidden');
+
+    fetch('/impostazioni/salva', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(dati)
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        btn.disabled = false;
+        btn.innerHTML = '&#10003; Salva Profilo ' + profilo;
+        if (data.successo) {
+            msg.classList.remove('hidden');
+            setTimeout(function() { msg.classList.add('hidden'); }, 3000);
+        } else {
+            alert('Errore: ' + (data.errore || 'sconosciuto'));
+        }
+    })
+    .catch(function(err) {
+        btn.disabled = false;
+        btn.innerHTML = '&#10003; Salva Profilo ' + profilo;
+        alert('Errore di connessione: ' + err);
+    });
+}
+</script>
+{% endblock %}

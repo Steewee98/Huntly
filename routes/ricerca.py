@@ -9,6 +9,7 @@ import time
 import requests
 from flask import Blueprint, render_template, request, jsonify
 from database import get_db
+from ai_helpers import analizza_profilo_linkedin
 
 # Blueprint per il modulo ricerca
 ricerca_bp = Blueprint("ricerca", __name__)
@@ -106,7 +107,13 @@ def normalizza_profilo(p):
 @ricerca_bp.route("/ricerca")
 def index():
     """Pagina di ricerca automatica figure con Apify/LinkedIn."""
-    return render_template("ricerca.html")
+    db = get_db()
+    imp_a = db.execute("SELECT id FROM impostazioni_profilo WHERE profilo='A'").fetchone()
+    imp_b = db.execute("SELECT id FROM impostazioni_profilo WHERE profilo='B'").fetchone()
+    db.close()
+    return render_template("ricerca.html",
+                           imp_a_configurato=imp_a is not None,
+                           imp_b_configurato=imp_b is not None)
 
 
 @ricerca_bp.route("/ricerca/cerca", methods=["POST"])
@@ -132,6 +139,118 @@ def cerca():
     return jsonify({
         "persone": persone,
         "totale": len(persone),
+    })
+
+
+@ricerca_bp.route("/ricerca/automatica", methods=["POST"])
+def automatica():
+    """
+    Ricerca automatica basata sui parametri delle impostazioni.
+    Importa i candidati trovati e lancia la valutazione AI per ciascuno.
+    """
+    dati = request.get_json()
+    tipo_profilo = dati.get("tipo_profilo", "A")
+    max_profili  = max(1, min(int(dati.get("max_profili", 20)), 100))
+
+    # Leggi impostazioni del profilo selezionato
+    db = get_db()
+    imp_row = db.execute(
+        "SELECT * FROM impostazioni_profilo WHERE profilo = ?", (tipo_profilo,)
+    ).fetchone()
+    db.close()
+
+    if not imp_row:
+        return jsonify({"errore": f"Impostazioni Profilo {tipo_profilo} non ancora configurate. "
+                                  f"Vai in Impostazioni e salva i parametri prima di usare la ricerca automatica."}), 400
+
+    imp = dict(imp_row)
+
+    # Costruisci la query per Apify dai parametri delle impostazioni
+    ruoli_raw = imp.get("ruoli_target", "") or ""
+    ruoli = [r.strip() for r in ruoli_raw.split(",") if r.strip()]
+
+    kw_positive = imp.get("keyword_positive", "") or ""
+    if tipo_profilo == "A":
+        extra = imp.get("settori", "") or ""
+    else:
+        extra = imp.get("istituti", "") or ""
+
+    kw_parts = [k.strip() for k in kw_positive.split(",") if k.strip()]
+    kw_parts += [s.strip() for s in extra.split(",") if s.strip()]
+    keywords = " ".join(kw_parts[:6])
+
+    ruolo_principale = ruoli[0] if ruoli else ""
+
+    # Calcola numero pagine (Apify restituisce ~10 profili per pagina)
+    num_pagine = max(1, (max_profili + 9) // 10)
+
+    items, errore = cerca_apify(ruolo_principale, "", "", "", keywords, num_pagine)
+    if errore:
+        return jsonify({"errore": errore}), 500
+
+    items = items[:max_profili]
+    trovati  = len(items)
+    importati = 0
+    valutati  = 0
+    punteggi  = []
+
+    db = get_db()
+    for item in items:
+        p = normalizza_profilo(item)
+        if not p["nome"] and not p["cognome"]:
+            continue
+
+        # Importa nella pipeline con stato "Da valutare"
+        cur = db.execute(
+            """INSERT INTO candidati
+               (nome, cognome, ruolo_attuale, azienda, profilo_linkedin,
+                tipo_profilo, stato, note)
+               VALUES (?, ?, ?, ?, ?, ?, 'Da valutare', ?)""",
+            (p["nome"], p["cognome"], p["ruolo"], p["azienda"],
+             p["linkedin"], tipo_profilo, p["headline"])
+        )
+        db.commit()
+        candidato_id = cur.lastrowid
+        importati += 1
+
+        # Valutazione AI con i parametri delle impostazioni
+        try:
+            testo = (
+                f"Nome: {p['nome']} {p['cognome']}\n"
+                f"Ruolo: {p['ruolo']}\n"
+                f"Azienda: {p['azienda']}\n"
+                f"Location: {p['location']}\n"
+                f"Sommario: {p['sommario']}\n"
+            )
+            risultato = analizza_profilo_linkedin(testo, tipo_profilo, imp)
+            punteggio = risultato.get("punteggio")
+            db.execute(
+                """UPDATE candidati SET
+                   punteggio=?, analisi=?, spunti=?, messaggio_outreach=?,
+                   stato='Da contattare', data_aggiornamento=CURRENT_TIMESTAMP
+                   WHERE id=?""",
+                (punteggio,
+                 risultato.get("analisi_percorso", ""),
+                 str(risultato.get("spunti_contatto", [])),
+                 risultato.get("messaggio_outreach", ""),
+                 candidato_id)
+            )
+            db.commit()
+            valutati += 1
+            if punteggio:
+                punteggi.append(punteggio)
+        except Exception:
+            pass  # continua anche se l'analisi AI fallisce per un singolo candidato
+
+    db.close()
+
+    punteggio_medio = round(sum(punteggi) / len(punteggi), 1) if punteggi else None
+    return jsonify({
+        "successo": True,
+        "trovati":  trovati,
+        "importati": importati,
+        "valutati":  valutati,
+        "punteggio_medio": punteggio_medio,
     })
 
 

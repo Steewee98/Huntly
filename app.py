@@ -13,6 +13,7 @@ from routes.candidati import candidati_bp
 from routes.pipeline import pipeline_bp
 from routes.contenuti import contenuti_bp
 from routes.ricerca import ricerca_bp
+from routes.impostazioni import impostazioni_bp
 
 # Carica le variabili d'ambiente dal file .env (se presente)
 load_dotenv()
@@ -28,9 +29,10 @@ app.register_blueprint(candidati_bp)
 app.register_blueprint(pipeline_bp)
 app.register_blueprint(contenuti_bp)
 app.register_blueprint(ricerca_bp)
+app.register_blueprint(impostazioni_bp)
 
 # Proteggi tutte le view con login_required (eccetto auth)
-for bp in [valutazione_bp, candidati_bp, pipeline_bp, contenuti_bp, ricerca_bp]:
+for bp in [valutazione_bp, candidati_bp, pipeline_bp, contenuti_bp, ricerca_bp, impostazioni_bp]:
     for endpoint, view_func in app.view_functions.items():
         if endpoint.startswith(bp.name + "."):
             app.view_functions[endpoint] = login_required(view_func)

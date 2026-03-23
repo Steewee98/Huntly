@@ -3,11 +3,70 @@
 
 {% block content %}
 <div class="page-header">
-    <h1 class="page-title">&#128269; Ricerca Automatica Candidati</h1>
+    <h1 class="page-title">&#128269; Ricerca Candidati</h1>
     <p class="page-subtitle">Trova figure professionali su LinkedIn tramite Apify e importale nella pipeline</p>
 </div>
 
-<!-- Form di ricerca -->
+<!-- ===== SEZIONE RICERCA AUTOMATICA ===== -->
+<div class="card" style="margin-bottom:1.5rem;border-left:4px solid var(--azzurro);">
+    <div class="card-header">
+        <h3>&#9889; Ricerca Automatica</h3>
+        <span style="font-size:0.8rem;color:var(--grigio-testo);">Usa i parametri configurati in Impostazioni</span>
+    </div>
+    <div class="card-body">
+        <div class="form-row" style="align-items:flex-end;gap:1rem;margin-bottom:1.25rem;">
+            <div class="form-group" style="max-width:260px;">
+                <label class="form-label">Numero massimo profili da cercare</label>
+                <input type="number" id="max-profili" class="form-input" value="20" min="1" max="100">
+            </div>
+        </div>
+        <div style="display:flex;gap:1rem;flex-wrap:wrap;align-items:center;">
+            <button class="btn btn-primary btn-lg" id="btn-auto-a"
+                    onclick="ricercaAutomatica('A')"
+                    {% if not imp_a_configurato %}disabled title="Configura prima il Profilo A in Impostazioni"{% endif %}>
+                &#128100; Ricerca Automatica Profilo A
+            </button>
+            <button class="btn btn-primary btn-lg" id="btn-auto-b"
+                    onclick="ricercaAutomatica('B')"
+                    {% if not imp_b_configurato %}disabled title="Configura prima il Profilo B in Impostazioni"{% endif %}>
+                &#128100; Ricerca Automatica Profilo B
+            </button>
+            {% if not imp_a_configurato or not imp_b_configurato %}
+            <a href="{{ url_for('impostazioni.index') }}" class="btn btn-outline btn-sm">
+                &#9881; Configura Impostazioni
+            </a>
+            {% endif %}
+        </div>
+
+        <!-- Box riepilogo risultati ricerca automatica -->
+        <div id="auto-risultato" class="hidden" style="margin-top:1.5rem;padding:1rem 1.25rem;
+             background:var(--azzurro-light);border-radius:var(--radius);border:1px solid #c5deff;">
+            <h4 style="margin-bottom:0.5rem;color:var(--azzurro);">Riepilogo ricerca</h4>
+            <div style="display:flex;gap:2rem;flex-wrap:wrap;">
+                <div><span style="font-size:1.5rem;font-weight:700;" id="auto-trovati">—</span>
+                     <div style="font-size:0.8rem;color:var(--grigio-testo);">Profili trovati</div></div>
+                <div><span style="font-size:1.5rem;font-weight:700;" id="auto-importati">—</span>
+                     <div style="font-size:0.8rem;color:var(--grigio-testo);">Importati in pipeline</div></div>
+                <div><span style="font-size:1.5rem;font-weight:700;" id="auto-valutati">—</span>
+                     <div style="font-size:0.8rem;color:var(--grigio-testo);">Valutati dall'AI</div></div>
+                <div><span style="font-size:1.5rem;font-weight:700;" id="auto-punteggio">—</span>
+                     <div style="font-size:0.8rem;color:var(--grigio-testo);">Punteggio medio</div></div>
+            </div>
+            <div style="margin-top:0.75rem;">
+                <a href="/pipeline" class="btn btn-primary btn-sm">&#9776; Vai alla Pipeline</a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Separatore visivo -->
+<div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.5rem;">
+    <hr style="flex:1;border:none;border-top:1px solid var(--grigio-bordo);">
+    <span style="color:var(--grigio-testo);font-size:0.85rem;white-space:nowrap;">oppure ricerca manuale</span>
+    <hr style="flex:1;border:none;border-top:1px solid var(--grigio-bordo);">
+</div>
+
+<!-- Form di ricerca manuale -->
 <div class="card">
     <div class="card-header">
         <h3>Parametri di ricerca</h3>
@@ -129,6 +188,49 @@
 
 {% block scripts %}
 <script>
+/* ---- Ricerca Automatica ---- */
+function ricercaAutomatica(tipo) {
+    const maxProfili = parseInt(document.getElementById('max-profili').value, 10) || 20;
+    const btnA = document.getElementById('btn-auto-a');
+    const btnB = document.getElementById('btn-auto-b');
+    const btn  = tipo === 'A' ? btnA : btnB;
+
+    btnA.disabled = true;
+    btnB.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Ricerca in corso...';
+    document.getElementById('auto-risultato').classList.add('hidden');
+
+    fetch('/ricerca/automatica', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tipo_profilo: tipo, max_profili: maxProfili })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        {% if imp_a_configurato %}btnA.disabled = false;{% endif %}
+        {% if imp_b_configurato %}btnB.disabled = false;{% endif %}
+        btn.innerHTML = '&#128100; Ricerca Automatica Profilo ' + tipo;
+
+        if (data.errore) {
+            alert('Errore: ' + data.errore);
+            return;
+        }
+        document.getElementById('auto-trovati').textContent   = data.trovati ?? '—';
+        document.getElementById('auto-importati').textContent = data.importati ?? '—';
+        document.getElementById('auto-valutati').textContent  = data.valutati ?? '—';
+        document.getElementById('auto-punteggio').textContent = data.punteggio_medio != null
+            ? data.punteggio_medio + '/10' : '—';
+        document.getElementById('auto-risultato').classList.remove('hidden');
+    })
+    .catch(function(err) {
+        {% if imp_a_configurato %}btnA.disabled = false;{% endif %}
+        {% if imp_b_configurato %}btnB.disabled = false;{% endif %}
+        btn.innerHTML = '&#128100; Ricerca Automatica Profilo ' + tipo;
+        alert('Errore di connessione: ' + err);
+    });
+}
+
+/* ---- Ricerca manuale ---- */
 let tipoProfiloSelezionato = 'A';
 
 function cercaFigure() {
