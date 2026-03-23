@@ -3,7 +3,7 @@
 
 {% block content %}
 
-<!-- Intestazione con navigazione -->
+<!-- Intestazione -->
 <div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.5rem;">
     <a href="/ricerca" class="btn btn-outline btn-sm">&#8592; Cronologia Ricerche</a>
     <div>
@@ -16,7 +16,7 @@
     </div>
 </div>
 
-<!-- Riepilogo ricerca -->
+<!-- Riepilogo -->
 <div class="card" style="margin-bottom:1.5rem;">
     <div class="card-header">
         <h3>Riepilogo Ricerca</h3>
@@ -25,15 +25,12 @@
         </span>
     </div>
     <div class="card-body">
-        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1.25rem;margin-bottom:1.5rem;">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:1.25rem;margin-bottom:1.5rem;">
             <div>
                 <div style="font-size:0.78rem;color:var(--grigio-testo);margin-bottom:0.2rem;">Fonte</div>
                 <div style="font-weight:600;">
-                    {% if ricerca.fonte == 'apify' %}
-                    &#9889; Automatica Apify
-                    {% else %}
-                    &#128203; Inserimento Manuale
-                    {% endif %}
+                    {% if ricerca.fonte == 'apify' %}&#9889; Automatica Apify
+                    {% else %}&#128203; Manuale{% endif %}
                 </div>
             </div>
             <div>
@@ -41,65 +38,58 @@
                 <div style="font-size:1.5rem;font-weight:700;color:var(--blu-scuro);">{{ ricerca.profili_trovati }}</div>
             </div>
             <div>
-                <div style="font-size:0.78rem;color:var(--grigio-testo);margin-bottom:0.2rem;">Importati</div>
+                <div style="font-size:0.78rem;color:var(--grigio-testo);margin-bottom:0.2rem;">Analizzati / Importati</div>
                 <div style="font-size:1.5rem;font-weight:700;color:var(--azzurro);">{{ ricerca.profili_importati }}</div>
             </div>
             <div>
                 <div style="font-size:0.78rem;color:var(--grigio-testo);margin-bottom:0.2rem;">Punteggio medio</div>
                 <div style="font-size:1.5rem;font-weight:700;">
-                    {% if ricerca.punteggio_medio %}
-                    {{ '%.1f'|format(ricerca.punteggio_medio) }}/10
-                    {% else %}—{% endif %}
+                    {% if ricerca.punteggio_medio %}{{ '%.1f'|format(ricerca.punteggio_medio) }}/10{% else %}—{% endif %}
                 </div>
             </div>
             <div>
                 <div style="font-size:0.78rem;color:var(--grigio-testo);margin-bottom:0.2rem;">Stato</div>
                 <div>
-                    {% if ricerca.stato == 'completata' %}
-                    <span style="color:#16a34a;font-weight:600;">&#10003; Completata</span>
-                    {% elif ricerca.stato == 'in_corso' %}
-                    <span style="color:var(--azzurro);font-weight:600;">&#8635; In corso</span>
-                    {% else %}
-                    <span style="color:#dc2626;font-weight:600;">&#10005; Errore</span>
-                    {% endif %}
+                    {% if ricerca.stato == 'completata' %}<span style="color:#16a34a;font-weight:600;">&#10003; Completata</span>
+                    {% elif ricerca.stato == 'in_corso' %}<span style="color:var(--azzurro);font-weight:600;">&#8635; In corso</span>
+                    {% else %}<span style="color:#dc2626;font-weight:600;">&#10005; Errore</span>{% endif %}
                 </div>
             </div>
         </div>
 
-        <!-- Parametri snapshot -->
         {% if parametri %}
         <div style="background:var(--grigio-sfondo);border-radius:var(--radius);padding:0.875rem 1rem;">
             <div style="font-size:0.78rem;color:var(--grigio-testo);margin-bottom:0.5rem;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">
-                Parametri usati al momento del lancio
+                Parametri usati
             </div>
             <div style="display:flex;flex-wrap:wrap;gap:0.5rem;">
-                {% for chiave, valore in parametri.items() %}
-                {% if valore %}
+                {% for chiave, valore in parametri.items() %}{% if valore %}
                 <span style="background:white;border:1px solid var(--grigio-bordo);border-radius:20px;padding:0.25rem 0.75rem;font-size:0.82rem;">
-                    <span style="color:var(--grigio-testo);">{{ chiave }}:</span>
-                    <strong>{{ valore }}</strong>
+                    <span style="color:var(--grigio-testo);">{{ chiave }}:</span> <strong>{{ valore }}</strong>
                 </span>
-                {% endif %}
-                {% endfor %}
+                {% endif %}{% endfor %}
             </div>
         </div>
         {% endif %}
     </div>
 </div>
 
-<!-- Tabella candidati -->
+<!-- Tabella profili -->
 <div class="card">
     <div class="card-header">
-        <h3>Candidati Trovati <span style="font-size:0.85rem;font-weight:400;color:var(--grigio-testo);">({{ candidati|length }})</span></h3>
+        <h3>
+            Profili Trovati
+            <span style="font-size:0.85rem;font-weight:400;color:var(--grigio-testo);">({{ profili|length }})</span>
+        </h3>
         <div style="display:flex;gap:0.5rem;align-items:center;flex-wrap:wrap;">
-            {% set non_analizzati = candidati | selectattr('punteggio', 'none') | list %}
+            {% set non_analizzati = profili | selectattr('punteggio', 'none') | list %}
             {% if non_analizzati %}
             <button class="btn btn-primary btn-sm" id="btn-analizza-tutti"
                     onclick="analizzaTutti()">
                 &#9889; Analizza tutti ({{ non_analizzati|length }})
             </button>
             {% endif %}
-            {% if candidati %}
+            {% if profili %}
             <a href="/ricerca/dettaglio/{{ ricerca.id }}/export_csv" class="btn btn-outline btn-sm">
                 &#8595; Esporta CSV
             </a>
@@ -107,84 +97,100 @@
         </div>
     </div>
 
-    <!-- Barra di avanzamento analisi batch -->
-    <div id="progress-container" class="hidden" style="padding:0.75rem 1.25rem;border-bottom:1px solid var(--grigio-bordo);">
+    <!-- Barra avanzamento analisi batch -->
+    <div id="progress-container" class="hidden"
+         style="padding:0.75rem 1.25rem;border-bottom:1px solid var(--grigio-bordo);">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.4rem;">
-            <span style="font-size:0.85rem;color:var(--grigio-testo);" id="progress-label">Analisi in corso...</span>
-            <span style="font-size:0.85rem;font-weight:600;" id="progress-count">0 / 0</span>
+            <span id="progress-label" style="font-size:0.85rem;color:var(--grigio-testo);">Analisi in corso...</span>
+            <span id="progress-count" style="font-size:0.85rem;font-weight:600;">0 / 0</span>
         </div>
         <div style="background:var(--grigio-bordo);border-radius:999px;height:8px;overflow:hidden;">
-            <div id="progress-bar" style="background:var(--azzurro);height:100%;width:0%;transition:width 0.3s;border-radius:999px;"></div>
+            <div id="progress-bar"
+                 style="background:var(--azzurro);height:100%;width:0%;transition:width 0.3s;border-radius:999px;"></div>
         </div>
     </div>
 
-    {% if candidati %}
+    {% if profili %}
     <div class="table-responsive">
-        <table class="data-table" id="tabella-candidati">
+        <table class="data-table" id="tabella-profili">
             <thead>
                 <tr>
-                    <th>Candidato</th>
+                    <th>Profilo</th>
                     <th>Azienda</th>
                     <th>Punteggio</th>
                     <th>Stato analisi</th>
-                    <th>Stato pipeline</th>
+                    <th>Pipeline</th>
                     <th>Azioni</th>
                 </tr>
             </thead>
             <tbody>
-                {% for c in candidati %}
-                <tr id="riga-{{ c.id }}" data-id="{{ c.id }}" data-tipo="{{ ricerca.tipo_profilo }}">
+                {% for p in profili %}
+                <tr id="riga-{{ loop.index0 }}"
+                    data-idx="{{ loop.index0 }}"
+                    data-profilo-id="{{ p.profilo_id or '' }}"
+                    data-candidato-id="{{ p.candidato_id or '' }}"
+                    data-tipo="{{ ricerca.tipo_profilo }}">
                     <td>
-                        <div class="candidato-nome">{{ c.nome }} {{ c.cognome }}</div>
-                        {% if c.ruolo_attuale %}
-                        <div class="candidato-meta">{{ c.ruolo_attuale }}</div>
+                        <div class="candidato-nome">{{ p.nome or '' }} {{ p.cognome or '' }}</div>
+                        {% if p.ruolo %}
+                        <div class="candidato-meta">{{ p.ruolo }}</div>
                         {% endif %}
-                        {% if c.profilo_linkedin %}
+                        {% if p.linkedin_url %}
                         <div style="margin-top:0.2rem;">
-                            <a href="{{ c.profilo_linkedin }}" target="_blank"
+                            <a href="{{ p.linkedin_url }}" target="_blank"
                                style="font-size:0.78rem;color:var(--azzurro);">LinkedIn &#8599;</a>
                         </div>
                         {% endif %}
                     </td>
-                    <td>{{ c.azienda or '—' }}</td>
+                    <td>{{ p.azienda or '—' }}</td>
                     <td class="cella-punteggio">
-                        {% if c.punteggio %}
-                        <span class="score-badge score-badge-{{ 'alto' if c.punteggio >= 8 else ('medio' if c.punteggio >= 5 else 'basso') }}">
-                            {{ c.punteggio }}/10
+                        {% if p.punteggio %}
+                        <span class="score-badge score-badge-{{ 'alto' if p.punteggio >= 8 else ('medio' if p.punteggio >= 5 else 'basso') }}">
+                            {{ p.punteggio }}/10
                         </span>
                         {% else %}
                         <span style="color:var(--grigio-testo);font-size:0.85rem;">—</span>
                         {% endif %}
                     </td>
-                    <td class="cella-badge-analisi">
-                        {% if c.punteggio is none %}
+                    <td class="cella-badge">
+                        {% if p.punteggio is none %}
                         <span class="badge-analisi badge-non-analizzato">Non analizzato</span>
-                        {% elif c.stato not in ('Da contattare', 'Da valutare') %}
+                        {% elif p.stato and p.stato not in ('Da contattare', 'Da valutare') %}
                         <span class="badge-analisi badge-in-pipeline">In pipeline</span>
                         {% else %}
-                        <span class="badge-analisi badge-analizzato">Analizzato &mdash; {{ c.punteggio }}/10</span>
+                        <span class="badge-analisi badge-analizzato">Analizzato — {{ p.punteggio }}/10</span>
+                        {% endif %}
+                    </td>
+                    <td class="cella-pipeline">
+                        {% if p.candidato_id %}
+                        <span style="font-size:0.82rem;">{{ p.stato or 'Da contattare' }}</span>
+                        {% else %}
+                        <span style="color:var(--grigio-testo);font-size:0.82rem;">—</span>
                         {% endif %}
                     </td>
                     <td>
-                        <span style="font-size:0.85rem;">{{ c.stato or '—' }}</span>
-                    </td>
-                    <td>
-                        <div style="display:flex;gap:0.4rem;flex-wrap:wrap;" class="cella-azioni">
-                            {% if c.analisi %}
+                        <div class="cella-azioni" style="display:flex;gap:0.4rem;flex-wrap:wrap;">
+                            {% if p.testo_profilo %}
                             <button class="btn btn-outline btn-xs"
-                                    onclick="apriReport({{ loop.index0 }})">
-                                Vedi Report
+                                    onclick="vediProfilo({{ loop.index0 }})">
+                                Vedi profilo
                             </button>
                             {% endif %}
-                            {% if c.punteggio is none %}
+                            {% if p.analisi %}
+                            <button class="btn btn-outline btn-xs"
+                                    onclick="vediReport({{ loop.index0 }})">
+                                Report AI
+                            </button>
+                            {% endif %}
+                            {% if p.punteggio is none %}
                             <button class="btn btn-primary btn-xs"
-                                    onclick="analizzaSingolo({{ c.id }}, this)">
+                                    onclick="analizzaSingolo({{ loop.index0 }}, this)">
                                 &#9733; Analizza
                             </button>
                             {% endif %}
-                            <a href="/pipeline" class="btn btn-secondary btn-xs">
-                                Pipeline &#8594;
-                            </a>
+                            {% if p.candidato_id %}
+                            <a href="/pipeline" class="btn btn-secondary btn-xs">Pipeline &#8594;</a>
+                            {% endif %}
                         </div>
                     </td>
                 </tr>
@@ -196,99 +202,120 @@
     <div class="card-body">
         <div class="empty-state" style="padding:2rem;">
             <div class="empty-icon">&#128100;</div>
-            <p>Nessun candidato collegato a questa ricerca.</p>
+            <p>Nessun profilo collegato a questa ricerca.</p>
         </div>
     </div>
     {% endif %}
 </div>
 
-<!-- Modal report valutazione -->
+<!-- Modal: testo completo profilo -->
+<div id="modal-profilo" class="modal-overlay hidden"
+     onclick="if(event.target===this)nascondi('modal-profilo')">
+    <div class="modal" style="max-width:680px;">
+        <div class="modal-header">
+            <h3 id="modal-profilo-titolo">Profilo LinkedIn</h3>
+            <button class="modal-close" onclick="nascondi('modal-profilo')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <pre id="modal-profilo-testo"
+                 style="white-space:pre-wrap;font-family:inherit;font-size:0.9rem;
+                        line-height:1.6;background:var(--grigio-sfondo);
+                        border-radius:var(--radius);padding:1rem;margin:0;
+                        max-height:60vh;overflow-y:auto;"></pre>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: report AI -->
 <div id="modal-report" class="modal-overlay hidden"
      onclick="if(event.target===this)nascondi('modal-report')">
     <div class="modal" style="max-width:680px;">
         <div class="modal-header">
-            <h3 id="modal-report-titolo">Report Valutazione</h3>
+            <h3 id="modal-report-titolo">Report Valutazione AI</h3>
             <button class="modal-close" onclick="nascondi('modal-report')">&times;</button>
         </div>
         <div class="modal-body" id="modal-report-body"></div>
     </div>
 </div>
 
-<!-- Dati candidati per JS -->
-<script id="candidati-data" type="application/json">
-{{ candidati | tojson }}
-</script>
+<!-- Dati profili per JS -->
+<script id="profili-data" type="application/json">{{ profili | tojson }}</script>
+<script>const ricercaId = {{ ricerca.id }};</script>
 
 <style>
-.badge-analisi {
-    display: inline-block;
-    padding: 0.2rem 0.6rem;
-    border-radius: 999px;
-    font-size: 0.78rem;
-    font-weight: 600;
-    white-space: nowrap;
-}
-.badge-non-analizzato {
-    background: #f1f5f9;
-    color: #64748b;
-    border: 1px solid #cbd5e1;
-}
-.badge-analizzato {
-    background: #f0fdf4;
-    color: #16a34a;
-    border: 1px solid #86efac;
-}
-.badge-in-pipeline {
-    background: #eff6ff;
-    color: var(--azzurro);
-    border: 1px solid #bfdbfe;
-}
+.badge-analisi { display:inline-block;padding:.2rem .6rem;border-radius:999px;font-size:.78rem;font-weight:600;white-space:nowrap; }
+.badge-non-analizzato { background:#f1f5f9;color:#64748b;border:1px solid #cbd5e1; }
+.badge-analizzato     { background:#f0fdf4;color:#16a34a;border:1px solid #86efac; }
+.badge-in-pipeline    { background:#eff6ff;color:var(--azzurro);border:1px solid #bfdbfe; }
 </style>
 {% endblock %}
 
 {% block scripts %}
 <script>
-const candidatiData = JSON.parse(document.getElementById('candidati-data').textContent);
-const ricercaId = {{ ricerca.id }};
+const profiliData = JSON.parse(document.getElementById('profili-data').textContent);
 
-/* ------------------------------------------------------------------ */
-/* Modal report                                                        */
-/* ------------------------------------------------------------------ */
-function apriReport(indice) {
-    const c = candidatiData[indice];
-    if (!c) return;
+/* ── Modal: testo profilo completo ─────────────────────────────────── */
+function vediProfilo(idx) {
+    const p = profiliData[idx];
+    if (!p) return;
+    const nome = ((p.nome || '') + ' ' + (p.cognome || '')).trim() || 'Profilo';
+    document.getElementById('modal-profilo-titolo').textContent = nome;
+    document.getElementById('modal-profilo-testo').textContent  = p.testo_profilo || '— testo non disponibile —';
+    mostra('modal-profilo');
+}
 
-    let spunti = c.spunti || [];
-    if (typeof spunti === 'string') {
-        try { spunti = JSON.parse(spunti); } catch { spunti = []; }
-    }
+/* ── Modal: report AI ──────────────────────────────────────────────── */
+function vediReport(idx) {
+    const p = profiliData[idx];
+    if (!p) return;
 
-    const scoreClass = c.punteggio >= 8 ? 'score-alto' : (c.punteggio >= 5 ? 'score-medio' : 'score-basso');
+    let spunti = p.spunti || [];
+    if (typeof spunti === 'string') { try { spunti = JSON.parse(spunti); } catch { spunti = []; } }
+
+    const scoreClass = p.punteggio >= 8 ? 'score-alto' : (p.punteggio >= 5 ? 'score-medio' : 'score-basso');
     const spuntiHtml = spunti.map(function(s) { return '<li class="spunto-item">' + s + '</li>'; }).join('');
+    const nome = ((p.nome || '') + ' ' + (p.cognome || '')).trim();
 
-    document.getElementById('modal-report-titolo').textContent = 'Report — ' + c.nome + ' ' + c.cognome;
+    document.getElementById('modal-report-titolo').textContent = 'Report — ' + nome;
     document.getElementById('modal-report-body').innerHTML =
         '<div class="report-sezione" style="text-align:center;">' +
-        '<div class="report-score ' + scoreClass + '">' + (c.punteggio || '—') + '/10</div>' +
-        '</div>' +
-        '<div class="report-sezione"><h4>Analisi del Percorso</h4><p>' + (c.analisi || '—') + '</p></div>' +
+        '<div class="report-score ' + scoreClass + '">' + (p.punteggio || '—') + '/10</div></div>' +
+        '<div class="report-sezione"><h4>Analisi del Percorso</h4><p>' + (p.analisi || '—') + '</p></div>' +
         (spuntiHtml ? '<div class="report-sezione"><h4>Spunti per il Contatto</h4><ul>' + spuntiHtml + '</ul></div>' : '') +
-        (c.messaggio_outreach ? '<div class="report-sezione"><h4>Messaggio di Outreach</h4>' +
-        '<div class="outreach-box">' + c.messaggio_outreach + '</div></div>' : '');
+        (p.messaggio_outreach ? '<div class="report-sezione"><h4>Messaggio di Outreach</h4>' +
+        '<div class="outreach-box">' + p.messaggio_outreach + '</div></div>' : '');
     mostra('modal-report');
 }
 
-/* ------------------------------------------------------------------ */
-/* Analisi singolo candidato (dalla tabella dettaglio)                 */
-/* ------------------------------------------------------------------ */
-function analizzaSingolo(candidatoId, btnEl) {
+/* ── Analisi singolo profilo ───────────────────────────────────────── */
+function analizzaSingolo(idx, btnEl) {
+    const p = profiliData[idx];
+    if (!p) return;
+
     btnEl.disabled = true;
     btnEl.innerHTML = '<span class="spinner"></span>';
+
+    const payload = {};
+    if (p.candidato_id) {
+        payload.candidato_id = p.candidato_id;
+    } else if (p.profilo_id) {
+        payload.profilo_ricerca_id = p.profilo_id;
+    }
+    // fallback con testo se né candidato_id né profilo_id
+    if (!payload.candidato_id && !payload.profilo_ricerca_id) {
+        payload.testo_profilo = p.testo_profilo || '';
+        payload.nome     = p.nome    || '';
+        payload.cognome  = p.cognome || '';
+        payload.ruolo    = p.ruolo   || '';
+        payload.azienda  = p.azienda || '';
+        payload.linkedin = p.linkedin_url || '';
+        payload.ricerca_id = ricercaId;
+    }
 
     fetch('/ricerca/analizza_candidato', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ candidato_id: candidatoId })
+        body: JSON.stringify(payload)
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {
@@ -298,7 +325,7 @@ function analizzaSingolo(candidatoId, btnEl) {
             alert('Errore: ' + data.errore);
             return;
         }
-        aggiornaRiga(candidatoId, data);
+        aggiornaRiga(idx, data);
     })
     .catch(function(err) {
         btnEl.disabled = false;
@@ -307,24 +334,17 @@ function analizzaSingolo(candidatoId, btnEl) {
     });
 }
 
-/* ------------------------------------------------------------------ */
-/* Analizza tutti i candidati non ancora analizzati                    */
-/* ------------------------------------------------------------------ */
+/* ── Analizza tutti i profili non analizzati ───────────────────────── */
 function analizzaTutti() {
-    // Raccogli gli id dei candidati senza punteggio
-    const righe = document.querySelectorAll('#tabella-candidati tbody tr');
+    const righe = document.querySelectorAll('#tabella-profili tbody tr');
     const daAnalizzare = [];
-    righe.forEach(function(riga) {
-        // Se la riga ha il badge "Non analizzato" non ha punteggio
-        if (riga.querySelector('.badge-non-analizzato')) {
-            daAnalizzare.push(parseInt(riga.dataset.id));
+    righe.forEach(function(r) {
+        if (r.querySelector('.badge-non-analizzato')) {
+            daAnalizzare.push(parseInt(r.dataset.idx));
         }
     });
 
-    if (daAnalizzare.length === 0) {
-        alert('Tutti i candidati sono già stati analizzati.');
-        return;
-    }
+    if (!daAnalizzare.length) { alert('Tutti i profili sono già stati analizzati.'); return; }
 
     const btnTutti = document.getElementById('btn-analizza-tutti');
     if (btnTutti) btnTutti.disabled = true;
@@ -333,48 +353,49 @@ function analizzaTutti() {
     const barEl     = document.getElementById('progress-bar');
     const labelEl   = document.getElementById('progress-label');
     const countEl   = document.getElementById('progress-count');
-
     container.classList.remove('hidden');
+
     const totale = daAnalizzare.length;
     let completati = 0;
+    countEl.textContent = '0 / ' + totale;
 
-    countEl.textContent = completati + ' / ' + totale;
-    barEl.style.width   = '0%';
-
-    // Analisi sequenziale per non sovraccaricare il server
     function prossimo(i) {
         if (i >= daAnalizzare.length) {
-            labelEl.textContent = '&#10003; Analisi completata!';
-            labelEl.innerHTML   = '&#10003; Analisi completata!';
-            if (btnTutti) {
-                btnTutti.disabled = true;
-                btnTutti.innerHTML = '&#10003; Tutti analizzati';
-            }
+            labelEl.innerHTML = '&#10003; Analisi completata!';
+            if (btnTutti) { btnTutti.disabled = true; btnTutti.innerHTML = '&#10003; Tutti analizzati'; }
             return;
         }
-
-        const id = daAnalizzare[i];
-        const riga = document.getElementById('riga-' + id);
+        const idx = daAnalizzare[i];
+        const p   = profiliData[idx];
+        const riga = document.getElementById('riga-' + idx);
+        if (riga) riga.style.background = '#eff6ff';
         labelEl.textContent = 'Analisi ' + (i + 1) + ' di ' + totale + '…';
 
-        // Evidenzia riga corrente
-        if (riga) riga.style.background = '#eff6ff';
+        const payload = {};
+        if (p.candidato_id) {
+            payload.candidato_id = p.candidato_id;
+        } else if (p.profilo_id) {
+            payload.profilo_ricerca_id = p.profilo_id;
+        } else {
+            payload.testo_profilo = p.testo_profilo || '';
+            payload.nome     = p.nome    || '';
+            payload.cognome  = p.cognome || '';
+            payload.ruolo    = p.ruolo   || '';
+            payload.azienda  = p.azienda || '';
+            payload.ricerca_id = ricercaId;
+        }
 
         fetch('/ricerca/analizza_candidato', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ candidato_id: id })
+            body: JSON.stringify(payload)
         })
         .then(function(r) { return r.json(); })
         .then(function(data) {
             completati++;
-            const perc = Math.round((completati / totale) * 100);
-            barEl.style.width   = perc + '%';
+            barEl.style.width   = Math.round(completati / totale * 100) + '%';
             countEl.textContent = completati + ' / ' + totale;
-
-            if (!data.errore) {
-                aggiornaRiga(id, data);
-            }
+            if (!data.errore) aggiornaRiga(idx, data);
             if (riga) riga.style.background = '';
             prossimo(i + 1);
         })
@@ -384,57 +405,60 @@ function analizzaTutti() {
             prossimo(i + 1);
         });
     }
-
     prossimo(0);
 }
 
-/* ------------------------------------------------------------------ */
-/* Aggiorna una riga nella tabella dopo l'analisi                      */
-/* ------------------------------------------------------------------ */
-function aggiornaRiga(candidatoId, data) {
-    const riga = document.getElementById('riga-' + candidatoId);
+/* ── Aggiorna riga dopo analisi ────────────────────────────────────── */
+function aggiornaRiga(idx, data) {
+    const riga = document.getElementById('riga-' + idx);
     if (!riga) return;
 
-    const punteggio = data.punteggio || 0;
-
-    // Aggiorna cella punteggio
+    const punteggio  = data.punteggio || 0;
     const scoreClass = punteggio >= 8 ? 'alto' : (punteggio >= 5 ? 'medio' : 'basso');
+
+    // Aggiorna dati locali
+    profiliData[idx].punteggio         = punteggio;
+    profiliData[idx].analisi           = data.analisi_percorso || '';
+    profiliData[idx].spunti            = data.spunti_contatto || [];
+    profiliData[idx].messaggio_outreach = data.messaggio_outreach || '';
+    profiliData[idx].candidato_id      = data.candidato_id || profiliData[idx].candidato_id;
+    profiliData[idx].stato             = 'Da contattare';
+
+    // Punteggio
     riga.querySelector('.cella-punteggio').innerHTML =
         '<span class="score-badge score-badge-' + scoreClass + '">' + punteggio + '/10</span>';
 
-    // Aggiorna badge stato analisi
-    riga.querySelector('.cella-badge-analisi').innerHTML =
+    // Badge
+    riga.querySelector('.cella-badge').innerHTML =
         '<span class="badge-analisi badge-analizzato">Analizzato &mdash; ' + punteggio + '/10</span>';
 
-    // Aggiorna azioni: rimuovi pulsante "Analizza", aggiungi "Vedi Report"
+    // Pipeline
+    riga.querySelector('.cella-pipeline').innerHTML =
+        '<span style="font-size:0.82rem;">Da contattare</span>';
+
+    // Azioni: rimuovi "Analizza", aggiungi "Report AI"
     const azioniDiv = riga.querySelector('.cella-azioni');
-    // Rimuovi btn Analizza se presente
     const btnAnalizza = azioniDiv.querySelector('.btn-primary');
     if (btnAnalizza) btnAnalizza.remove();
 
-    // Aggiungi "Vedi Report" se non già presente
-    if (!azioniDiv.querySelector('.btn-outline')) {
-        const newIdx = candidatiData.length;
-        // Aggiunge il candidato aggiornato all'array locale per il modal
-        candidatiData.push({
-            id: candidatoId,
-            nome: data.nome_contatto ? data.nome_contatto.split(' ')[0] : '',
-            cognome: data.nome_contatto ? data.nome_contatto.split(' ').slice(1).join(' ') : '',
-            punteggio: punteggio,
-            analisi: data.analisi_percorso || '',
-            spunti: data.spunti_contatto || [],
-            messaggio_outreach: data.messaggio_outreach || '',
-        });
-        const reportBtn = document.createElement('button');
-        reportBtn.className = 'btn btn-outline btn-xs';
-        reportBtn.textContent = 'Vedi Report';
-        reportBtn.onclick = function() { apriReport(newIdx); };
-        azioniDiv.insertBefore(reportBtn, azioniDiv.firstChild);
+    if (!azioniDiv.querySelector('[onclick^="vediReport"]')) {
+        const btnReport = document.createElement('button');
+        btnReport.className = 'btn btn-outline btn-xs';
+        btnReport.textContent = 'Report AI';
+        btnReport.setAttribute('onclick', 'vediReport(' + idx + ')');
+        azioniDiv.insertBefore(btnReport, azioniDiv.querySelector('[onclick^="vediProfilo"]')
+            ? azioniDiv.querySelector('[onclick^="vediProfilo"]').nextSibling
+            : azioniDiv.firstChild);
     }
 
-    // Stato pipeline → Da contattare
-    const statoCella = riga.cells[4];
-    if (statoCella) statoCella.innerHTML = '<span style="font-size:0.85rem;">Da contattare</span>';
+    // Aggiungi link pipeline se non c'è
+    if (!azioniDiv.querySelector('a[href="/pipeline"]')) {
+        const linkPipeline = document.createElement('a');
+        linkPipeline.href = '/pipeline';
+        linkPipeline.className = 'btn btn-secondary btn-xs';
+        linkPipeline.textContent = 'Pipeline →';
+        azioniDiv.appendChild(linkPipeline);
+    }
 }
 </script>
 {% endblock %}

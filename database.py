@@ -238,6 +238,23 @@ def init_db():
             data_ricerca        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )""",
 
+        # ── Tabella profili trovati nelle ricerche ──────────────────────────
+        # Salva il testo completo di ogni profilo trovato, collegato alla ricerca.
+        # Rimane permanente anche dopo eventuali cancellazioni di candidati.
+        """CREATE TABLE IF NOT EXISTS profili_ricerca (
+            id            SERIAL PRIMARY KEY,
+            ricerca_id    INTEGER NOT NULL,
+            nome          TEXT,
+            cognome       TEXT,
+            ruolo         TEXT,
+            azienda       TEXT,
+            location      TEXT,
+            linkedin_url  TEXT,
+            testo_profilo TEXT,
+            candidato_id  INTEGER,
+            data_trovato  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )""",
+
         # ── Migrazioni colonne ─────────────────────────────────────────────
         "ALTER TABLE valutazioni          ADD COLUMN IF NOT EXISTS nome_contatto TEXT",
         "ALTER TABLE valutazioni          ADD COLUMN IF NOT EXISTS ruolo_attuale TEXT",

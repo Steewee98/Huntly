@@ -71,6 +71,21 @@ def cerca_apify(ruolo, citta="", paese="", azienda="", parole_chiave="", num_pag
         return None, f"Errore di connessione: {str(e)}"
 
 
+def _costruisci_testo_profilo(p):
+    """Costruisce il testo completo del profilo da usare per l'analisi AI e per la visualizzazione."""
+    parti = [
+        f"Nome: {p.get('nome', '')} {p.get('cognome', '')}".strip(),
+        f"Ruolo: {p.get('ruolo', '')}",
+        f"Azienda: {p.get('azienda', '')}",
+        f"Location: {p.get('location', '')}",
+    ]
+    if p.get("sommario"):
+        parti.append(f"Sommario: {p['sommario']}")
+    if p.get("linkedin"):
+        parti.append(f"LinkedIn: {p['linkedin']}")
+    return "\n".join(parti)
+
+
 def normalizza_profilo(p):
     """Estrae i campi utili da un profilo restituito dall'actor."""
     # L'actor può usare campi leggermente diversi a seconda della versione
@@ -126,7 +141,10 @@ def index():
 
 @ricerca_bp.route("/ricerca/cerca", methods=["POST"])
 def cerca():
-    """Esegue la ricerca su Apify, salva nella cronologia e restituisce i risultati normalizzati."""
+    """
+    Esegue la ricerca su Apify, salva nella cronologia e persistela in profili_ricerca.
+    Ogni profilo trovato viene salvato permanentemente con il testo completo.
+    """
     dati = request.get_json()
     ruolo         = dati.get("ruolo", "").strip()
     citta         = dati.get("citta", "").strip()
@@ -145,7 +163,7 @@ def cerca():
 
     persone = [normalizza_profilo(p) for p in items if isinstance(p, dict)]
 
-    # Salva la ricerca nella cronologia per collegare le analisi successive
+    # Salva la ricerca nella cronologia
     parametri_str = json.dumps({
         'ruolo': ruolo, 'citta': citta, 'azienda': azienda,
         'parole_chiave': parole_chiave,
@@ -158,12 +176,25 @@ def cerca():
         (tipo_profilo, parametri_str, len(persone))
     )
     ricerca_id = cur.lastrowid
+
+    # Salva ogni profilo trovato in profili_ricerca con il testo completo
+    for p in persone:
+        testo = _costruisci_testo_profilo(p)
+        cur_p = db.execute(
+            """INSERT INTO profili_ricerca
+               (ricerca_id, nome, cognome, ruolo, azienda, location, linkedin_url, testo_profilo)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            (ricerca_id, p["nome"], p["cognome"], p["ruolo"], p["azienda"],
+             p["location"], p["linkedin"], testo)
+        )
+        p["profilo_ricerca_id"] = cur_p.lastrowid
+
     db.commit()
     db.close()
 
     return jsonify({
-        "persone": persone,
-        "totale":  len(persone),
+        "persone":    persone,
+        "totale":     len(persone),
         "ricerca_id": ricerca_id,
     })
 
@@ -254,6 +285,8 @@ def automatica():
         if not p["nome"] and not p["cognome"]:
             continue
 
+        testo = _costruisci_testo_profilo(p)
+
         # Importa nella pipeline con stato "Da valutare" e ricerca_id
         cur = db.execute(
             """INSERT INTO candidati
@@ -267,15 +300,19 @@ def automatica():
         candidato_id = cur.lastrowid
         importati += 1
 
+        # Salva il profilo completo in profili_ricerca
+        db.execute(
+            """INSERT INTO profili_ricerca
+               (ricerca_id, nome, cognome, ruolo, azienda, location, linkedin_url,
+                testo_profilo, candidato_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (ricerca_id, p["nome"], p["cognome"], p["ruolo"], p["azienda"],
+             p["location"], p["linkedin"], testo, candidato_id)
+        )
+        db.commit()
+
         # Valutazione AI con i parametri delle impostazioni
         try:
-            testo = (
-                f"Nome: {p['nome']} {p['cognome']}\n"
-                f"Ruolo: {p['ruolo']}\n"
-                f"Azienda: {p['azienda']}\n"
-                f"Location: {p['location']}\n"
-                f"Sommario: {p['sommario']}\n"
-            )
             risultato = analizza_profilo_linkedin(testo, tipo_profilo, imp)
             punteggio = risultato.get("punteggio")
             spunti_json = json.dumps(risultato.get("spunti_contatto", []), ensure_ascii=False)
@@ -371,40 +408,69 @@ def export_csv():
 @ricerca_bp.route("/ricerca/analizza_candidato", methods=["POST"])
 def analizza_candidato():
     """
-    Esegue analisi AI su un candidato (già in DB o nuovo da ricerca manuale).
+    Esegue analisi AI su un candidato. Gestisce tre casi:
+    1. candidato_id → candidato già in pipeline (re-analisi o prima analisi)
+    2. profilo_ricerca_id → profilo salvato in profili_ricerca ma non ancora in pipeline
+    3. dati testuali diretti → candidato completamente nuovo
     Salva automaticamente in candidati (pipeline) e valutazioni (cronologia).
     """
     dati = request.get_json()
-    candidato_id = dati.get("candidato_id")
-    tipo_profilo  = dati.get("tipo_profilo", "A")
-    ricerca_id    = dati.get("ricerca_id")
+    candidato_id       = dati.get("candidato_id")
+    profilo_ricerca_id = dati.get("profilo_ricerca_id")
+    tipo_profilo       = dati.get("tipo_profilo", "A")
+    ricerca_id         = dati.get("ricerca_id")
 
     db = get_db()
 
     if candidato_id:
-        # Candidato già in DB: fetch e costruisci testo profilo
+        # Caso 1: candidato già in DB (pipeline)
         c = db.execute(
             "SELECT * FROM candidati WHERE id = ?", (candidato_id,)
         ).fetchone()
         if not c:
             db.close()
             return jsonify({"errore": "Candidato non trovato"}), 404
-        tipo_profilo = c["tipo_profilo"]
-        ricerca_id   = c["ricerca_id"]
-        testo_profilo = (
-            f"Nome: {c['nome']} {c['cognome']}\n"
-            f"Ruolo: {c['ruolo_attuale'] or ''}\n"
-            f"Azienda: {c['azienda'] or ''}\n"
-        )
-        if c.get("profilo_linkedin"):
-            testo_profilo += f"LinkedIn: {c['profilo_linkedin']}\n"
+        tipo_profilo  = c["tipo_profilo"]
+        ricerca_id    = c["ricerca_id"]
+        # Cerca il testo profilo in profili_ricerca se disponibile
+        pr = db.execute(
+            "SELECT testo_profilo FROM profili_ricerca WHERE candidato_id = ? LIMIT 1",
+            (candidato_id,)
+        ).fetchone()
+        if pr and pr.get("testo_profilo"):
+            testo_profilo = pr["testo_profilo"]
+        else:
+            testo_profilo = (
+                f"Nome: {c['nome']} {c['cognome']}\n"
+                f"Ruolo: {c['ruolo_attuale'] or ''}\n"
+                f"Azienda: {c['azienda'] or ''}\n"
+            )
+            if c.get("profilo_linkedin"):
+                testo_profilo += f"LinkedIn: {c['profilo_linkedin']}\n"
         nome    = c["nome"]
         cognome = c["cognome"]
         ruolo   = c["ruolo_attuale"] or ""
         azienda = c["azienda"] or ""
         linkedin = c.get("profilo_linkedin") or ""
+
+    elif profilo_ricerca_id:
+        # Caso 2: profilo già in profili_ricerca ma non ancora in pipeline
+        pr = db.execute(
+            "SELECT * FROM profili_ricerca WHERE id = ?", (profilo_ricerca_id,)
+        ).fetchone()
+        if not pr:
+            db.close()
+            return jsonify({"errore": "Profilo non trovato"}), 404
+        testo_profilo = pr["testo_profilo"] or ""
+        nome          = pr["nome"] or ""
+        cognome       = pr["cognome"] or ""
+        ruolo         = pr["ruolo"] or ""
+        azienda       = pr["azienda"] or ""
+        linkedin      = pr["linkedin_url"] or ""
+        ricerca_id    = pr["ricerca_id"]
+
     else:
-        # Nuovo candidato da ricerca manuale (non ancora in DB)
+        # Caso 3: dati testuali diretti (ricerca.html, vecchio flusso)
         testo_profilo = dati.get("testo_profilo", "").strip()
         nome    = dati.get("nome", "").strip()
         cognome = dati.get("cognome", "").strip()
@@ -485,6 +551,21 @@ def analizza_candidato():
             (ricerca_id,)
         )
 
+    # Collega profili_ricerca al candidato appena creato/aggiornato
+    if profilo_ricerca_id:
+        db.execute(
+            "UPDATE profili_ricerca SET candidato_id = ? WHERE id = ?",
+            (candidato_id, profilo_ricerca_id)
+        )
+    elif ricerca_id and e_candidato_nuovo:
+        # Per nuovi candidati senza profilo_ricerca_id, cerca per corrispondenza nome+ricerca
+        db.execute(
+            """UPDATE profili_ricerca SET candidato_id = ?
+               WHERE ricerca_id = ? AND candidato_id IS NULL
+               AND nome = ? AND cognome = ?""",
+            (candidato_id, ricerca_id, nome, cognome)
+        )
+
     db.commit()
     db.close()
 
@@ -493,7 +574,11 @@ def analizza_candidato():
 
 @ricerca_bp.route("/ricerca/dettaglio/<int:ricerca_id>")
 def dettaglio_ricerca(ricerca_id):
-    """Pagina di dettaglio di una ricerca con tutti i candidati trovati."""
+    """
+    Pagina di dettaglio di una ricerca.
+    Mostra tutti i profili trovati (da profili_ricerca) con i dati di analisi e pipeline.
+    Fallback sui candidati diretti per ricerche precedenti all'introduzione di profili_ricerca.
+    """
     db = get_db()
     ricerca = db.execute(
         "SELECT * FROM ricerche_automatiche WHERE id = ?", (ricerca_id,)
@@ -503,19 +588,51 @@ def dettaglio_ricerca(ricerca_id):
         db.close()
         return "Ricerca non trovata", 404
 
-    candidati = db.execute(
-        """SELECT id, nome, cognome, ruolo_attuale, azienda, punteggio, stato,
-                  analisi, spunti, messaggio_outreach, profilo_linkedin,
-                  data_inserimento, data_aggiornamento
-           FROM candidati WHERE ricerca_id = ? ORDER BY punteggio DESC NULLS LAST""",
+    # Prima tenta con profili_ricerca (ricerche nuove)
+    profili = db.execute(
+        """SELECT pr.id           AS profilo_id,
+                  pr.nome,        pr.cognome,
+                  pr.ruolo,       pr.azienda,
+                  pr.location,    pr.linkedin_url,
+                  pr.testo_profilo,
+                  pr.candidato_id,
+                  c.punteggio,    c.analisi,
+                  c.spunti,       c.messaggio_outreach,
+                  c.stato
+           FROM profili_ricerca pr
+           LEFT JOIN candidati c ON pr.candidato_id = c.id
+           WHERE pr.ricerca_id = ?
+           ORDER BY c.punteggio DESC NULLS LAST, pr.id""",
         (ricerca_id,)
     ).fetchall()
+
+    usa_fallback = (len(profili) == 0)
+
+    if usa_fallback:
+        # Fallback: ricerche precedenti che hanno candidati ma non profili_ricerca
+        profili = db.execute(
+            """SELECT id            AS profilo_id,
+                      id            AS candidato_id,
+                      nome,         cognome,
+                      ruolo_attuale AS ruolo,
+                      azienda,
+                      NULL          AS location,
+                      profilo_linkedin AS linkedin_url,
+                      NULL          AS testo_profilo,
+                      punteggio,    analisi,
+                      spunti,       messaggio_outreach,
+                      stato
+               FROM candidati
+               WHERE ricerca_id = ?
+               ORDER BY punteggio DESC NULLS LAST""",
+            (ricerca_id,)
+        ).fetchall()
+
     db.close()
 
     ricerca = dict(ricerca)
-    candidati = [dict(c) for c in candidati]
+    profili  = [dict(p) for p in profili]
 
-    # Parsa il JSON dei parametri per mostrarli in modo leggibile
     try:
         parametri = json.loads(ricerca.get('parametri') or '{}')
     except Exception:
@@ -523,32 +640,45 @@ def dettaglio_ricerca(ricerca_id):
 
     return render_template("ricerca_dettaglio.html",
                            ricerca=ricerca,
-                           candidati=candidati,
-                           parametri=parametri)
+                           profili=profili,
+                           parametri=parametri,
+                           usa_fallback=usa_fallback)
 
 
 @ricerca_bp.route("/ricerca/dettaglio/<int:ricerca_id>/export_csv")
 def export_csv_candidati(ricerca_id):
-    """Esporta in CSV i candidati di una ricerca specifica."""
+    """Esporta in CSV tutti i profili di una ricerca specifica."""
     db = get_db()
     ricerca = db.execute(
         "SELECT tipo_profilo, data_ricerca FROM ricerche_automatiche WHERE id = ?",
         (ricerca_id,)
     ).fetchone()
-    candidati = db.execute(
-        """SELECT nome, cognome, ruolo_attuale, azienda, punteggio, stato, data_aggiornamento
-           FROM candidati WHERE ricerca_id = ? ORDER BY punteggio DESC NULLS LAST""",
+    # Prova prima profili_ricerca, fallback su candidati
+    righe = db.execute(
+        """SELECT pr.nome, pr.cognome, pr.ruolo, pr.azienda,
+                  c.punteggio, c.stato, c.data_aggiornamento
+           FROM profili_ricerca pr
+           LEFT JOIN candidati c ON pr.candidato_id = c.id
+           WHERE pr.ricerca_id = ?
+           ORDER BY c.punteggio DESC NULLS LAST, pr.id""",
         (ricerca_id,)
     ).fetchall()
+    if not righe:
+        righe = db.execute(
+            """SELECT nome, cognome, ruolo_attuale AS ruolo, azienda,
+                      punteggio, stato, data_aggiornamento
+               FROM candidati WHERE ricerca_id = ? ORDER BY punteggio DESC NULLS LAST""",
+            (ricerca_id,)
+        ).fetchall()
     db.close()
 
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(['Nome', 'Cognome', 'Ruolo', 'Azienda', 'Punteggio', 'Stato', 'Data Valutazione'])
-    for c in candidati:
+    for c in righe:
         writer.writerow([
             c['nome'], c['cognome'],
-            c['ruolo_attuale'] or '',
+            c.get('ruolo') or '',
             c['azienda'] or '',
             c['punteggio'] or '',
             c['stato'] or '',

@@ -573,14 +573,15 @@ function avviaAnalisi() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-            testo_profilo: testo,
-            nome:          p.nome || '',
-            cognome:       p.cognome || '',
-            ruolo:         p.ruolo || '',
-            azienda:       p.azienda || '',
-            linkedin:      p.linkedin || '',
-            tipo_profilo:  tipoAnalisiSelezionato,
-            ricerca_id:    ricercaIdCorrente,
+            profilo_ricerca_id: p.profilo_ricerca_id || null,
+            testo_profilo:      testo,
+            nome:               p.nome || '',
+            cognome:            p.cognome || '',
+            ruolo:              p.ruolo || '',
+            azienda:            p.azienda || '',
+            linkedin:           p.linkedin || '',
+            tipo_profilo:       tipoAnalisiSelezionato,
+            ricerca_id:         ricercaIdCorrente,
         })
     })
     .then(function(r) { return r.json(); })
