@@ -4,10 +4,13 @@ Cerca figure professionali su LinkedIn tramite l'actor harvestapi/linkedin-profi
 e le importa nella pipeline.
 """
 
+import io
+import csv
+import json
 import os
 import time
 import requests
-from flask import Blueprint, render_template, request, jsonify
+from flask import Blueprint, render_template, request, jsonify, Response
 from database import get_db
 from ai_helpers import analizza_profilo_linkedin
 
@@ -110,10 +113,15 @@ def index():
     db = get_db()
     imp_a = db.execute("SELECT id FROM impostazioni_profilo WHERE profilo='A'").fetchone()
     imp_b = db.execute("SELECT id FROM impostazioni_profilo WHERE profilo='B'").fetchone()
+    cronologia = db.execute(
+        "SELECT * FROM ricerche_automatiche ORDER BY data_ricerca DESC"
+    ).fetchall()
     db.close()
+    cronologia = [dict(r) for r in cronologia]
     return render_template("ricerca.html",
                            imp_a_configurato=imp_a is not None,
-                           imp_b_configurato=imp_b is not None)
+                           imp_b_configurato=imp_b is not None,
+                           cronologia=cronologia)
 
 
 @ricerca_bp.route("/ricerca/cerca", methods=["POST"])
@@ -184,8 +192,25 @@ def automatica():
     # Calcola numero pagine (Apify restituisce ~10 profili per pagina)
     num_pagine = max(1, (max_profili + 9) // 10)
 
+    # Parametri usati per la ricerca (da salvare in cronologia)
+    parametri_str = json.dumps({
+        'ruolo': ruolo_principale,
+        'keywords': keywords,
+        'max_profili': max_profili,
+    }, ensure_ascii=False)
+
     items, errore = cerca_apify(ruolo_principale, "", "", "", keywords, num_pagine)
     if errore:
+        # Salva la ricerca fallita nella cronologia
+        db_err = get_db()
+        db_err.execute(
+            """INSERT INTO ricerche_automatiche
+               (tipo_profilo, parametri, profili_trovati, profili_importati, stato)
+               VALUES (?, ?, 0, 0, 'errore')""",
+            (tipo_profilo, parametri_str)
+        )
+        db_err.commit()
+        db_err.close()
         return jsonify({"errore": errore}), 500
 
     items = items[:max_profili]
@@ -195,19 +220,30 @@ def automatica():
     punteggi  = []
 
     db = get_db()
+
+    # Crea il record ricerca PRIMA del loop per ottenere l'ID da passare ai candidati
+    cur_r = db.execute(
+        """INSERT INTO ricerche_automatiche
+           (tipo_profilo, parametri, profili_trovati, stato)
+           VALUES (?, ?, ?, 'in_corso')""",
+        (tipo_profilo, parametri_str, trovati)
+    )
+    ricerca_id = cur_r.lastrowid
+    db.commit()
+
     for item in items:
         p = normalizza_profilo(item)
         if not p["nome"] and not p["cognome"]:
             continue
 
-        # Importa nella pipeline con stato "Da valutare"
+        # Importa nella pipeline con stato "Da valutare" e ricerca_id
         cur = db.execute(
             """INSERT INTO candidati
                (nome, cognome, ruolo_attuale, azienda, profilo_linkedin,
-                tipo_profilo, stato, note)
-               VALUES (?, ?, ?, ?, ?, ?, 'Da valutare', ?)""",
+                tipo_profilo, stato, note, ricerca_id)
+               VALUES (?, ?, ?, ?, ?, ?, 'Da valutare', ?, ?)""",
             (p["nome"], p["cognome"], p["ruolo"], p["azienda"],
-             p["linkedin"], tipo_profilo, p["headline"])
+             p["linkedin"], tipo_profilo, p["headline"], ricerca_id)
         )
         db.commit()
         candidato_id = cur.lastrowid
@@ -224,6 +260,7 @@ def automatica():
             )
             risultato = analizza_profilo_linkedin(testo, tipo_profilo, imp)
             punteggio = risultato.get("punteggio")
+            spunti_json = json.dumps(risultato.get("spunti_contatto", []), ensure_ascii=False)
             db.execute(
                 """UPDATE candidati SET
                    punteggio=?, analisi=?, spunti=?, messaggio_outreach=?,
@@ -231,9 +268,25 @@ def automatica():
                    WHERE id=?""",
                 (punteggio,
                  risultato.get("analisi_percorso", ""),
-                 str(risultato.get("spunti_contatto", [])),
+                 spunti_json,
                  risultato.get("messaggio_outreach", ""),
                  candidato_id)
+            )
+            # Salva nella cronologia valutazioni con fonte 'ricerca_automatica'
+            nome_completo = f"{p['nome']} {p['cognome']}".strip() or None
+            anteprima = f"{p['nome']} {p['cognome']} — {p['ruolo']}".strip()[:120]
+            db.execute(
+                """INSERT INTO valutazioni
+                   (nome_contatto, ruolo_attuale, azienda, tipo_profilo,
+                    anteprima_testo, punteggio, analisi, spunti, messaggio_outreach,
+                    candidato_id, fonte)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (nome_completo, p['ruolo'] or None, p['azienda'] or None,
+                 tipo_profilo, anteprima, punteggio,
+                 risultato.get("analisi_percorso", ""),
+                 spunti_json,
+                 risultato.get("messaggio_outreach", ""),
+                 candidato_id, 'ricerca_automatica')
             )
             db.commit()
             valutati += 1
@@ -242,9 +295,18 @@ def automatica():
         except Exception:
             pass  # continua anche se l'analisi AI fallisce per un singolo candidato
 
+    punteggio_medio = round(sum(punteggi) / len(punteggi), 1) if punteggi else None
+
+    # Aggiorna il record ricerca con i conteggi finali
+    db.execute(
+        """UPDATE ricerche_automatiche
+           SET profili_importati=?, punteggio_medio=?, stato='completata'
+           WHERE id=?""",
+        (importati, punteggio_medio, ricerca_id)
+    )
+    db.commit()
     db.close()
 
-    punteggio_medio = round(sum(punteggi) / len(punteggi), 1) if punteggi else None
     return jsonify({
         "successo": True,
         "trovati":  trovati,
@@ -252,6 +314,53 @@ def automatica():
         "valutati":  valutati,
         "punteggio_medio": punteggio_medio,
     })
+
+
+@ricerca_bp.route("/ricerca/export_csv")
+def export_csv():
+    """Esporta la cronologia ricerche automatiche in formato CSV."""
+    db = get_db()
+    rows = db.execute(
+        "SELECT * FROM ricerche_automatiche ORDER BY data_ricerca DESC"
+    ).fetchall()
+    db.close()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        'ID', 'Data', 'Tipo Profilo', 'Profili Trovati',
+        'Importati', 'Punteggio Medio', 'Stato', 'Parametri'
+    ])
+    for r in rows:
+        writer.writerow([
+            r['id'],
+            r['data_ricerca'],
+            r['tipo_profilo'],
+            r['profili_trovati'],
+            r['profili_importati'],
+            r['punteggio_medio'] if r['punteggio_medio'] else '',
+            r['stato'],
+            r['parametri'] or '',
+        ])
+
+    return Response(
+        '\ufeff' + output.getvalue(),  # BOM per compatibilità Excel
+        mimetype='text/csv; charset=utf-8',
+        headers={'Content-Disposition': 'attachment; filename=cronologia_ricerche.csv'}
+    )
+
+
+@ricerca_bp.route("/ricerca/dettaglio/<int:ricerca_id>")
+def dettaglio_ricerca(ricerca_id):
+    """Restituisce i candidati trovati in una ricerca specifica."""
+    db = get_db()
+    candidati = db.execute(
+        """SELECT id, nome, cognome, ruolo_attuale, azienda, punteggio, stato
+           FROM candidati WHERE ricerca_id = ? ORDER BY punteggio DESC NULLS LAST""",
+        (ricerca_id,)
+    ).fetchall()
+    db.close()
+    return jsonify({"candidati": [dict(c) for c in candidati]})
 
 
 @ricerca_bp.route("/ricerca/importa", methods=["POST"])

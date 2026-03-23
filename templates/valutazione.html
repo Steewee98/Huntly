@@ -177,12 +177,45 @@ Includi: nome, titolo, descrizione, esperienze lavorative, formazione, competenz
 <div id="errore-box" class="hidden alert alert-errore"></div>
 
 <!-- Cronologia valutazioni -->
-{% if cronologia %}
 <div class="card" style="margin-top: 2rem;">
     <div class="card-header">
         <h3>Cronologia Valutazioni</h3>
-        <span class="text-muted" style="font-size:0.82rem;">Ultime {{ cronologia|length }}</span>
+        <div style="display:flex;gap:0.75rem;align-items:center;flex-wrap:wrap;">
+            <span class="text-muted" style="font-size:0.82rem;" id="cronologia-count">
+                {{ cronologia|length }} valutazioni totali
+            </span>
+            <a href="/valutazione/export_csv" class="btn btn-outline btn-sm">&#8595; Esporta CSV</a>
+        </div>
     </div>
+
+    <!-- Filtri -->
+    <div style="padding:0.875rem 1.25rem;background:var(--grigio-sfondo);border-bottom:1px solid var(--grigio-bordo);display:flex;gap:1rem;flex-wrap:wrap;align-items:flex-end;">
+        <div>
+            <label style="font-size:0.8rem;color:var(--grigio-testo);display:block;margin-bottom:0.3rem;">Tipo Profilo</label>
+            <select id="filtro-tipo" class="form-input form-select" style="padding:0.3rem 0.6rem;font-size:0.85rem;height:auto;" onchange="filtraCronologia()">
+                <option value="">Tutti</option>
+                <option value="A">Profilo A</option>
+                <option value="B">Profilo B</option>
+            </select>
+        </div>
+        <div>
+            <label style="font-size:0.8rem;color:var(--grigio-testo);display:block;margin-bottom:0.3rem;">Punteggio minimo</label>
+            <input type="number" id="filtro-punteggio" class="form-input" min="1" max="10"
+                   style="padding:0.3rem 0.6rem;font-size:0.85rem;width:90px;height:auto;"
+                   placeholder="es. 7" oninput="filtraCronologia()">
+        </div>
+        <div>
+            <label style="font-size:0.8rem;color:var(--grigio-testo);display:block;margin-bottom:0.3rem;">Fonte</label>
+            <select id="filtro-fonte" class="form-input form-select" style="padding:0.3rem 0.6rem;font-size:0.85rem;height:auto;" onchange="filtraCronologia()">
+                <option value="">Tutte</option>
+                <option value="manuale">Manuale</option>
+                <option value="ricerca_automatica">Automatica</option>
+            </select>
+        </div>
+        <button class="btn btn-outline btn-sm" onclick="resetFiltri()" style="margin-top:auto;">&#10005; Reset</button>
+    </div>
+
+    {% if cronologia %}
     <div class="table-responsive">
         <table class="data-table" id="cronologia-tabella">
             <thead>
@@ -190,32 +223,39 @@ Includi: nome, titolo, descrizione, esperienze lavorative, formazione, competenz
                     <th>Data</th>
                     <th>Contatto</th>
                     <th>Profilo</th>
-                    <th>Anteprima</th>
                     <th>Punteggio</th>
+                    <th>Fonte</th>
                     <th>Azione</th>
                 </tr>
             </thead>
             <tbody>
                 {% for v in cronologia %}
-                <tr>
+                <tr data-tipo="{{ v.tipo_profilo }}"
+                    data-punteggio="{{ v.punteggio or 0 }}"
+                    data-fonte="{{ v.fonte or 'manuale' }}">
                     <td style="white-space:nowrap;">
                         <div>{{ v.data_valutazione[:10] }}</div>
                         <div class="candidato-meta">{{ v.data_valutazione[11:16] }}</div>
                     </td>
-                    <td><strong>{{ v.nome_contatto or '—' }}</strong></td>
+                    <td>
+                        <strong>{{ v.nome_contatto or '—' }}</strong>
+                        {% if v.ruolo_attuale %}
+                        <div class="candidato-meta">{{ v.ruolo_attuale }}</div>
+                        {% endif %}
+                    </td>
                     <td>
                         <span class="badge badge-profilo-{{ v.tipo_profilo|lower }}">
                             Profilo {{ v.tipo_profilo }}
                         </span>
                     </td>
                     <td>
-                        <span style="font-size:0.85rem; color:var(--grigio-testo);">
-                            {{ v.anteprima_testo }}…
+                        <span class="score-badge score-badge-{{ 'alto' if v.punteggio >= 8 else ('medio' if v.punteggio >= 5 else 'basso') }}">
+                            {{ v.punteggio }}/10
                         </span>
                     </td>
                     <td>
-                        <span class="score-badge score-badge-{{ 'alto' if v.punteggio >= 8 else ('medio' if v.punteggio >= 5 else 'basso') }}">
-                            {{ v.punteggio }}/10
+                        <span style="font-size:0.82rem;color:var(--grigio-testo);">
+                            {{ 'Automatica' if v.fonte == 'ricerca_automatica' else 'Manuale' }}
                         </span>
                     </td>
                     <td>
@@ -235,8 +275,15 @@ Includi: nome, titolo, descrizione, esperienze lavorative, formazione, competenz
             </tbody>
         </table>
     </div>
+    {% else %}
+    <div class="card-body">
+        <div class="empty-state" style="padding:2rem;">
+            <div class="empty-icon">&#128203;</div>
+            <p>Nessuna valutazione ancora. Analizza il primo profilo per iniziare la cronologia.</p>
+        </div>
+    </div>
+    {% endif %}
 </div>
-{% endif %}
 
 <!-- Modale dettaglio cronologia -->
 <div id="modal-cronologia" class="modal-overlay hidden" onclick="if(event.target===this)nascondi('modal-cronologia')">
@@ -663,17 +710,19 @@ async function salvaCandidatoDaCronologia() {
 function aggiornaCronologia(dati, tipoProfilo, testoOriginale, nomeContatto) {
     // Aggiunge dinamicamente la nuova riga in cima alla tabella cronologia
     const tbody = document.querySelector('#cronologia-tabella tbody');
-    if (!tbody) return; // la sezione non esiste ancora (nessuna cronologia precedente)
+    if (!tbody) return;
 
     const ora = new Date();
     const data = ora.toISOString().slice(0, 10);
     const orario = ora.toTimeString().slice(0, 5);
-    const anteprima = testoOriginale.replace(/\n/g, ' ').slice(0, 120);
     const score = dati.punteggio;
     const scoreClass = score >= 8 ? 'alto' : (score >= 5 ? 'medio' : 'basso');
     const badgeClass = tipoProfilo === 'A' ? 'badge-profilo-a' : 'badge-profilo-b';
 
     const tr = document.createElement('tr');
+    tr.dataset.tipo = tipoProfilo;
+    tr.dataset.punteggio = score;
+    tr.dataset.fonte = 'manuale';
     tr.innerHTML = `
         <td style="white-space:nowrap;">
             <div>${data}</div>
@@ -681,11 +730,59 @@ function aggiornaCronologia(dati, tipoProfilo, testoOriginale, nomeContatto) {
         </td>
         <td><strong>${nomeContatto || '—'}</strong></td>
         <td><span class="badge ${badgeClass}">Profilo ${tipoProfilo}</span></td>
-        <td><span style="font-size:0.85rem;color:var(--grigio-testo);">${anteprima}…</span></td>
         <td><span class="score-badge score-badge-${scoreClass}">${score}/10</span></td>
+        <td><span style="font-size:0.82rem;color:var(--grigio-testo);">Manuale</span></td>
         <td><button class="btn btn-outline btn-xs" onclick="mostraDettaglioInline(this, ${JSON.stringify(dati).replace(/"/g, '&quot;')})">Vedi Report</button></td>
     `;
     tbody.insertBefore(tr, tbody.firstChild);
+
+    // Aggiorna il contatore
+    const counter = document.getElementById('cronologia-count');
+    if (counter) {
+        const righe = tbody.querySelectorAll('tr').length;
+        counter.textContent = righe + ' valutazioni totali';
+    }
+}
+
+function filtraCronologia() {
+    const tipo = document.getElementById('filtro-tipo').value;
+    const punteggioMin = parseInt(document.getElementById('filtro-punteggio').value) || 0;
+    const fonte = document.getElementById('filtro-fonte').value;
+    const tbody = document.querySelector('#cronologia-tabella tbody');
+    if (!tbody) return;
+
+    let visibili = 0;
+    tbody.querySelectorAll('tr').forEach(function(tr) {
+        const tRow = tr.dataset.tipo || '';
+        const pRow = parseInt(tr.dataset.punteggio) || 0;
+        const fRow = tr.dataset.fonte || 'manuale';
+
+        const okTipo = !tipo || tRow === tipo;
+        const okPunt = !punteggioMin || pRow >= punteggioMin;
+        const okFonte = !fonte || fRow === fonte;
+
+        if (okTipo && okPunt && okFonte) {
+            tr.style.display = '';
+            visibili++;
+        } else {
+            tr.style.display = 'none';
+        }
+    });
+
+    const counter = document.getElementById('cronologia-count');
+    if (counter) {
+        const totale = tbody.querySelectorAll('tr').length;
+        counter.textContent = visibili === totale
+            ? totale + ' valutazioni totali'
+            : visibili + ' di ' + totale + ' valutazioni';
+    }
+}
+
+function resetFiltri() {
+    document.getElementById('filtro-tipo').value = '';
+    document.getElementById('filtro-punteggio').value = '';
+    document.getElementById('filtro-fonte').value = '';
+    filtraCronologia();
 }
 
 function mostraDettaglioInline(btn, dati) {

@@ -3,10 +3,12 @@ Modulo 1 — Valutazione Candidati.
 Gestisce l'analisi di profili LinkedIn tramite Claude AI.
 """
 
+import io
+import csv
 import os
 import json
 import requests
-from flask import Blueprint, render_template, request, jsonify, redirect, url_for
+from flask import Blueprint, render_template, request, jsonify, redirect, url_for, Response
 from ai_helpers import analizza_profilo_linkedin, rigenera_messaggio_outreach
 from database import get_db
 
@@ -31,10 +33,10 @@ def index():
         ).fetchone()
         db.close()
 
-    # Carica la cronologia delle ultime valutazioni
+    # Carica tutta la cronologia delle valutazioni (senza limite)
     db = get_db()
     cronologia = db.execute(
-        "SELECT * FROM valutazioni ORDER BY data_valutazione DESC LIMIT 20"
+        "SELECT * FROM valutazioni ORDER BY data_valutazione DESC"
     ).fetchall()
     db.close()
     cronologia = [dict(r) for r in cronologia]
@@ -76,12 +78,12 @@ def analizza():
         if row:
             nome_contatto = f"{row['nome']} {row['cognome']}"
 
-    # Salva sempre nella cronologia valutazioni
+    # Salva sempre nella cronologia valutazioni con fonte 'manuale'
     db.execute(
         """INSERT INTO valutazioni
            (nome_contatto, ruolo_attuale, azienda, anni_esperienza,
-            tipo_profilo, anteprima_testo, punteggio, analisi, spunti, messaggio_outreach, candidato_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            tipo_profilo, anteprima_testo, punteggio, analisi, spunti, messaggio_outreach, candidato_id, fonte)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             nome_contatto, ruolo_attuale, azienda, anni_esperienza,
             tipo_profilo, anteprima,
@@ -90,6 +92,7 @@ def analizza():
             spunti_json,
             risultato["messaggio_outreach"],
             candidato_id or None,
+            'manuale',
         ),
     )
 
@@ -233,6 +236,41 @@ def poll_run(run_id):
 
     except requests.exceptions.RequestException as e:
         return jsonify({"errore": f"Errore polling: {str(e)}"}), 500
+
+
+@valutazione_bp.route("/valutazione/export_csv")
+def export_csv():
+    """Esporta la cronologia valutazioni in formato CSV."""
+    db = get_db()
+    rows = db.execute(
+        "SELECT * FROM valutazioni ORDER BY data_valutazione DESC"
+    ).fetchall()
+    db.close()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow([
+        'ID', 'Data', 'Contatto', 'Ruolo', 'Azienda',
+        'Tipo Profilo', 'Punteggio', 'Fonte', 'Anteprima'
+    ])
+    for r in rows:
+        writer.writerow([
+            r['id'],
+            r['data_valutazione'],
+            r['nome_contatto'] or '',
+            r['ruolo_attuale'] or '',
+            r['azienda'] or '',
+            r['tipo_profilo'],
+            r['punteggio'],
+            r['fonte'] if r['fonte'] else 'manuale',
+            r['anteprima_testo'] or '',
+        ])
+
+    return Response(
+        '\ufeff' + output.getvalue(),  # BOM per compatibilità Excel
+        mimetype='text/csv; charset=utf-8',
+        headers={'Content-Disposition': 'attachment; filename=cronologia_valutazioni.csv'}
+    )
 
 
 @valutazione_bp.route("/valutazione/rigenera_messaggio", methods=["POST"])

@@ -109,5 +109,29 @@ def init_db():
         )
     """)
 
+    # Tabella cronologia ricerche automatiche Apify
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS ricerche_automatiche (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            tipo_profilo TEXT DEFAULT 'A',
+            parametri TEXT,
+            profili_trovati INTEGER DEFAULT 0,
+            profili_importati INTEGER DEFAULT 0,
+            punteggio_medio REAL,
+            stato TEXT DEFAULT 'completata',
+            data_ricerca TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+
+    # Migrazioni per DB esistenti (colonne aggiunte in versioni successive)
+    for colonna in [
+        "ALTER TABLE valutazioni ADD COLUMN fonte TEXT DEFAULT 'manuale'",
+        "ALTER TABLE candidati ADD COLUMN ricerca_id INTEGER",
+    ]:
+        try:
+            cur.execute(colonna)
+        except Exception:
+            pass  # colonna già esistente
+
     conn.commit()
     conn.close()
