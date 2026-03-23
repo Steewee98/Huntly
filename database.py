@@ -1,138 +1,258 @@
 """
-Gestione del database SQLite per SABIA Recruiting Tool.
-Crea le tabelle e fornisce la connessione al database.
+Gestione del database PostgreSQL per SABIA Recruiting Tool.
+Usa psycopg2 con DATABASE_URL fornita da Railway.
+
+Il wrapper _PgConnection / _PgCursor mantiene la stessa interfaccia
+di sqlite3 usata in tutta l'app (execute / commit / close / lastrowid / fetchone / fetchall)
+senza dover modificare nessun file route.
 """
 
-import sqlite3
 import os
+import re
+import psycopg2
+import psycopg2.extras
+from datetime import datetime, date
 
-DATABASE_PATH = os.path.join(os.path.dirname(__file__), "sabia.db")
 
+# ─────────────────────────────────────────────
+# Helpers interni
+# ─────────────────────────────────────────────
+
+def _get_raw_connection():
+    """Apre una connessione psycopg2 usando DATABASE_URL."""
+    url = os.environ.get("DATABASE_URL", "")
+    if not url:
+        raise RuntimeError(
+            "DATABASE_URL non configurata. "
+            "Aggiungi un database PostgreSQL in Railway (Add Service → Database → PostgreSQL)."
+        )
+    # Railway espone postgres:// ma psycopg2 vuole postgresql://
+    if url.startswith("postgres://"):
+        url = url.replace("postgres://", "postgresql://", 1)
+    return psycopg2.connect(url, cursor_factory=psycopg2.extras.RealDictCursor)
+
+
+def _serialize_row(row):
+    """
+    Converte un RealDictRow PostgreSQL in un dict con datetime → stringa ISO.
+    I template usano slicing tipo data[:10] e data[11:16], che funziona
+    solo con stringhe — psycopg2 restituisce oggetti datetime.
+    """
+    if row is None:
+        return None
+    result = {}
+    for k, v in row.items():
+        if isinstance(v, datetime):
+            result[k] = v.strftime("%Y-%m-%d %H:%M:%S")
+        elif isinstance(v, date):
+            result[k] = v.strftime("%Y-%m-%d")
+        else:
+            result[k] = v
+    return result
+
+
+# ─────────────────────────────────────────────
+# Wrapper cursore
+# ─────────────────────────────────────────────
+
+class _PgCursor:
+    """
+    Cursore compatibile con sqlite3: espone lastrowid, fetchone, fetchall.
+    lastrowid viene popolato durante execute() sugli INSERT con RETURNING id.
+    """
+
+    def __init__(self, cursor, lastrowid=None):
+        self._cur = cursor
+        self.lastrowid = lastrowid
+
+    def fetchall(self):
+        try:
+            rows = self._cur.fetchall()
+            return [_serialize_row(r) for r in (rows or [])]
+        except psycopg2.ProgrammingError:
+            return []
+
+    def fetchone(self):
+        try:
+            return _serialize_row(self._cur.fetchone())
+        except psycopg2.ProgrammingError:
+            return None
+
+
+# ─────────────────────────────────────────────
+# Wrapper connessione
+# ─────────────────────────────────────────────
+
+class _PgConnection:
+    """
+    Connessione compatibile con sqlite3.
+    Converte automaticamente i placeholder ? in %s e aggiunge
+    RETURNING id agli INSERT per emulare cur.lastrowid.
+    """
+
+    def __init__(self, conn):
+        self._conn = conn
+        self._cur = conn.cursor()
+
+    def execute(self, sql, params=None):
+        # Converti placeholder SQLite → psycopg2
+        pg_sql = sql.replace("?", "%s")
+
+        # Aggiunge RETURNING id agli INSERT per ottenere lastrowid
+        is_insert = bool(re.match(r"\s*INSERT\b", pg_sql, re.IGNORECASE))
+        if is_insert and "RETURNING" not in pg_sql.upper():
+            pg_sql = pg_sql.rstrip().rstrip(";") + " RETURNING id"
+
+        if params is not None:
+            self._cur.execute(pg_sql, params)
+        else:
+            self._cur.execute(pg_sql)
+
+        # Cattura subito l'id restituito prima che il cursore cambi stato
+        lastrowid = None
+        if is_insert:
+            row = self._cur.fetchone()
+            lastrowid = row["id"] if row else None
+
+        return _PgCursor(self._cur, lastrowid)
+
+    def commit(self):
+        self._conn.commit()
+
+    def close(self):
+        try:
+            self._cur.close()
+        except Exception:
+            pass
+        try:
+            self._conn.close()
+        except Exception:
+            pass
+
+
+# ─────────────────────────────────────────────
+# API pubblica
+# ─────────────────────────────────────────────
 
 def get_db():
-    """Restituisce una connessione al database con row_factory per accesso a colonne per nome."""
-    conn = sqlite3.connect(DATABASE_PATH)
-    conn.row_factory = sqlite3.Row
-    return conn
+    """Restituisce una connessione al database pronta all'uso."""
+    return _PgConnection(_get_raw_connection())
 
 
 def init_db():
-    """Inizializza il database creando le tabelle se non esistono."""
+    """
+    Inizializza il database creando le tabelle se non esistono.
+    Sicuro da chiamare ad ogni avvio: usa IF NOT EXISTS ovunque.
+    """
     conn = get_db()
-    cur = conn.cursor()
 
-    # Tabella candidati
-    cur.execute("""
+    # ── Tabella candidati ──────────────────────────────────────────────────
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS candidati (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nome TEXT NOT NULL,
-            cognome TEXT NOT NULL,
-            ruolo_attuale TEXT,
-            azienda TEXT,
-            anni_esperienza INTEGER,
-            note TEXT,
-            profilo_linkedin TEXT,
-            tipo_profilo TEXT DEFAULT 'A',
-            stato TEXT DEFAULT 'Da contattare',
-            punteggio INTEGER,
-            analisi TEXT,
-            spunti TEXT,
-            messaggio_outreach TEXT,
-            data_inserimento TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            data_aggiornamento TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            id                  SERIAL PRIMARY KEY,
+            nome                TEXT NOT NULL,
+            cognome             TEXT NOT NULL,
+            ruolo_attuale       TEXT,
+            azienda             TEXT,
+            anni_esperienza     INTEGER,
+            note                TEXT,
+            profilo_linkedin    TEXT,
+            tipo_profilo        TEXT DEFAULT 'A',
+            stato               TEXT DEFAULT 'Da contattare',
+            punteggio           INTEGER,
+            analisi             TEXT,
+            spunti              TEXT,
+            messaggio_outreach  TEXT,
+            ricerca_id          INTEGER,
+            data_inserimento    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            data_aggiornamento  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
 
-    # Tabella cronologia valutazioni (ogni analisi viene sempre salvata)
-    cur.execute("""
+    # ── Tabella valutazioni ────────────────────────────────────────────────
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS valutazioni (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            nome_contatto TEXT,
-            ruolo_attuale TEXT,
-            azienda TEXT,
-            anni_esperienza INTEGER,
-            tipo_profilo TEXT DEFAULT 'A',
-            anteprima_testo TEXT,
-            punteggio INTEGER,
-            analisi TEXT,
-            spunti TEXT,
-            messaggio_outreach TEXT,
-            candidato_id INTEGER,
-            data_valutazione TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            id                  SERIAL PRIMARY KEY,
+            nome_contatto       TEXT,
+            ruolo_attuale       TEXT,
+            azienda             TEXT,
+            anni_esperienza     INTEGER,
+            tipo_profilo        TEXT DEFAULT 'A',
+            anteprima_testo     TEXT,
+            punteggio           INTEGER,
+            analisi             TEXT,
+            spunti              TEXT,
+            messaggio_outreach  TEXT,
+            candidato_id        INTEGER,
+            fonte               TEXT DEFAULT 'manuale',
+            data_valutazione    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
-    # Migrazioni per DB esistenti
-    for colonna in [
-        "ALTER TABLE valutazioni ADD COLUMN nome_contatto TEXT",
-        "ALTER TABLE valutazioni ADD COLUMN ruolo_attuale TEXT",
-        "ALTER TABLE valutazioni ADD COLUMN azienda TEXT",
-        "ALTER TABLE valutazioni ADD COLUMN anni_esperienza INTEGER",
-    ]:
-        try:
-            cur.execute(colonna)
-        except Exception:
-            pass  # colonna già esistente
 
-    # Tabella contenuti LinkedIn generati
-    cur.execute("""
+    # ── Tabella contenuti LinkedIn ─────────────────────────────────────────
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS contenuti_linkedin (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            tema TEXT NOT NULL,
-            tono TEXT NOT NULL,
-            profilo_destinazione TEXT NOT NULL,
-            variante_1 TEXT,
-            variante_2 TEXT,
-            variante_3 TEXT,
-            data_creazione TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            id                      SERIAL PRIMARY KEY,
+            tema                    TEXT NOT NULL,
+            tono                    TEXT NOT NULL,
+            profilo_destinazione    TEXT NOT NULL,
+            variante_1              TEXT,
+            variante_2              TEXT,
+            variante_3              TEXT,
+            data_creazione          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
 
-    # Tabella impostazioni profili A e B
-    cur.execute("""
+    # ── Tabella impostazioni profili A e B ─────────────────────────────────
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS impostazioni_profilo (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            profilo TEXT NOT NULL UNIQUE,
-            eta_min INTEGER DEFAULT 0,
-            eta_max INTEGER DEFAULT 99,
+            id                  SERIAL PRIMARY KEY,
+            profilo             TEXT NOT NULL UNIQUE,
+            eta_min             INTEGER DEFAULT 0,
+            eta_max             INTEGER DEFAULT 99,
             anni_esperienza_min INTEGER DEFAULT 0,
-            settori TEXT DEFAULT '',
-            istituti TEXT DEFAULT '',
-            ruoli_target TEXT DEFAULT '',
-            keyword_positive TEXT DEFAULT '',
-            keyword_negative TEXT DEFAULT '',
-            peso_eta INTEGER DEFAULT 5,
-            peso_esperienza INTEGER DEFAULT 5,
-            peso_settore INTEGER DEFAULT 5,
-            peso_ruolo INTEGER DEFAULT 5,
-            peso_keyword INTEGER DEFAULT 5,
-            data_aggiornamento TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            settori             TEXT DEFAULT '',
+            istituti            TEXT DEFAULT '',
+            ruoli_target        TEXT DEFAULT '',
+            keyword_positive    TEXT DEFAULT '',
+            keyword_negative    TEXT DEFAULT '',
+            peso_eta            INTEGER DEFAULT 5,
+            peso_esperienza     INTEGER DEFAULT 5,
+            peso_settore        INTEGER DEFAULT 5,
+            peso_ruolo          INTEGER DEFAULT 5,
+            peso_keyword        INTEGER DEFAULT 5,
+            data_aggiornamento  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
 
-    # Tabella cronologia ricerche automatiche Apify
-    cur.execute("""
+    # ── Tabella cronologia ricerche ────────────────────────────────────────
+    conn.execute("""
         CREATE TABLE IF NOT EXISTS ricerche_automatiche (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            tipo_profilo TEXT DEFAULT 'A',
-            parametri TEXT,
-            profili_trovati INTEGER DEFAULT 0,
-            profili_importati INTEGER DEFAULT 0,
-            punteggio_medio REAL,
-            stato TEXT DEFAULT 'completata',
-            data_ricerca TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            id                  SERIAL PRIMARY KEY,
+            tipo_profilo        TEXT DEFAULT 'A',
+            parametri           TEXT,
+            profili_trovati     INTEGER DEFAULT 0,
+            profili_importati   INTEGER DEFAULT 0,
+            punteggio_medio     REAL,
+            stato               TEXT DEFAULT 'completata',
+            fonte               TEXT DEFAULT 'apify',
+            data_ricerca        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     """)
 
-    # Migrazioni per DB esistenti (colonne aggiunte in versioni successive)
-    for colonna in [
-        "ALTER TABLE valutazioni ADD COLUMN fonte TEXT DEFAULT 'manuale'",
-        "ALTER TABLE candidati ADD COLUMN ricerca_id INTEGER",
-        "ALTER TABLE ricerche_automatiche ADD COLUMN fonte TEXT DEFAULT 'apify'",
-    ]:
-        try:
-            cur.execute(colonna)
-        except Exception:
-            pass  # colonna già esistente
+    # ── Migrazioni per DB esistenti ────────────────────────────────────────
+    # ADD COLUMN IF NOT EXISTS è supportato da PostgreSQL 9.6+
+    migrazioni = [
+        "ALTER TABLE valutazioni         ADD COLUMN IF NOT EXISTS nome_contatto TEXT",
+        "ALTER TABLE valutazioni         ADD COLUMN IF NOT EXISTS ruolo_attuale TEXT",
+        "ALTER TABLE valutazioni         ADD COLUMN IF NOT EXISTS azienda TEXT",
+        "ALTER TABLE valutazioni         ADD COLUMN IF NOT EXISTS anni_esperienza INTEGER",
+        "ALTER TABLE valutazioni         ADD COLUMN IF NOT EXISTS fonte TEXT DEFAULT 'manuale'",
+        "ALTER TABLE candidati           ADD COLUMN IF NOT EXISTS ricerca_id INTEGER",
+        "ALTER TABLE ricerche_automatiche ADD COLUMN IF NOT EXISTS fonte TEXT DEFAULT 'apify'",
+    ]
+    for sql in migrazioni:
+        conn.execute(sql)
 
     conn.commit()
     conn.close()
