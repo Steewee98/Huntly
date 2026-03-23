@@ -127,6 +127,7 @@ def init_db():
     for colonna in [
         "ALTER TABLE valutazioni ADD COLUMN fonte TEXT DEFAULT 'manuale'",
         "ALTER TABLE candidati ADD COLUMN ricerca_id INTEGER",
+        "ALTER TABLE ricerche_automatiche ADD COLUMN fonte TEXT DEFAULT 'apify'",
     ]:
         try:
             cur.execute(colonna)

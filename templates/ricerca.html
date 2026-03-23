@@ -153,19 +153,20 @@
     </div>
 </div>
 
-<!-- Cronologia Ricerche Automatiche -->
+<!-- Cronologia Ricerche -->
 <div class="card" style="margin-top:2rem;">
     <div class="card-header">
-        <h3>&#128203; Cronologia Ricerche Automatiche</h3>
+        <h3>&#128203; Cronologia Ricerche</h3>
         <a href="/ricerca/export_csv" class="btn btn-outline btn-sm">&#8595; Esporta CSV</a>
     </div>
     {% if cronologia %}
     <div class="table-responsive">
-        <table class="data-table" id="cronologia-ricerche">
+        <table class="data-table">
             <thead>
                 <tr>
                     <th>Data</th>
-                    <th>Tipo Profilo</th>
+                    <th>Tipo</th>
+                    <th>Fonte</th>
                     <th>Trovati</th>
                     <th>Importati</th>
                     <th>Punteggio Medio</th>
@@ -174,7 +175,8 @@
             </thead>
             <tbody>
                 {% for r in cronologia %}
-                <tr style="cursor:pointer;" onclick="mostraDettaglioRicerca({{ r.id }})"
+                <tr style="cursor:pointer;"
+                    onclick="window.location.href='/ricerca/dettaglio/{{ r.id }}'"
                     title="Clicca per vedere i candidati trovati">
                     <td style="white-space:nowrap;">
                         <div>{{ r.data_ricerca[:10] }}</div>
@@ -183,6 +185,15 @@
                     <td>
                         <span class="badge badge-profilo-{{ r.tipo_profilo|lower }}">
                             Profilo {{ r.tipo_profilo }}
+                        </span>
+                    </td>
+                    <td>
+                        <span style="font-size:0.82rem;">
+                            {% if r.fonte == 'apify' %}
+                            &#9889; Automatica
+                            {% else %}
+                            &#128203; Manuale
+                            {% endif %}
                         </span>
                     </td>
                     <td><strong>{{ r.profili_trovati }}</strong></td>
@@ -212,27 +223,10 @@
     <div class="card-body">
         <div class="empty-state" style="padding:2rem;">
             <div class="empty-icon">&#128269;</div>
-            <p>Nessuna ricerca automatica ancora. Lancia la prima ricerca per iniziare la cronologia.</p>
+            <p>Nessuna ricerca ancora. Le ricerche automatiche e gli inserimenti manuali appariranno qui.</p>
         </div>
     </div>
     {% endif %}
-</div>
-
-<!-- Modal: candidati di una ricerca specifica -->
-<div id="modal-ricerca-dettaglio" class="modal-overlay hidden"
-     onclick="if(event.target===this)this.classList.add('hidden')">
-    <div class="modal" style="max-width:700px;">
-        <div class="modal-header">
-            <h3>Candidati Trovati</h3>
-            <button class="modal-close"
-                    onclick="document.getElementById('modal-ricerca-dettaglio').classList.add('hidden')">&times;</button>
-        </div>
-        <div class="modal-body" id="modal-ricerca-dettaglio-body">
-            <div style="text-align:center;padding:2rem;">
-                <span class="spinner"></span>
-            </div>
-        </div>
-    </div>
 </div>
 
 <!-- Modal: scelta tipo profilo prima di importare -->
@@ -457,44 +451,5 @@ document.getElementById('modal-import').addEventListener('click', function(e) {
     if (e.target === this) chiudiModal();
 });
 
-/* ---- Dettaglio ricerca automatica ---- */
-function mostraDettaglioRicerca(ricercaId) {
-    const modal = document.getElementById('modal-ricerca-dettaglio');
-    const body  = document.getElementById('modal-ricerca-dettaglio-body');
-    modal.classList.remove('hidden');
-    body.innerHTML = '<div style="text-align:center;padding:2rem;"><span class="spinner"></span> Caricamento...</div>';
-
-    fetch('/ricerca/dettaglio/' + ricercaId)
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            const candidati = data.candidati || [];
-            if (candidati.length === 0) {
-                body.innerHTML = '<p style="color:var(--grigio-testo);">Nessun candidato collegato a questa ricerca.</p>';
-                return;
-            }
-            let html = '<div class="table-responsive"><table class="data-table"><thead><tr>' +
-                '<th>Nome</th><th>Ruolo</th><th>Azienda</th><th>Punteggio</th><th>Stato</th></tr></thead><tbody>';
-            candidati.forEach(function(c) {
-                const nome = [c.nome, c.cognome].filter(Boolean).join(' ') || '—';
-                const score = c.punteggio
-                    ? '<span class="score-badge score-badge-' + (c.punteggio >= 8 ? 'alto' : c.punteggio >= 5 ? 'medio' : 'basso') + '">' + c.punteggio + '/10</span>'
-                    : '—';
-                html += '<tr>' +
-                    '<td><strong>' + escHtml(nome) + '</strong></td>' +
-                    '<td>' + escHtml(c.ruolo_attuale || '—') + '</td>' +
-                    '<td>' + escHtml(c.azienda || '—') + '</td>' +
-                    '<td>' + score + '</td>' +
-                    '<td style="font-size:0.85rem;">' + escHtml(c.stato || '—') + '</td>' +
-                    '</tr>';
-            });
-            html += '</tbody></table></div>';
-            html += '<div style="margin-top:1rem;text-align:right;">' +
-                '<a href="/pipeline" class="btn btn-primary btn-sm">&#9776; Vai alla Pipeline</a></div>';
-            body.innerHTML = html;
-        })
-        .catch(function(err) {
-            body.innerHTML = '<p style="color:#dc2626;">Errore: ' + err + '</p>';
-        });
-}
 </script>
 {% endblock %}

@@ -224,8 +224,8 @@ def automatica():
     # Crea il record ricerca PRIMA del loop per ottenere l'ID da passare ai candidati
     cur_r = db.execute(
         """INSERT INTO ricerche_automatiche
-           (tipo_profilo, parametri, profili_trovati, stato)
-           VALUES (?, ?, ?, 'in_corso')""",
+           (tipo_profilo, parametri, profili_trovati, fonte, stato)
+           VALUES (?, ?, ?, 'apify', 'in_corso')""",
         (tipo_profilo, parametri_str, trovati)
     )
     ricerca_id = cur_r.lastrowid
@@ -352,15 +352,73 @@ def export_csv():
 
 @ricerca_bp.route("/ricerca/dettaglio/<int:ricerca_id>")
 def dettaglio_ricerca(ricerca_id):
-    """Restituisce i candidati trovati in una ricerca specifica."""
+    """Pagina di dettaglio di una ricerca con tutti i candidati trovati."""
     db = get_db()
+    ricerca = db.execute(
+        "SELECT * FROM ricerche_automatiche WHERE id = ?", (ricerca_id,)
+    ).fetchone()
+
+    if not ricerca:
+        db.close()
+        return "Ricerca non trovata", 404
+
     candidati = db.execute(
-        """SELECT id, nome, cognome, ruolo_attuale, azienda, punteggio, stato
+        """SELECT id, nome, cognome, ruolo_attuale, azienda, punteggio, stato,
+                  analisi, spunti, messaggio_outreach, data_inserimento, data_aggiornamento
            FROM candidati WHERE ricerca_id = ? ORDER BY punteggio DESC NULLS LAST""",
         (ricerca_id,)
     ).fetchall()
     db.close()
-    return jsonify({"candidati": [dict(c) for c in candidati]})
+
+    ricerca = dict(ricerca)
+    candidati = [dict(c) for c in candidati]
+
+    # Parsa il JSON dei parametri per mostrarli in modo leggibile
+    try:
+        parametri = json.loads(ricerca.get('parametri') or '{}')
+    except Exception:
+        parametri = {}
+
+    return render_template("ricerca_dettaglio.html",
+                           ricerca=ricerca,
+                           candidati=candidati,
+                           parametri=parametri)
+
+
+@ricerca_bp.route("/ricerca/dettaglio/<int:ricerca_id>/export_csv")
+def export_csv_candidati(ricerca_id):
+    """Esporta in CSV i candidati di una ricerca specifica."""
+    db = get_db()
+    ricerca = db.execute(
+        "SELECT tipo_profilo, data_ricerca FROM ricerche_automatiche WHERE id = ?",
+        (ricerca_id,)
+    ).fetchone()
+    candidati = db.execute(
+        """SELECT nome, cognome, ruolo_attuale, azienda, punteggio, stato, data_aggiornamento
+           FROM candidati WHERE ricerca_id = ? ORDER BY punteggio DESC NULLS LAST""",
+        (ricerca_id,)
+    ).fetchall()
+    db.close()
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['Nome', 'Cognome', 'Ruolo', 'Azienda', 'Punteggio', 'Stato', 'Data Valutazione'])
+    for c in candidati:
+        writer.writerow([
+            c['nome'], c['cognome'],
+            c['ruolo_attuale'] or '',
+            c['azienda'] or '',
+            c['punteggio'] or '',
+            c['stato'] or '',
+            c['data_aggiornamento'] or '',
+        ])
+
+    tipo = ricerca['tipo_profilo'] if ricerca else 'X'
+    return Response(
+        '\ufeff' + output.getvalue(),
+        mimetype='text/csv; charset=utf-8',
+        headers={'Content-Disposition': f'attachment; filename=candidati_ricerca_{ricerca_id}_profilo{tipo}.csv'}
+    )
 
 
 @ricerca_bp.route("/ricerca/importa", methods=["POST"])

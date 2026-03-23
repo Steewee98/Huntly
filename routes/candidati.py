@@ -6,6 +6,7 @@ Form per aggiungere candidati al database.
 import json
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from database import get_db
+from datetime import datetime
 
 # Blueprint per il modulo inserimento candidati
 candidati_bp = Blueprint("candidati", __name__)
@@ -32,12 +33,31 @@ def inserisci():
         flash("Nome e cognome sono obbligatori.", "errore")
         return redirect(url_for("candidati.index"))
 
+    # Snapshot dei parametri usati per questa inserzione manuale
+    parametri_str = json.dumps({
+        'nome': nome,
+        'cognome': cognome,
+        'ruolo_attuale': ruolo_attuale,
+        'azienda': azienda,
+        'tipo_profilo': tipo_profilo,
+    }, ensure_ascii=False)
+
     db = get_db()
+
+    # Registra la ricerca manuale nella cronologia
+    ricerca_cur = db.execute(
+        """INSERT INTO ricerche_automatiche
+           (tipo_profilo, parametri, profili_trovati, profili_importati, fonte, stato)
+           VALUES (?, ?, 1, 1, 'manuale', 'completata')""",
+        (tipo_profilo, parametri_str)
+    )
+    ricerca_id = ricerca_cur.lastrowid
+
     cur = db.execute(
         """INSERT INTO candidati
-           (nome, cognome, ruolo_attuale, azienda, anni_esperienza, note, tipo_profilo)
-           VALUES (?, ?, ?, ?, ?, ?, ?)""",
-        (nome, cognome, ruolo_attuale, azienda, anni_esperienza, note, tipo_profilo),
+           (nome, cognome, ruolo_attuale, azienda, anni_esperienza, note, tipo_profilo, ricerca_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (nome, cognome, ruolo_attuale, azienda, anni_esperienza, note, tipo_profilo, ricerca_id),
     )
     db.commit()
     nuovo_id = cur.lastrowid

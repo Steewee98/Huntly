@@ -1,0 +1,222 @@
+{% extends "base.html" %}
+{% block title %}Dettaglio Ricerca #{{ ricerca.id }} — SABIA{% endblock %}
+
+{% block content %}
+
+<!-- Intestazione con navigazione -->
+<div style="display:flex;align-items:center;gap:1rem;margin-bottom:1.5rem;">
+    <a href="/ricerca" class="btn btn-outline btn-sm">&#8592; Cronologia Ricerche</a>
+    <div>
+        <h1 class="page-title" style="margin:0;font-size:1.25rem;">
+            Dettaglio Ricerca #{{ ricerca.id }}
+        </h1>
+        <p style="margin:0;font-size:0.82rem;color:var(--grigio-testo);">
+            {{ ricerca.data_ricerca[:16].replace('T', ' ') if 'T' in ricerca.data_ricerca else ricerca.data_ricerca[:16] }}
+        </p>
+    </div>
+</div>
+
+<!-- Riepilogo ricerca -->
+<div class="card" style="margin-bottom:1.5rem;">
+    <div class="card-header">
+        <h3>Riepilogo Ricerca</h3>
+        <span class="badge badge-profilo-{{ ricerca.tipo_profilo|lower }}">
+            Profilo {{ ricerca.tipo_profilo }}
+        </span>
+    </div>
+    <div class="card-body">
+        <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:1.25rem;margin-bottom:1.5rem;">
+            <div>
+                <div style="font-size:0.78rem;color:var(--grigio-testo);margin-bottom:0.2rem;">Fonte</div>
+                <div style="font-weight:600;">
+                    {% if ricerca.fonte == 'apify' %}
+                    &#9889; Automatica Apify
+                    {% else %}
+                    &#128203; Inserimento Manuale
+                    {% endif %}
+                </div>
+            </div>
+            <div>
+                <div style="font-size:0.78rem;color:var(--grigio-testo);margin-bottom:0.2rem;">Profili trovati</div>
+                <div style="font-size:1.5rem;font-weight:700;color:var(--blu-scuro);">{{ ricerca.profili_trovati }}</div>
+            </div>
+            <div>
+                <div style="font-size:0.78rem;color:var(--grigio-testo);margin-bottom:0.2rem;">Importati</div>
+                <div style="font-size:1.5rem;font-weight:700;color:var(--azzurro);">{{ ricerca.profili_importati }}</div>
+            </div>
+            <div>
+                <div style="font-size:0.78rem;color:var(--grigio-testo);margin-bottom:0.2rem;">Punteggio medio</div>
+                <div style="font-size:1.5rem;font-weight:700;">
+                    {% if ricerca.punteggio_medio %}
+                    {{ '%.1f'|format(ricerca.punteggio_medio) }}/10
+                    {% else %}—{% endif %}
+                </div>
+            </div>
+            <div>
+                <div style="font-size:0.78rem;color:var(--grigio-testo);margin-bottom:0.2rem;">Stato</div>
+                <div>
+                    {% if ricerca.stato == 'completata' %}
+                    <span style="color:#16a34a;font-weight:600;">&#10003; Completata</span>
+                    {% elif ricerca.stato == 'in_corso' %}
+                    <span style="color:var(--azzurro);font-weight:600;">&#8635; In corso</span>
+                    {% else %}
+                    <span style="color:#dc2626;font-weight:600;">&#10005; Errore</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Parametri snapshot -->
+        {% if parametri %}
+        <div style="background:var(--grigio-sfondo);border-radius:var(--radius);padding:0.875rem 1rem;">
+            <div style="font-size:0.78rem;color:var(--grigio-testo);margin-bottom:0.5rem;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">
+                Parametri usati al momento del lancio
+            </div>
+            <div style="display:flex;flex-wrap:wrap;gap:0.5rem;">
+                {% for chiave, valore in parametri.items() %}
+                {% if valore %}
+                <span style="background:white;border:1px solid var(--grigio-bordo);border-radius:20px;padding:0.25rem 0.75rem;font-size:0.82rem;">
+                    <span style="color:var(--grigio-testo);">{{ chiave }}:</span>
+                    <strong>{{ valore }}</strong>
+                </span>
+                {% endif %}
+                {% endfor %}
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Tabella candidati -->
+<div class="card">
+    <div class="card-header">
+        <h3>Candidati Trovati <span style="font-size:0.85rem;font-weight:400;color:var(--grigio-testo);">({{ candidati|length }})</span></h3>
+        {% if candidati %}
+        <a href="/ricerca/dettaglio/{{ ricerca.id }}/export_csv" class="btn btn-outline btn-sm">
+            &#8595; Esporta candidati CSV
+        </a>
+        {% endif %}
+    </div>
+
+    {% if candidati %}
+    <div class="table-responsive">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Candidato</th>
+                    <th>Azienda</th>
+                    <th>Punteggio</th>
+                    <th>Stato Pipeline</th>
+                    <th>Azioni</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in candidati %}
+                <tr>
+                    <td>
+                        <div class="candidato-nome">{{ c.nome }} {{ c.cognome }}</div>
+                        {% if c.ruolo_attuale %}
+                        <div class="candidato-meta">{{ c.ruolo_attuale }}</div>
+                        {% endif %}
+                    </td>
+                    <td>{{ c.azienda or '—' }}</td>
+                    <td>
+                        {% if c.punteggio %}
+                        <span class="score-badge score-badge-{{ 'alto' if c.punteggio >= 8 else ('medio' if c.punteggio >= 5 else 'basso') }}">
+                            {{ c.punteggio }}/10
+                        </span>
+                        {% else %}
+                        <span style="color:var(--grigio-testo);font-size:0.85rem;">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span style="font-size:0.85rem;">{{ c.stato or '—' }}</span>
+                    </td>
+                    <td>
+                        <div style="display:flex;gap:0.4rem;flex-wrap:wrap;">
+                            {% if c.analisi %}
+                            <button class="btn btn-outline btn-xs"
+                                    onclick="apriReport({{ loop.index0 }})">
+                                Vedi Report
+                            </button>
+                            {% endif %}
+                            <a href="/pipeline" class="btn btn-secondary btn-xs">
+                                Pipeline &#8594;
+                            </a>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="card-body">
+        <div class="empty-state" style="padding:2rem;">
+            <div class="empty-icon">&#128100;</div>
+            <p>Nessun candidato collegato a questa ricerca.</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Modal report valutazione -->
+<div id="modal-report" class="modal-overlay hidden"
+     onclick="if(event.target===this)nascondi('modal-report')">
+    <div class="modal" style="max-width:680px;">
+        <div class="modal-header">
+            <h3 id="modal-report-titolo">Report Valutazione</h3>
+            <button class="modal-close" onclick="nascondi('modal-report')">&times;</button>
+        </div>
+        <div class="modal-body" id="modal-report-body"></div>
+    </div>
+</div>
+
+<!-- Dati candidati per JS -->
+<script id="candidati-data" type="application/json">
+{{ candidati | tojson }}
+</script>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const candidatiData = JSON.parse(document.getElementById('candidati-data').textContent);
+
+function apriReport(indice) {
+    const c = candidatiData[indice];
+    if (!c) return;
+
+    let spunti = c.spunti || [];
+    if (typeof spunti === 'string') {
+        try { spunti = JSON.parse(spunti); } catch { spunti = []; }
+    }
+
+    const scoreClass = c.punteggio >= 8 ? 'score-alto' : (c.punteggio >= 5 ? 'score-medio' : 'score-basso');
+    const spuntiHtml = spunti.map(s => `<li class="spunto-item">${s}</li>`).join('');
+
+    document.getElementById('modal-report-titolo').textContent =
+        `Report — ${c.nome} ${c.cognome}`;
+
+    document.getElementById('modal-report-body').innerHTML = `
+        <div class="report-sezione" style="text-align:center;">
+            <div class="report-score ${scoreClass}">${c.punteggio || '—'}/10</div>
+        </div>
+        <div class="report-sezione">
+            <h4>Analisi del Percorso</h4>
+            <p>${c.analisi || '—'}</p>
+        </div>
+        ${spuntiHtml ? `
+        <div class="report-sezione">
+            <h4>Spunti per il Contatto</h4>
+            <ul>${spuntiHtml}</ul>
+        </div>` : ''}
+        ${c.messaggio_outreach ? `
+        <div class="report-sezione">
+            <h4>Messaggio di Outreach</h4>
+            <div class="outreach-box">${c.messaggio_outreach}</div>
+        </div>` : ''}
+    `;
+    mostra('modal-report');
+}
+</script>
+{% endblock %}
