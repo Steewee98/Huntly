@@ -6,10 +6,11 @@ Contiene tutte le funzioni AI usate dai vari moduli dell'app.
 import anthropic
 import os
 import json
+import re
 import logging
 
-# Model ID corretto con data nel formato richiesto dall'API
-CLAUDE_MODEL = "claude-sonnet-4-20250514"
+# Model ID corretto per Claude Sonnet 4.6
+CLAUDE_MODEL = "claude-sonnet-4-6"
 
 logger = logging.getLogger(__name__)
 
@@ -19,17 +20,99 @@ def get_client():
     return anthropic.Anthropic(api_key=os.environ.get("ANTHROPIC_API_KEY"))
 
 
+def clean_text(testo: str) -> str:
+    """
+    Sanitizza il testo prima di mandarlo all'API:
+    - Forza encoding UTF-8 rimuovendo caratteri non validi
+    - Normalizza spazi e a capo
+    - Rimuove caratteri di controllo (eccetto \\n e \\t)
+    """
+    if not testo:
+        return ""
+    # Forza stringa Python, rimuovi caratteri non-UTF8
+    if isinstance(testo, bytes):
+        testo = testo.decode("utf-8", errors="ignore")
+    # Rimuovi caratteri di controllo non stampabili (mantieni \n \t \r)
+    testo = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", "", testo)
+    # Normalizza spazi multipli e righe vuote eccessive
+    testo = re.sub(r"\n{3,}", "\n\n", testo)
+    testo = testo.strip()
+    return testo
+
+
+def _log_payload(funzione: str, payload: dict):
+    """Logga il payload completo prima di ogni chiamata API."""
+    logger.info(
+        "[AI] %s → model=%s max_tokens=%s messages_count=%d first_content_preview=%s",
+        funzione,
+        payload.get("model"),
+        payload.get("max_tokens"),
+        len(payload.get("messages", [])),
+        str(payload.get("messages", [{}])[0].get("content", ""))[:120],
+    )
+
+
+def _chiama_api(funzione: str, payload: dict):
+    """
+    Esegue la chiamata all'API Anthropic con logging completo.
+    Lancia l'eccezione originale in caso di errore, dopo aver loggato il response body.
+    """
+    # Validazioni difensive
+    assert isinstance(payload["model"], str), "model deve essere una stringa"
+    assert isinstance(payload["max_tokens"], int), "max_tokens deve essere un intero"
+    assert isinstance(payload["messages"], list) and len(payload["messages"]) > 0, \
+        "messages deve essere una lista non vuota"
+    for m in payload["messages"]:
+        assert isinstance(m.get("role"), str), "ogni messaggio deve avere role stringa"
+        assert isinstance(m.get("content"), str), "ogni messaggio deve avere content stringa"
+
+    _log_payload(funzione, payload)
+
+    client = get_client()
+    try:
+        risposta = client.messages.create(**payload)
+        return risposta
+    except anthropic.APIStatusError as e:
+        logger.error(
+            "[AI] %s → APIStatusError status=%s body=%s",
+            funzione, e.status_code, e.response.text if hasattr(e, "response") else str(e),
+            exc_info=True,
+        )
+        raise
+    except anthropic.APIError as e:
+        logger.error("[AI] %s → APIError: %s", funzione, str(e), exc_info=True)
+        raise
+    except Exception as e:
+        logger.error("[AI] %s → %s: %s", funzione, type(e).__name__, str(e), exc_info=True)
+        raise
+
+
+def test_connessione_api() -> dict:
+    """
+    Chiama l'API con un payload minimale per verificare la connettività.
+    Restituisce {"ok": True} oppure {"ok": False, "errore": "..."}.
+    """
+    payload = {
+        "model": CLAUDE_MODEL,
+        "max_tokens": 10,
+        "messages": [{"role": "user", "content": "test"}],
+    }
+    try:
+        _chiama_api("test_connessione_api", payload)
+        logger.info("[AI] test_connessione_api → OK")
+        return {"ok": True}
+    except Exception as e:
+        return {"ok": False, "errore": str(e)}
+
+
 def analizza_profilo_linkedin(testo_profilo: str, tipo_profilo: str, impostazioni: dict = None) -> dict:
     """
     Analizza un profilo LinkedIn e restituisce valutazione strutturata.
-
     tipo_profilo: 'A' = Senior, 'B' = Under 35
-    impostazioni: dict con i parametri configurati nella pagina Impostazioni (opzionale)
     """
-    client = get_client()
+    testo_profilo = clean_text(testo_profilo)
 
     if impostazioni:
-        # Usa i parametri personalizzati dell'utente
         if tipo_profilo == "A":
             descrizione_profilo = (
                 f"Profilo A (Senior): età tra {impostazioni.get('eta_min', 40)} e "
@@ -50,12 +133,11 @@ def analizza_profilo_linkedin(testo_profilo: str, tipo_profilo: str, impostazion
                 f"Segnali positivi (favoriscono la valutazione): {impostazioni.get('keyword_positive', '')}. "
                 f"Segnali negativi (penalizzano la valutazione): {impostazioni.get('keyword_negative', '')}."
             )
-
-        p_eta  = impostazioni.get('peso_eta', 5)
-        p_esp  = impostazioni.get('peso_esperienza', 5)
-        p_set  = impostazioni.get('peso_settore', 5)
-        p_ruo  = impostazioni.get('peso_ruolo', 5)
-        p_kw   = impostazioni.get('peso_keyword', 5)
+        p_eta = impostazioni.get('peso_eta', 5)
+        p_esp = impostazioni.get('peso_esperienza', 5)
+        p_set = impostazioni.get('peso_settore', 5)
+        p_ruo = impostazioni.get('peso_ruolo', 5)
+        p_kw  = impostazioni.get('peso_keyword', 5)
         istr_punteggio = (
             f"\nPer il punteggio finale (1-10) usa questi pesi (scala 0-10, 0=ignora, 10=determinante):\n"
             f"- Eta nel range target: {p_eta}/10\n"
@@ -65,7 +147,6 @@ def analizza_profilo_linkedin(testo_profilo: str, tipo_profilo: str, impostazion
             f"- Parole chiave positive/negative: {p_kw}/10"
         )
     else:
-        # Valori di default
         if tipo_profilo == "A":
             descrizione_profilo = (
                 "Profilo A: professionista senior tra 40 e 65 anni, "
@@ -102,31 +183,29 @@ def analizza_profilo_linkedin(testo_profilo: str, tipo_profilo: str, impostazion
         "}"
     )
 
+    payload = {
+        "model":      CLAUDE_MODEL,
+        "max_tokens": 1500,
+        "messages":   [{"role": "user", "content": clean_text(prompt)}],
+    }
     try:
-        risposta = client.messages.create(
-            model=CLAUDE_MODEL,
-            max_tokens=1500,
-            messages=[{"role": "user", "content": prompt}]
-        )
+        risposta = _chiama_api("analizza_profilo_linkedin", payload)
         testo = risposta.content[0].text.strip()
-        # Rimuovi eventuali backtick markdown
         if testo.startswith("```"):
             testo = testo.split("```")[1]
             if testo.startswith("json"):
                 testo = testo[4:]
         return json.loads(testo)
     except Exception as e:
-        logger.error(f"[AI] Errore analizza_profilo_linkedin: {type(e).__name__}: {e}", exc_info=True)
+        logger.error("[AI] analizza_profilo_linkedin fallita: %s", e)
         raise
 
 
 def rigenera_messaggio_outreach(testo_profilo: str, messaggio_attuale: str, istruzioni: str = "") -> str:
-    """
-    Rigenera il messaggio di outreach.
-    Se vengono fornite istruzioni personalizzate, le usa per riscrivere il messaggio attuale.
-    Altrimenti genera una nuova variante partendo dal profilo.
-    """
-    client = get_client()
+    """Rigenera il messaggio di outreach (nuova variante o riscritto con istruzioni)."""
+    testo_profilo    = clean_text(testo_profilo)
+    messaggio_attuale = clean_text(messaggio_attuale)
+    istruzioni        = clean_text(istruzioni)
 
     if istruzioni:
         prompt = (
@@ -149,24 +228,19 @@ def rigenera_messaggio_outreach(testo_profilo: str, messaggio_attuale: str, istr
             "Scrivi SOLO il testo del nuovo messaggio, senza intestazioni o spiegazioni. Max 300 caratteri."
         )
 
-    try:
-        risposta = client.messages.create(
-            model=CLAUDE_MODEL,
-            max_tokens=400,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        return risposta.content[0].text.strip()
-    except Exception as e:
-        logger.error(f"[AI] Errore rigenera_messaggio_outreach: {type(e).__name__}: {e}", exc_info=True)
-        raise
+    payload = {
+        "model":      CLAUDE_MODEL,
+        "max_tokens": 400,
+        "messages":   [{"role": "user", "content": clean_text(prompt)}],
+    }
+    risposta = _chiama_api("rigenera_messaggio_outreach", payload)
+    return risposta.content[0].text.strip()
 
 
 def rigenera_messaggio_followup(candidato: dict, messaggio_attuale: str, istruzioni: str = "") -> str:
-    """
-    Rigenera o riscrive un messaggio di follow-up.
-    Se istruzioni e vuoto genera una nuova variante, altrimenti riscrive seguendo le istruzioni.
-    """
-    client = get_client()
+    """Rigenera o riscrive un messaggio di follow-up."""
+    messaggio_attuale = clean_text(messaggio_attuale)
+    istruzioni        = clean_text(istruzioni)
 
     contesto = (
         f"Candidato: {candidato.get('nome','')} {candidato.get('cognome','')}\n"
@@ -196,22 +270,17 @@ def rigenera_messaggio_followup(candidato: dict, messaggio_attuale: str, istruzi
             "Scrivi SOLO il testo del nuovo messaggio, senza intestazioni. Max 300 caratteri."
         )
 
-    try:
-        risposta = client.messages.create(
-            model=CLAUDE_MODEL,
-            max_tokens=400,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        return risposta.content[0].text.strip()
-    except Exception as e:
-        logger.error(f"[AI] Errore rigenera_messaggio_followup: {type(e).__name__}: {e}", exc_info=True)
-        raise
+    payload = {
+        "model":      CLAUDE_MODEL,
+        "max_tokens": 400,
+        "messages":   [{"role": "user", "content": clean_text(prompt)}],
+    }
+    risposta = _chiama_api("rigenera_messaggio_followup", payload)
+    return risposta.content[0].text.strip()
 
 
 def genera_messaggio_followup(candidato: dict) -> str:
     """Genera un messaggio di follow-up personalizzato per un candidato."""
-    client = get_client()
-
     prompt = (
         "Sei un recruiter esperto. Scrivi un breve messaggio di follow-up LinkedIn per questo candidato.\n\n"
         f"Candidato: {candidato['nome']} {candidato['cognome']}\n"
@@ -223,25 +292,19 @@ def genera_messaggio_followup(candidato: dict) -> str:
         "Tono professionale e cordiale. Max 300 caratteri."
     )
 
-    try:
-        risposta = client.messages.create(
-            model=CLAUDE_MODEL,
-            max_tokens=400,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        return risposta.content[0].text.strip()
-    except Exception as e:
-        logger.error(f"[AI] Errore genera_messaggio_followup: {type(e).__name__}: {e}", exc_info=True)
-        raise
+    payload = {
+        "model":      CLAUDE_MODEL,
+        "max_tokens": 400,
+        "messages":   [{"role": "user", "content": clean_text(prompt)}],
+    }
+    risposta = _chiama_api("genera_messaggio_followup", payload)
+    return risposta.content[0].text.strip()
 
 
 def genera_prompt_immagine(testo_post: str, tema: str, tono: str, prompt_custom: str = "") -> str:
-    """
-    Usa Claude per costruire un prompt ottimizzato per Pollinations/FLUX
-    a partire dal testo del post LinkedIn.
-    """
-    client = get_client()
-
+    """Usa Claude per costruire un prompt ottimizzato per Pollinations/FLUX."""
+    testo_post    = clean_text(testo_post)
+    prompt_custom = clean_text(prompt_custom)
     istruzioni_custom = f"\nModifica richiesta dall'utente: {prompt_custom}" if prompt_custom else ""
 
     prompt = (
@@ -261,33 +324,22 @@ def genera_prompt_immagine(testo_post: str, tema: str, tono: str, prompt_custom:
         "Rispondi SOLO con il prompt in inglese, max 200 caratteri, senza virgolette."
     )
 
-    try:
-        risposta = client.messages.create(
-            model=CLAUDE_MODEL,
-            max_tokens=300,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        return risposta.content[0].text.strip()
-    except Exception as e:
-        logger.error(f"[AI] Errore genera_prompt_immagine: {type(e).__name__}: {e}", exc_info=True)
-        raise
+    payload = {
+        "model":      CLAUDE_MODEL,
+        "max_tokens": 300,
+        "messages":   [{"role": "user", "content": clean_text(prompt)}],
+    }
+    risposta = _chiama_api("genera_prompt_immagine", payload)
+    return risposta.content[0].text.strip()
 
 
 def genera_contenuti_linkedin(tema: str, tono: str, profilo: str) -> dict:
-    """
-    Genera 3 varianti di post LinkedIn.
-
-    tono: 'professionale' | 'ispirazionale' | 'educativo'
-    profilo: 'Salvatore Sabia' | 'Assistente Recrutatrice'
-    """
-    client = get_client()
-
+    """Genera 3 varianti di post LinkedIn."""
     descrizioni_tono = {
         "professionale": "formale, autorevole, basato su dati e risultati concreti",
         "ispirazionale": "motivante, emotivo, con storie e metafore, che spinge all'azione",
-        "educativo": "informativo, chiaro, che insegna qualcosa di valore al lettore"
+        "educativo":     "informativo, chiaro, che insegna qualcosa di valore al lettore",
     }
-
     descrizioni_profilo = {
         "Salvatore Sabia": (
             "Salvatore Sabia, imprenditore nel settore della consulenza finanziaria, "
@@ -296,7 +348,7 @@ def genera_contenuti_linkedin(tema: str, tono: str, profilo: str) -> dict:
         "Assistente Recrutatrice": (
             "Assistente recrutatrice specializzata nel settore bancario-finanziario, "
             "che aiuta professionisti a trovare nuove opportunita di crescita."
-        )
+        ),
     }
 
     prompt = (
@@ -317,12 +369,13 @@ def genera_contenuti_linkedin(tema: str, tono: str, profilo: str) -> dict:
         "}"
     )
 
+    payload = {
+        "model":      CLAUDE_MODEL,
+        "max_tokens": 2000,
+        "messages":   [{"role": "user", "content": clean_text(prompt)}],
+    }
     try:
-        risposta = client.messages.create(
-            model=CLAUDE_MODEL,
-            max_tokens=2000,
-            messages=[{"role": "user", "content": prompt}]
-        )
+        risposta = _chiama_api("genera_contenuti_linkedin", payload)
         testo = risposta.content[0].text.strip()
         if testo.startswith("```"):
             testo = testo.split("```")[1]
@@ -330,5 +383,5 @@ def genera_contenuti_linkedin(tema: str, tono: str, profilo: str) -> dict:
                 testo = testo[4:]
         return json.loads(testo)
     except Exception as e:
-        logger.error(f"[AI] Errore genera_contenuti_linkedin: {type(e).__name__}: {e}", exc_info=True)
+        logger.error("[AI] genera_contenuti_linkedin fallita: %s", e)
         raise
