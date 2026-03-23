@@ -80,6 +80,22 @@ def admin_init_db():
         }), 500
 
 
+@app.errorhandler(Exception)
+def handle_exception(e):
+    """
+    Restituisce sempre JSON invece di HTML in caso di errore non gestito.
+    Evita che il browser riceva una pagina HTML quando si aspetta JSON.
+    """
+    import traceback, logging
+    logging.getLogger(__name__).error("Unhandled exception: %s", traceback.format_exc())
+    from flask import request as flask_request
+    # Per richieste AJAX (Accept: application/json o X-Requested-With) restituisce JSON
+    if flask_request.is_json or flask_request.headers.get("X-Requested-With") == "XMLHttpRequest":
+        return jsonify({"errore": str(e), "tipo": type(e).__name__}), 500
+    # Per pagine HTML rilancia l'eccezione normale di Flask
+    raise e
+
+
 @app.route("/admin/test-api")
 def admin_test_api():
     """Verifica la connessione all'API Anthropic con una chiamata minimale."""

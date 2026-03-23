@@ -143,23 +143,28 @@
 {% block scripts %}
 <script>
 // Carica i dati dei candidati
-const candidatiData = JSON.parse(document.getElementById('candidati-data').textContent);
+let candidatiData = [];
+try {
+    candidatiData = JSON.parse(document.getElementById('candidati-data').textContent);
+} catch(e) { console.error('[pipeline] JSON.parse candidati-data:', e); }
 
 async function aggiornaStato(select) {
     const id = select.dataset.id;
     const stato = select.value;
 
-    const risposta = await fetch('/pipeline/aggiorna_stato', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id, stato })
-    });
-
-    if (risposta.ok) {
-        // Feedback visivo breve
-        select.classList.add('select-saved');
-        setTimeout(() => select.classList.remove('select-saved'), 1500);
-    }
+    try {
+        const risposta = await fetch('/pipeline/aggiorna_stato', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, stato })
+        });
+        if (risposta.ok) {
+            select.classList.add('select-saved');
+            setTimeout(() => select.classList.remove('select-saved'), 1500);
+        } else {
+            console.error('[pipeline] aggiornaStato HTTP', risposta.status);
+        }
+    } catch(e) { console.error('[pipeline] aggiornaStato fetch error:', e); }
 }
 
 function mostraReport(id) {
@@ -212,6 +217,7 @@ async function generaFollowup(id, nome) {
 
     try {
         const risposta = await fetch(`/pipeline/followup/${id}`, { method: 'POST' });
+        console.log('[pipeline] followup response:', risposta.status, risposta.headers.get('content-type'));
         const dati = await risposta.json();
 
         if (risposta.ok) {
@@ -276,6 +282,7 @@ async function chiamaRigeneraFollowup(istruzioni) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ messaggio_attuale: messaggioAttuale, istruzioni })
         });
+        console.log('[pipeline] rigenera_followup response:', risposta.status, risposta.headers.get('content-type'));
         const dati = await risposta.json();
         if (!risposta.ok) throw new Error(dati.errore || 'Errore');
 
@@ -299,13 +306,17 @@ async function chiamaRigeneraFollowup(istruzioni) {
 
 async function eliminaCandidato(id, nome) {
     if (!confirm(`Eliminare ${nome} dalla pipeline?`)) return;
-
-    const risposta = await fetch(`/pipeline/elimina/${id}`, { method: 'DELETE' });
-    if (risposta.ok) {
-        const row = document.getElementById(`row-${id}`);
-        row.style.opacity = '0';
-        setTimeout(() => row.remove(), 300);
-    }
+    try {
+        const risposta = await fetch(`/pipeline/elimina/${id}`, { method: 'DELETE' });
+        if (risposta.ok) {
+            const row = document.getElementById(`row-${id}`);
+            row.style.opacity = '0';
+            setTimeout(() => row.remove(), 300);
+        } else {
+            console.error('[pipeline] eliminaCandidato HTTP', risposta.status);
+            alert('Errore durante l\'eliminazione.');
+        }
+    } catch(e) { console.error('[pipeline] eliminaCandidato fetch error:', e); alert('Errore di rete.'); }
 }
 
 

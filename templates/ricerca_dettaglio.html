@@ -258,7 +258,9 @@
 
 {% block scripts %}
 <script>
-const profiliData = JSON.parse(document.getElementById('profili-data').textContent);
+let profiliData = [];
+try { profiliData = JSON.parse(document.getElementById('profili-data').textContent); }
+catch(e) { console.error('[ricerca_dettaglio] JSON.parse profili-data:', e); }
 
 /* ── Modal: testo profilo completo ─────────────────────────────────── */
 function vediProfilo(idx) {

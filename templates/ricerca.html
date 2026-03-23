@@ -497,7 +497,9 @@ function selezionaTipo(tipo) {
 }
 
 function confermaImport() {
-    const persona = JSON.parse(document.getElementById('modal-dati').value);
+    let persona;
+    try { persona = JSON.parse(document.getElementById('modal-dati').value); }
+    catch(e) { console.error('[ricerca] JSON.parse modal-dati:', e); return; }
     persona.tipo_profilo = tipoProfiloSelezionato;
 
     fetch('/ricerca/importa', {

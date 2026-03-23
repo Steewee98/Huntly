@@ -586,7 +586,7 @@ def dettaglio_ricerca(ricerca_id):
 
     if not ricerca:
         db.close()
-        return "Ricerca non trovata", 404
+        return jsonify({"errore": "Ricerca non trovata"}), 404
 
     # Prima tenta con profili_ricerca (ricerche nuove)
     profili = db.execute(

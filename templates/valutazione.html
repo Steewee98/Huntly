@@ -635,7 +635,9 @@ function getScoreClass(score) {
 }
 
 function apriModalCandidato(valutazioneId) {
-    const tutti = JSON.parse(document.getElementById('cronologia-data').textContent);
+    let tutti = [];
+    try { tutti = JSON.parse(document.getElementById('cronologia-data').textContent); }
+    catch(e) { console.error('[valutazione] JSON.parse cronologia-data (modal candidato):', e); }
     const v = tutti.find(x => x.id === valutazioneId);
 
     // Pre-compila tutti i campi con i dati estratti da Claude
@@ -791,7 +793,9 @@ function mostraDettaglioInline(btn, dati) {
 }
 
 function mostraDettaglioCronologia(id) {
-    const tutti = JSON.parse(document.getElementById('cronologia-data').textContent);
+    let tutti = [];
+    try { tutti = JSON.parse(document.getElementById('cronologia-data').textContent); }
+    catch(e) { console.error('[valutazione] JSON.parse cronologia-data (dettaglio):', e); }
     const v = tutti.find(x => x.id === id);
     if (!v) return;
 
