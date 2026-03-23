@@ -6,6 +6,12 @@ Contiene tutte le funzioni AI usate dai vari moduli dell'app.
 import anthropic
 import os
 import json
+import logging
+
+# Model ID corretto con data nel formato richiesto dall'API
+CLAUDE_MODEL = "claude-sonnet-4-20250514"
+
+logger = logging.getLogger(__name__)
 
 
 def get_client():
@@ -52,7 +58,7 @@ def analizza_profilo_linkedin(testo_profilo: str, tipo_profilo: str, impostazion
         p_kw   = impostazioni.get('peso_keyword', 5)
         istr_punteggio = (
             f"\nPer il punteggio finale (1-10) usa questi pesi (scala 0-10, 0=ignora, 10=determinante):\n"
-            f"- Età nel range target: {p_eta}/10\n"
+            f"- Eta nel range target: {p_eta}/10\n"
             f"- Anni di esperienza: {p_esp}/10\n"
             f"- Settore/istituto di provenienza: {p_set}/10\n"
             f"- Corrispondenza ruolo target: {p_ruo}/10\n"
@@ -73,43 +79,45 @@ def analizza_profilo_linkedin(testo_profilo: str, tipo_profilo: str, impostazion
             )
         istr_punteggio = ""
 
-    prompt = f"""Sei un esperto recruiter nel settore della consulenza finanziaria e bancaria.
-Analizza il seguente profilo LinkedIn per valutarne la compatibilità con questo target:
-
-{descrizione_profilo}{istr_punteggio}
-
-PROFILO LINKEDIN:
-{testo_profilo}
-
-Fornisci la tua analisi ESCLUSIVAMENTE nel seguente formato JSON valido, senza testo aggiuntivo:
-{{
-  "nome_contatto": "<nome e cognome della persona estratto dal testo, o null se non identificabile>",
-  "ruolo_attuale": "<ruolo/titolo professionale attuale estratto dal testo, o null>",
-  "azienda": "<nome dell'azienda attuale estratto dal testo, o null>",
-  "anni_esperienza": <numero intero degli anni totali di esperienza professionale stimati dal testo, o null>,
-  "punteggio": <numero da 1 a 10>,
-  "analisi_percorso": "<analisi dettagliata del percorso professionale in 3-4 frasi>",
-  "spunti_contatto": [
-    "<spunto personalizzato 1 per il primo contatto>",
-    "<spunto personalizzato 2 per il primo contatto>",
-    "<spunto personalizzato 3 per il primo contatto>"
-  ],
-  "messaggio_outreach": "<bozza completa del messaggio di outreach personalizzato su LinkedIn, tono professionale ma umano, max 300 caratteri>"
-}}"""
-
-    risposta = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=1500,
-        messages=[{"role": "user", "content": prompt}]
+    prompt = (
+        "Sei un esperto recruiter nel settore della consulenza finanziaria e bancaria.\n"
+        "Analizza il seguente profilo LinkedIn per valutarne la compatibilita con questo target:\n\n"
+        f"{descrizione_profilo}{istr_punteggio}\n\n"
+        "PROFILO LINKEDIN:\n"
+        f"{testo_profilo}\n\n"
+        "Fornisci la tua analisi ESCLUSIVAMENTE nel seguente formato JSON valido, senza testo aggiuntivo:\n"
+        "{\n"
+        '  "nome_contatto": "<nome e cognome della persona estratto dal testo, o null se non identificabile>",\n'
+        '  "ruolo_attuale": "<ruolo/titolo professionale attuale estratto dal testo, o null>",\n'
+        '  "azienda": "<nome dell\'azienda attuale estratto dal testo, o null>",\n'
+        '  "anni_esperienza": <numero intero degli anni totali di esperienza professionale stimati dal testo, o null>,\n'
+        '  "punteggio": <numero da 1 a 10>,\n'
+        '  "analisi_percorso": "<analisi dettagliata del percorso professionale in 3-4 frasi>",\n'
+        '  "spunti_contatto": [\n'
+        '    "<spunto personalizzato 1 per il primo contatto>",\n'
+        '    "<spunto personalizzato 2 per il primo contatto>",\n'
+        '    "<spunto personalizzato 3 per il primo contatto>"\n'
+        '  ],\n'
+        '  "messaggio_outreach": "<bozza completa del messaggio di outreach personalizzato su LinkedIn, tono professionale ma umano, max 300 caratteri>"\n'
+        "}"
     )
 
-    testo = risposta.content[0].text.strip()
-    # Rimuovi eventuali backtick markdown
-    if testo.startswith("```"):
-        testo = testo.split("```")[1]
-        if testo.startswith("json"):
-            testo = testo[4:]
-    return json.loads(testo)
+    try:
+        risposta = client.messages.create(
+            model=CLAUDE_MODEL,
+            max_tokens=1500,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        testo = risposta.content[0].text.strip()
+        # Rimuovi eventuali backtick markdown
+        if testo.startswith("```"):
+            testo = testo.split("```")[1]
+            if testo.startswith("json"):
+                testo = testo[4:]
+        return json.loads(testo)
+    except Exception as e:
+        logger.error(f"[AI] Errore analizza_profilo_linkedin: {type(e).__name__}: {e}", exc_info=True)
+        raise
 
 
 def rigenera_messaggio_outreach(testo_profilo: str, messaggio_attuale: str, istruzioni: str = "") -> str:
@@ -121,40 +129,42 @@ def rigenera_messaggio_outreach(testo_profilo: str, messaggio_attuale: str, istr
     client = get_client()
 
     if istruzioni:
-        prompt = f"""Sei un recruiter esperto. Riscrivi il seguente messaggio di outreach LinkedIn
-seguendo queste istruzioni: {istruzioni}
-
-MESSAGGIO ATTUALE:
-{messaggio_attuale}
-
-PROFILO DEL CANDIDATO (contesto):
-{testo_profilo[:500]}
-
-Riscrivi SOLO il testo del messaggio, senza intestazioni o spiegazioni. Max 300 caratteri."""
+        prompt = (
+            "Sei un recruiter esperto. Riscrivi il seguente messaggio di outreach LinkedIn\n"
+            f"seguendo queste istruzioni: {istruzioni}\n\n"
+            "MESSAGGIO ATTUALE:\n"
+            f"{messaggio_attuale}\n\n"
+            "PROFILO DEL CANDIDATO (contesto):\n"
+            f"{testo_profilo[:500]}\n\n"
+            "Riscrivi SOLO il testo del messaggio, senza intestazioni o spiegazioni. Max 300 caratteri."
+        )
     else:
-        prompt = f"""Sei un recruiter esperto. Genera una NUOVA variante del messaggio di outreach LinkedIn
-per questo candidato. Deve essere diversa dalla versione precedente, mantenendo tono professionale e umano.
+        prompt = (
+            "Sei un recruiter esperto. Genera una NUOVA variante del messaggio di outreach LinkedIn\n"
+            "per questo candidato. Deve essere diversa dalla versione precedente, mantenendo tono professionale e umano.\n\n"
+            "PROFILO DEL CANDIDATO:\n"
+            f"{testo_profilo[:500]}\n\n"
+            "VERSIONE PRECEDENTE (da cui differenziarti):\n"
+            f"{messaggio_attuale}\n\n"
+            "Scrivi SOLO il testo del nuovo messaggio, senza intestazioni o spiegazioni. Max 300 caratteri."
+        )
 
-PROFILO DEL CANDIDATO:
-{testo_profilo[:500]}
-
-VERSIONE PRECEDENTE (da cui differenziarti):
-{messaggio_attuale}
-
-Scrivi SOLO il testo del nuovo messaggio, senza intestazioni o spiegazioni. Max 300 caratteri."""
-
-    risposta = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=400,
-        messages=[{"role": "user", "content": prompt}]
-    )
-    return risposta.content[0].text.strip()
+    try:
+        risposta = client.messages.create(
+            model=CLAUDE_MODEL,
+            max_tokens=400,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return risposta.content[0].text.strip()
+    except Exception as e:
+        logger.error(f"[AI] Errore rigenera_messaggio_outreach: {type(e).__name__}: {e}", exc_info=True)
+        raise
 
 
 def rigenera_messaggio_followup(candidato: dict, messaggio_attuale: str, istruzioni: str = "") -> str:
     """
     Rigenera o riscrive un messaggio di follow-up.
-    Se istruzioni è vuoto genera una nuova variante, altrimenti riscrive seguendo le istruzioni.
+    Se istruzioni e vuoto genera una nuova variante, altrimenti riscrive seguendo le istruzioni.
     """
     client = get_client()
 
@@ -166,58 +176,63 @@ def rigenera_messaggio_followup(candidato: dict, messaggio_attuale: str, istruzi
     )
 
     if istruzioni:
-        prompt = f"""Sei un recruiter esperto. Riscrivi questo messaggio di follow-up LinkedIn
-seguendo queste istruzioni: {istruzioni}
-
-MESSAGGIO ATTUALE:
-{messaggio_attuale}
-
-CONTESTO CANDIDATO:
-{contesto}
-
-Scrivi SOLO il testo del messaggio, senza intestazioni. Max 300 caratteri."""
+        prompt = (
+            "Sei un recruiter esperto. Riscrivi questo messaggio di follow-up LinkedIn\n"
+            f"seguendo queste istruzioni: {istruzioni}\n\n"
+            "MESSAGGIO ATTUALE:\n"
+            f"{messaggio_attuale}\n\n"
+            "CONTESTO CANDIDATO:\n"
+            f"{contesto}\n\n"
+            "Scrivi SOLO il testo del messaggio, senza intestazioni. Max 300 caratteri."
+        )
     else:
-        prompt = f"""Sei un recruiter esperto. Genera una NUOVA variante del messaggio di follow-up
-LinkedIn, diversa dalla precedente, per questo candidato.
+        prompt = (
+            "Sei un recruiter esperto. Genera una NUOVA variante del messaggio di follow-up\n"
+            "LinkedIn, diversa dalla precedente, per questo candidato.\n\n"
+            "CONTESTO CANDIDATO:\n"
+            f"{contesto}\n\n"
+            "VERSIONE PRECEDENTE (da cui differenziarti):\n"
+            f"{messaggio_attuale}\n\n"
+            "Scrivi SOLO il testo del nuovo messaggio, senza intestazioni. Max 300 caratteri."
+        )
 
-CONTESTO CANDIDATO:
-{contesto}
-
-VERSIONE PRECEDENTE (da cui differenziarti):
-{messaggio_attuale}
-
-Scrivi SOLO il testo del nuovo messaggio, senza intestazioni. Max 300 caratteri."""
-
-    risposta = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=400,
-        messages=[{"role": "user", "content": prompt}]
-    )
-    return risposta.content[0].text.strip()
+    try:
+        risposta = client.messages.create(
+            model=CLAUDE_MODEL,
+            max_tokens=400,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return risposta.content[0].text.strip()
+    except Exception as e:
+        logger.error(f"[AI] Errore rigenera_messaggio_followup: {type(e).__name__}: {e}", exc_info=True)
+        raise
 
 
 def genera_messaggio_followup(candidato: dict) -> str:
     """Genera un messaggio di follow-up personalizzato per un candidato."""
     client = get_client()
 
-    prompt = f"""Sei un recruiter esperto. Scrivi un breve messaggio di follow-up LinkedIn per questo candidato.
-
-Candidato: {candidato['nome']} {candidato['cognome']}
-Ruolo attuale: {candidato.get('ruolo_attuale', 'N/D')}
-Azienda: {candidato.get('azienda', 'N/D')}
-Stato nel processo: {candidato.get('stato', 'N/D')}
-Note: {candidato.get('note', 'nessuna')}
-
-Scrivi SOLO il testo del messaggio, senza intestazioni o spiegazioni.
-Tono professionale e cordiale. Max 300 caratteri."""
-
-    risposta = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=400,
-        messages=[{"role": "user", "content": prompt}]
+    prompt = (
+        "Sei un recruiter esperto. Scrivi un breve messaggio di follow-up LinkedIn per questo candidato.\n\n"
+        f"Candidato: {candidato['nome']} {candidato['cognome']}\n"
+        f"Ruolo attuale: {candidato.get('ruolo_attuale', 'N/D')}\n"
+        f"Azienda: {candidato.get('azienda', 'N/D')}\n"
+        f"Stato nel processo: {candidato.get('stato', 'N/D')}\n"
+        f"Note: {candidato.get('note', 'nessuna')}\n\n"
+        "Scrivi SOLO il testo del messaggio, senza intestazioni o spiegazioni.\n"
+        "Tono professionale e cordiale. Max 300 caratteri."
     )
 
-    return risposta.content[0].text.strip()
+    try:
+        risposta = client.messages.create(
+            model=CLAUDE_MODEL,
+            max_tokens=400,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return risposta.content[0].text.strip()
+    except Exception as e:
+        logger.error(f"[AI] Errore genera_messaggio_followup: {type(e).__name__}: {e}", exc_info=True)
+        raise
 
 
 def genera_prompt_immagine(testo_post: str, tema: str, tono: str, prompt_custom: str = "") -> str:
@@ -229,30 +244,33 @@ def genera_prompt_immagine(testo_post: str, tema: str, tono: str, prompt_custom:
 
     istruzioni_custom = f"\nModifica richiesta dall'utente: {prompt_custom}" if prompt_custom else ""
 
-    prompt = f"""Sei un esperto di prompt engineering per generatori di immagini AI.
-Crea un prompt in inglese per generare un'immagine professionale da usare come visual su LinkedIn.
-
-TEMA DEL POST: {tema}
-TONO: {tono}
-TESTO DEL POST (riferimento):
-{testo_post[:400]}{istruzioni_custom}
-
-Il prompt deve descrivere un'immagine:
-- Professionale, moderna, adatta a LinkedIn
-- Stile fotografico o illustrativo high-end
-- Colori prevalenti: blu scuro e azzurro professionale
-- NO testo nell'immagine
-- NO persone riconoscibili
-- Concettuale, evocativa del tema
-
-Rispondi SOLO con il prompt in inglese, max 200 caratteri, senza virgolette."""
-
-    risposta = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=300,
-        messages=[{"role": "user", "content": prompt}]
+    prompt = (
+        "Sei un esperto di prompt engineering per generatori di immagini AI.\n"
+        "Crea un prompt in inglese per generare un'immagine professionale da usare come visual su LinkedIn.\n\n"
+        f"TEMA DEL POST: {tema}\n"
+        f"TONO: {tono}\n"
+        "TESTO DEL POST (riferimento):\n"
+        f"{testo_post[:400]}{istruzioni_custom}\n\n"
+        "Il prompt deve descrivere un'immagine:\n"
+        "- Professionale, moderna, adatta a LinkedIn\n"
+        "- Stile fotografico o illustrativo high-end\n"
+        "- Colori prevalenti: blu scuro e azzurro professionale\n"
+        "- NO testo nell'immagine\n"
+        "- NO persone riconoscibili\n"
+        "- Concettuale, evocativa del tema\n\n"
+        "Rispondi SOLO con il prompt in inglese, max 200 caratteri, senza virgolette."
     )
-    return risposta.content[0].text.strip()
+
+    try:
+        risposta = client.messages.create(
+            model=CLAUDE_MODEL,
+            max_tokens=300,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        return risposta.content[0].text.strip()
+    except Exception as e:
+        logger.error(f"[AI] Errore genera_prompt_immagine: {type(e).__name__}: {e}", exc_info=True)
+        raise
 
 
 def genera_contenuti_linkedin(tema: str, tono: str, profilo: str) -> dict:
@@ -277,38 +295,40 @@ def genera_contenuti_linkedin(tema: str, tono: str, profilo: str) -> dict:
         ),
         "Assistente Recrutatrice": (
             "Assistente recrutatrice specializzata nel settore bancario-finanziario, "
-            "che aiuta professionisti a trovare nuove opportunità di crescita."
+            "che aiuta professionisti a trovare nuove opportunita di crescita."
         )
     }
 
-    prompt = f"""Sei un esperto di content marketing LinkedIn nel settore finanziario.
-
-Scrivi 3 varianti di post LinkedIn con queste caratteristiche:
-- Tema: {tema}
-- Tono: {descrizioni_tono.get(tono, tono)}
-- Scritto in prima persona da: {descrizioni_profilo.get(profilo, profilo)}
-
-Ogni post deve avere:
-1. Un HOOK d'apertura forte (prima riga che cattura l'attenzione)
-2. Un CORPO con il messaggio principale
-3. Una CALL TO ACTION finale
-
-Fornisci il risultato ESCLUSIVAMENTE in questo formato JSON valido:
-{{
-  "variante_1": "<testo completo del post 1, con a capo come \\n>",
-  "variante_2": "<testo completo del post 2, con a capo come \\n>",
-  "variante_3": "<testo completo del post 3, con a capo come \\n>"
-}}"""
-
-    risposta = client.messages.create(
-        model="claude-sonnet-4-6",
-        max_tokens=2000,
-        messages=[{"role": "user", "content": prompt}]
+    prompt = (
+        "Sei un esperto di content marketing LinkedIn nel settore finanziario.\n\n"
+        "Scrivi 3 varianti di post LinkedIn con queste caratteristiche:\n"
+        f"- Tema: {tema}\n"
+        f"- Tono: {descrizioni_tono.get(tono, tono)}\n"
+        f"- Scritto in prima persona da: {descrizioni_profilo.get(profilo, profilo)}\n\n"
+        "Ogni post deve avere:\n"
+        "1. Un HOOK d'apertura forte (prima riga che cattura l'attenzione)\n"
+        "2. Un CORPO con il messaggio principale\n"
+        "3. Una CALL TO ACTION finale\n\n"
+        "Fornisci il risultato ESCLUSIVAMENTE in questo formato JSON valido:\n"
+        "{\n"
+        '  "variante_1": "<testo completo del post 1, con a capo come \\n>",\n'
+        '  "variante_2": "<testo completo del post 2, con a capo come \\n>",\n'
+        '  "variante_3": "<testo completo del post 3, con a capo come \\n>"\n'
+        "}"
     )
 
-    testo = risposta.content[0].text.strip()
-    if testo.startswith("```"):
-        testo = testo.split("```")[1]
-        if testo.startswith("json"):
-            testo = testo[4:]
-    return json.loads(testo)
+    try:
+        risposta = client.messages.create(
+            model=CLAUDE_MODEL,
+            max_tokens=2000,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        testo = risposta.content[0].text.strip()
+        if testo.startswith("```"):
+            testo = testo.split("```")[1]
+            if testo.startswith("json"):
+                testo = testo[4:]
+        return json.loads(testo)
+    except Exception as e:
+        logger.error(f"[AI] Errore genera_contenuti_linkedin: {type(e).__name__}: {e}", exc_info=True)
+        raise
