@@ -142,13 +142,20 @@ def get_db():
 def init_db():
     """
     Inizializza il database creando le tabelle se non esistono.
-    Sicuro da chiamare ad ogni avvio: usa IF NOT EXISTS ovunque.
+    Ogni DDL viene eseguito in un savepoint separato: se fallisce
+    (es. tipo omonimo già esistente in PostgreSQL) viene fatto rollback
+    solo di quel singolo statement e si continua con i successivi.
     """
-    conn = get_db()
+    import logging
+    log = logging.getLogger(__name__)
 
-    # ── Tabella candidati ──────────────────────────────────────────────────
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS candidati (
+    # Usa la connessione raw psycopg2 per gestire i savepoint direttamente
+    raw_conn = _get_raw_connection()
+    cur = raw_conn.cursor()
+
+    statements = [
+        # ── Tabella candidati ──────────────────────────────────────────────
+        """CREATE TABLE IF NOT EXISTS candidati (
             id                  SERIAL PRIMARY KEY,
             nome                TEXT NOT NULL,
             cognome             TEXT NOT NULL,
@@ -166,12 +173,10 @@ def init_db():
             ricerca_id          INTEGER,
             data_inserimento    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             data_aggiornamento  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
+        )""",
 
-    # ── Tabella valutazioni ────────────────────────────────────────────────
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS valutazioni (
+        # ── Tabella valutazioni ────────────────────────────────────────────
+        """CREATE TABLE IF NOT EXISTS valutazioni (
             id                  SERIAL PRIMARY KEY,
             nome_contatto       TEXT,
             ruolo_attuale       TEXT,
@@ -186,12 +191,10 @@ def init_db():
             candidato_id        INTEGER,
             fonte               TEXT DEFAULT 'manuale',
             data_valutazione    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
+        )""",
 
-    # ── Tabella contenuti LinkedIn ─────────────────────────────────────────
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS contenuti_linkedin (
+        # ── Tabella contenuti LinkedIn ─────────────────────────────────────
+        """CREATE TABLE IF NOT EXISTS contenuti_linkedin (
             id                      SERIAL PRIMARY KEY,
             tema                    TEXT NOT NULL,
             tono                    TEXT NOT NULL,
@@ -200,12 +203,10 @@ def init_db():
             variante_2              TEXT,
             variante_3              TEXT,
             data_creazione          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
+        )""",
 
-    # ── Tabella impostazioni profili A e B ─────────────────────────────────
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS impostazioni_profilo (
+        # ── Tabella impostazioni profili A e B ─────────────────────────────
+        """CREATE TABLE IF NOT EXISTS impostazioni_profilo (
             id                  SERIAL PRIMARY KEY,
             profilo             TEXT NOT NULL UNIQUE,
             eta_min             INTEGER DEFAULT 0,
@@ -222,12 +223,10 @@ def init_db():
             peso_ruolo          INTEGER DEFAULT 5,
             peso_keyword        INTEGER DEFAULT 5,
             data_aggiornamento  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
+        )""",
 
-    # ── Tabella cronologia ricerche ────────────────────────────────────────
-    conn.execute("""
-        CREATE TABLE IF NOT EXISTS ricerche_automatiche (
+        # ── Tabella cronologia ricerche ────────────────────────────────────
+        """CREATE TABLE IF NOT EXISTS ricerche_automatiche (
             id                  SERIAL PRIMARY KEY,
             tipo_profilo        TEXT DEFAULT 'A',
             parametri           TEXT,
@@ -237,22 +236,28 @@ def init_db():
             stato               TEXT DEFAULT 'completata',
             fonte               TEXT DEFAULT 'apify',
             data_ricerca        TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )
-    """)
+        )""",
 
-    # ── Migrazioni per DB esistenti ────────────────────────────────────────
-    # ADD COLUMN IF NOT EXISTS è supportato da PostgreSQL 9.6+
-    migrazioni = [
-        "ALTER TABLE valutazioni         ADD COLUMN IF NOT EXISTS nome_contatto TEXT",
-        "ALTER TABLE valutazioni         ADD COLUMN IF NOT EXISTS ruolo_attuale TEXT",
-        "ALTER TABLE valutazioni         ADD COLUMN IF NOT EXISTS azienda TEXT",
-        "ALTER TABLE valutazioni         ADD COLUMN IF NOT EXISTS anni_esperienza INTEGER",
-        "ALTER TABLE valutazioni         ADD COLUMN IF NOT EXISTS fonte TEXT DEFAULT 'manuale'",
-        "ALTER TABLE candidati           ADD COLUMN IF NOT EXISTS ricerca_id INTEGER",
+        # ── Migrazioni colonne ─────────────────────────────────────────────
+        "ALTER TABLE valutazioni          ADD COLUMN IF NOT EXISTS nome_contatto TEXT",
+        "ALTER TABLE valutazioni          ADD COLUMN IF NOT EXISTS ruolo_attuale TEXT",
+        "ALTER TABLE valutazioni          ADD COLUMN IF NOT EXISTS azienda TEXT",
+        "ALTER TABLE valutazioni          ADD COLUMN IF NOT EXISTS anni_esperienza INTEGER",
+        "ALTER TABLE valutazioni          ADD COLUMN IF NOT EXISTS fonte TEXT DEFAULT 'manuale'",
+        "ALTER TABLE candidati            ADD COLUMN IF NOT EXISTS ricerca_id INTEGER",
         "ALTER TABLE ricerche_automatiche ADD COLUMN IF NOT EXISTS fonte TEXT DEFAULT 'apify'",
     ]
-    for sql in migrazioni:
-        conn.execute(sql)
 
-    conn.commit()
-    conn.close()
+    for i, sql in enumerate(statements):
+        sp = f"sabia_init_{i}"
+        cur.execute(f"SAVEPOINT {sp}")
+        try:
+            cur.execute(sql)
+            cur.execute(f"RELEASE SAVEPOINT {sp}")
+        except psycopg2.Error as e:
+            cur.execute(f"ROLLBACK TO SAVEPOINT {sp}")
+            log.warning("init_db: DDL ignorato [%s]: %s", type(e).__name__, sql.strip()[:80])
+
+    raw_conn.commit()
+    cur.close()
+    raw_conn.close()
