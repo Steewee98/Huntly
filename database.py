@@ -263,6 +263,19 @@ def init_db():
         "ALTER TABLE valutazioni          ADD COLUMN IF NOT EXISTS fonte TEXT DEFAULT 'manuale'",
         "ALTER TABLE candidati            ADD COLUMN IF NOT EXISTS ricerca_id INTEGER",
         "ALTER TABLE ricerche_automatiche ADD COLUMN IF NOT EXISTS fonte TEXT DEFAULT 'apify'",
+
+        # ── Indici per performance query ───────────────────────────────────
+        "CREATE INDEX IF NOT EXISTS idx_candidati_tipo_profilo  ON candidati(tipo_profilo)",
+        "CREATE INDEX IF NOT EXISTS idx_candidati_stato          ON candidati(stato)",
+        "CREATE INDEX IF NOT EXISTS idx_candidati_data_ins       ON candidati(data_inserimento DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_candidati_punteggio      ON candidati(punteggio)",
+        "CREATE INDEX IF NOT EXISTS idx_valutazioni_data         ON valutazioni(data_valutazione DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_valutazioni_tipo         ON valutazioni(tipo_profilo)",
+        "CREATE INDEX IF NOT EXISTS idx_valutazioni_punteggio    ON valutazioni(punteggio)",
+        "CREATE INDEX IF NOT EXISTS idx_ricerche_data            ON ricerche_automatiche(data_ricerca DESC)",
+        "CREATE INDEX IF NOT EXISTS idx_ricerche_tipo            ON ricerche_automatiche(tipo_profilo)",
+        "CREATE INDEX IF NOT EXISTS idx_profili_ricerca_id       ON profili_ricerca(ricerca_id)",
+        "CREATE INDEX IF NOT EXISTS idx_profili_candidato_id     ON profili_ricerca(candidato_id)",
     ]
 
     for i, sql in enumerate(statements):

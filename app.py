@@ -39,6 +39,17 @@ for bp in [valutazione_bp, candidati_bp, pipeline_bp, contenuti_bp, ricerca_bp, 
             app.view_functions[endpoint] = login_required(view_func)
 
 
+@app.after_request
+def add_cache_headers(response):
+    """Aggiunge cache headers ai file statici per ridurre le richieste al server."""
+    from flask import request as flask_req
+    if flask_req.path.startswith("/static/"):
+        # 1 anno per file statici (CSS, JS, immagini): cambiano raramente
+        response.cache_control.max_age = 31536000
+        response.cache_control.public = True
+    return response
+
+
 @app.route("/")
 @login_required
 def home():

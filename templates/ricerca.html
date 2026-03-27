@@ -44,14 +44,16 @@
             <h4 style="margin-bottom:0.5rem;color:var(--azzurro);">Riepilogo ricerca</h4>
             <div style="display:flex;gap:2rem;flex-wrap:wrap;">
                 <div><span style="font-size:1.5rem;font-weight:700;" id="auto-trovati">—</span>
-                     <div style="font-size:0.8rem;color:var(--grigio-testo);">Profili trovati</div></div>
-                <div><span style="font-size:1.5rem;font-weight:700;" id="auto-importati">—</span>
-                     <div style="font-size:0.8rem;color:var(--grigio-testo);">Importati in pipeline</div></div>
+                     <div style="font-size:0.8rem;color:var(--grigio-testo);">Profili importati</div></div>
+                <div><span style="font-size:1.5rem;font-weight:700;color:#dc2626;" id="auto-scartati">—</span>
+                     <div style="font-size:0.8rem;color:var(--grigio-testo);">Scartati dal filtro</div></div>
                 <div><span style="font-size:1.5rem;font-weight:700;" id="auto-valutati">—</span>
                      <div style="font-size:0.8rem;color:var(--grigio-testo);">Valutati dall'AI</div></div>
                 <div><span style="font-size:1.5rem;font-weight:700;" id="auto-punteggio">—</span>
                      <div style="font-size:0.8rem;color:var(--grigio-testo);">Punteggio medio</div></div>
             </div>
+            <div id="auto-motivi" class="hidden"
+                 style="margin-top:0.5rem;font-size:0.82rem;color:#dc2626;"></div>
             <div style="margin-top:0.75rem;">
                 <a href="/pipeline" class="btn btn-primary btn-sm">&#9776; Vai alla Pipeline</a>
             </div>
@@ -364,11 +366,23 @@ function ricercaAutomatica(tipo) {
 
         if (data.errore) { alert('Errore: ' + data.errore); return; }
 
-        document.getElementById('auto-trovati').textContent   = data.trovati ?? '—';
-        document.getElementById('auto-importati').textContent = data.importati ?? '—';
-        document.getElementById('auto-valutati').textContent  = data.valutati ?? '—';
+        document.getElementById('auto-trovati').textContent  = data.trovati ?? '—';
+        document.getElementById('auto-scartati').textContent = data.scartati ?? '0';
+        document.getElementById('auto-valutati').textContent = data.valutati ?? '—';
         document.getElementById('auto-punteggio').textContent = data.punteggio_medio != null
             ? data.punteggio_medio + '/10' : '—';
+
+        const motiviEl = document.getElementById('auto-motivi');
+        if (data.scartati > 0 && data.motivi_scarto && Object.keys(data.motivi_scarto).length) {
+            const testo = Object.entries(data.motivi_scarto)
+                .map(function(e) { return e[0] + ' (' + e[1] + ')'; })
+                .join(' · ');
+            motiviEl.textContent = 'Motivi scarto: ' + testo;
+            motiviEl.classList.remove('hidden');
+        } else {
+            motiviEl.classList.add('hidden');
+        }
+
         document.getElementById('auto-risultato').classList.remove('hidden');
     })
     .catch(function(err) {

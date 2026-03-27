@@ -5,11 +5,11 @@ Gestisce l'analisi di profili LinkedIn tramite Claude AI.
 
 import io
 import csv
-import os
 import json
+import os
 import requests
 from flask import Blueprint, render_template, request, jsonify, redirect, url_for, Response
-from ai_helpers import analizza_profilo_linkedin, rigenera_messaggio_outreach
+from ai_helpers import analizza_profilo_linkedin, rigenera_messaggio_outreach, analizza_profilo_linkedin_stream
 from database import get_db
 
 APIFY_BASE  = "https://api.apify.com/v2"
@@ -129,6 +129,100 @@ def analizza():
     db.close()
 
     return jsonify(risultato)
+
+
+@valutazione_bp.route("/valutazione/analizza_stream", methods=["POST"])
+def analizza_stream():
+    """
+    Endpoint SSE: streama l'analisi profilo LinkedIn chunk per chunk.
+    Restituisce text/event-stream con eventi JSON line-delimited.
+    """
+    dati = request.get_json()
+    testo_profilo = dati.get("testo_profilo", "").strip()
+    tipo_profilo  = dati.get("tipo_profilo", "A")
+
+    if not testo_profilo:
+        def _err():
+            yield f"data: {json.dumps({'type': 'errore', 'messaggio': 'Inserire il testo del profilo LinkedIn'})}\n\n"
+        return Response(_err(), mimetype="text/event-stream")
+
+    def _genera():
+        yield from analizza_profilo_linkedin_stream(testo_profilo, tipo_profilo)
+
+    return Response(
+        _genera(),
+        mimetype="text/event-stream",
+        headers={
+            "Cache-Control":    "no-cache",
+            "X-Accel-Buffering": "no",   # disabilita buffering Nginx/Railway
+        },
+    )
+
+
+@valutazione_bp.route("/valutazione/salva_analisi", methods=["POST"])
+def salva_analisi():
+    """
+    Salva il risultato di un'analisi nel DB (chiamato dal frontend dopo lo stream).
+    Accetta lo stesso payload di /analizza, più il campo 'risultato' già parsato.
+    """
+    dati          = request.get_json()
+    testo_profilo = dati.get("testo_profilo", "").strip()
+    tipo_profilo  = dati.get("tipo_profilo", "A")
+    candidato_id  = dati.get("candidato_id")
+    risultato     = dati.get("risultato", {})
+
+    if not risultato:
+        return jsonify({"errore": "Risultato mancante"}), 400
+
+    def _s(v):
+        return str(v) if v not in (None, "", {}, []) else None
+    def _i(v):
+        try: return int(v) if v not in (None, "", {}, []) else None
+        except (TypeError, ValueError): return None
+
+    nome_contatto   = _s(risultato.get("nome_contatto"))
+    ruolo_attuale   = _s(risultato.get("ruolo_attuale"))
+    azienda         = _s(risultato.get("azienda"))
+    anni_esperienza = _i(risultato.get("anni_esperienza"))
+    spunti_json     = json.dumps(risultato.get("spunti_contatto", []), ensure_ascii=False)
+    anteprima       = testo_profilo[:120].replace("\n", " ").strip()
+
+    db = get_db()
+
+    if not nome_contatto and candidato_id:
+        row = db.execute("SELECT nome, cognome FROM candidati WHERE id = ?", (candidato_id,)).fetchone()
+        if row:
+            nome_contatto = f"{row['nome']} {row['cognome']}"
+
+    db.execute(
+        """INSERT INTO valutazioni
+           (nome_contatto, ruolo_attuale, azienda, anni_esperienza,
+            tipo_profilo, anteprima_testo, punteggio, analisi, spunti, messaggio_outreach, candidato_id, fonte)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (nome_contatto, ruolo_attuale, azienda, anni_esperienza,
+         tipo_profilo, anteprima,
+         risultato.get("punteggio"),
+         risultato.get("analisi_percorso"),
+         spunti_json,
+         risultato.get("messaggio_outreach"),
+         candidato_id or None,
+         "manuale"),
+    )
+
+    if candidato_id:
+        db.execute(
+            """UPDATE candidati SET
+               punteggio=?, analisi=?, spunti=?, messaggio_outreach=?,
+               tipo_profilo=?, data_aggiornamento=CURRENT_TIMESTAMP
+               WHERE id=?""",
+            (risultato.get("punteggio"), risultato.get("analisi_percorso"),
+             spunti_json, risultato.get("messaggio_outreach"),
+             tipo_profilo, candidato_id),
+        )
+
+    db.commit()
+    db.close()
+    return jsonify({"successo": True})
 
 
 @valutazione_bp.route("/valutazione/cerca_per_nome", methods=["POST"])

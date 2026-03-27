@@ -201,6 +201,112 @@ def analizza_profilo_linkedin(testo_profilo: str, tipo_profilo: str, impostazion
         raise
 
 
+def analizza_profilo_linkedin_stream(testo_profilo: str, tipo_profilo: str, impostazioni: dict = None):
+    """
+    Versione streaming di analizza_profilo_linkedin().
+    Genera eventi SSE:
+      - {"type":"chunk","text":"..."}   — testo grezzo in arrivo da Claude
+      - {"type":"done","risultato":{}}  — analisi completa, JSON parsato
+      - {"type":"errore","messaggio":"..."} — in caso di errore
+    """
+    testo_profilo = clean_text(testo_profilo)
+
+    # Stessa logica di costruzione prompt di analizza_profilo_linkedin
+    if impostazioni:
+        if tipo_profilo == "A":
+            descrizione_profilo = (
+                f"Profilo A (Senior): età tra {impostazioni.get('eta_min', 40)} e "
+                f"{impostazioni.get('eta_max', 65)} anni, almeno "
+                f"{impostazioni.get('anni_esperienza_min', 5)} anni di esperienza nel settore. "
+                f"Settori di provenienza accettati: {impostazioni.get('settori', 'consulenza, bancario, finanziario')}. "
+                f"Ruoli target: {impostazioni.get('ruoli_target', '')}. "
+                f"Segnali positivi: {impostazioni.get('keyword_positive', '')}. "
+                f"Segnali negativi: {impostazioni.get('keyword_negative', '')}."
+            )
+        else:
+            descrizione_profilo = (
+                f"Profilo B (Under 35): età tra {impostazioni.get('eta_min', 22)} e "
+                f"{impostazioni.get('eta_max', 35)} anni, almeno "
+                f"{impostazioni.get('anni_esperienza_min', 2)} anni di esperienza bancaria. "
+                f"Istituti di provenienza preferiti: {impostazioni.get('istituti', 'banche, assicurazioni, SIM')}. "
+                f"Ruoli target: {impostazioni.get('ruoli_target', '')}. "
+                f"Segnali positivi: {impostazioni.get('keyword_positive', '')}. "
+                f"Segnali negativi: {impostazioni.get('keyword_negative', '')}."
+            )
+        p_eta = impostazioni.get('peso_eta', 5)
+        p_esp = impostazioni.get('peso_esperienza', 5)
+        p_set = impostazioni.get('peso_settore', 5)
+        p_ruo = impostazioni.get('peso_ruolo', 5)
+        p_kw  = impostazioni.get('peso_keyword', 5)
+        istr_punteggio = (
+            f"\nPer il punteggio finale (1-10) usa questi pesi (scala 0-10):\n"
+            f"- Eta nel range target: {p_eta}/10\n"
+            f"- Anni di esperienza: {p_esp}/10\n"
+            f"- Settore/istituto di provenienza: {p_set}/10\n"
+            f"- Corrispondenza ruolo target: {p_ruo}/10\n"
+            f"- Parole chiave positive/negative: {p_kw}/10"
+        )
+    else:
+        descrizione_profilo = (
+            "Profilo A: professionista senior tra 40 e 65 anni, con esperienza in consulenza, "
+            "libero professionista o con P.IVA, orientato all'autonomia e alla gestione clienti."
+            if tipo_profilo == "A" else
+            "Profilo B: professionista under 35 con esperienza bancaria, "
+            "orientato alla crescita professionale nel settore finanziario."
+        )
+        istr_punteggio = ""
+
+    prompt = (
+        "Sei un esperto recruiter nel settore della consulenza finanziaria e bancaria.\n"
+        "Analizza il seguente profilo LinkedIn per valutarne la compatibilita con questo target:\n\n"
+        f"{descrizione_profilo}{istr_punteggio}\n\n"
+        "PROFILO LINKEDIN:\n"
+        f"{testo_profilo}\n\n"
+        "Fornisci la tua analisi ESCLUSIVAMENTE nel seguente formato JSON valido, senza testo aggiuntivo:\n"
+        "{\n"
+        '  "nome_contatto": "<nome e cognome, o null>",\n'
+        '  "ruolo_attuale": "<ruolo/titolo professionale attuale, o null>",\n'
+        '  "azienda": "<nome azienda attuale, o null>",\n'
+        '  "anni_esperienza": <numero intero o null>,\n'
+        '  "punteggio": <numero da 1 a 10>,\n'
+        '  "analisi_percorso": "<analisi dettagliata in 3-4 frasi>",\n'
+        '  "spunti_contatto": ["<spunto 1>","<spunto 2>","<spunto 3>"],\n'
+        '  "messaggio_outreach": "<bozza messaggio LinkedIn max 300 caratteri>"\n'
+        "}"
+    )
+
+    payload = {
+        "model":      CLAUDE_MODEL,
+        "max_tokens": 1500,
+        "messages":   [{"role": "user", "content": clean_text(prompt)}],
+    }
+
+    client = get_client()
+    testo_accumulato = ""
+
+    try:
+        with client.messages.stream(**payload) as stream:
+            for chunk in stream.text_stream:
+                testo_accumulato += chunk
+                yield f"data: {json.dumps({'type': 'chunk', 'text': chunk}, ensure_ascii=False)}\n\n"
+
+        # Stream completato — parse JSON finale
+        testo_pulito = testo_accumulato.strip()
+        if testo_pulito.startswith("```"):
+            testo_pulito = testo_pulito.split("```")[1]
+            if testo_pulito.startswith("json"):
+                testo_pulito = testo_pulito[4:]
+        risultato = json.loads(testo_pulito)
+        yield f"data: {json.dumps({'type': 'done', 'risultato': risultato}, ensure_ascii=False)}\n\n"
+
+    except json.JSONDecodeError as e:
+        logger.error("[AI] analizza_profilo_linkedin_stream — JSON parse fallito: %s | testo: %s", e, testo_accumulato[:200])
+        yield f"data: {json.dumps({'type': 'errore', 'messaggio': 'Risposta AI non parsabile come JSON.'})}\n\n"
+    except Exception as e:
+        logger.error("[AI] analizza_profilo_linkedin_stream — errore: %s", e, exc_info=True)
+        yield f"data: {json.dumps({'type': 'errore', 'messaggio': str(e)})}\n\n"
+
+
 def rigenera_messaggio_outreach(testo_profilo: str, messaggio_attuale: str, istruzioni: str = "") -> str:
     """Rigenera il messaggio di outreach (nuova variante o riscritto con istruzioni)."""
     testo_profilo    = clean_text(testo_profilo)

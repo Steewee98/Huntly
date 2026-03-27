@@ -102,6 +102,44 @@ Includi: nome, titolo, descrizione, esperienze lavorative, formazione, competenz
     </div>
 </div>
 
+<!-- Anteprima streaming — testo grezzo di Claude in arrivo -->
+<div id="stream-preview" class="hidden" style="margin-top:1.5rem;">
+    <div class="card">
+        <div class="card-header">
+            <h3 style="font-size:0.88rem;color:var(--grigio-testo);font-weight:500;">
+                <span class="spinner" style="width:14px;height:14px;border-width:2px;margin-right:6px;vertical-align:middle;"></span>
+                Generazione analisi in corso...
+            </h3>
+        </div>
+        <div class="card-body" style="padding:1rem 1.25rem;">
+            <pre id="stream-testo"
+                 style="white-space:pre-wrap;word-break:break-word;font-family:inherit;
+                        font-size:0.82rem;color:var(--grigio-testo);margin:0;
+                        min-height:48px;max-height:240px;overflow-y:auto;"></pre>
+        </div>
+    </div>
+</div>
+
+<!-- Skeleton loading — visibile durante il caricamento iniziale -->
+<div id="skeleton-results" class="hidden" style="margin-top:1.5rem;">
+    <div class="results-grid">
+        <div class="card result-card" style="min-height:120px;">
+            <div class="card-body">
+                <div class="skeleton-box" style="width:80px;height:80px;border-radius:50%;margin:0 auto 0.75rem;"></div>
+                <div class="skeleton-box" style="width:60%;height:14px;margin:0 auto;"></div>
+            </div>
+        </div>
+        <div class="card result-card">
+            <div class="card-header"><div class="skeleton-box" style="width:40%;height:16px;"></div></div>
+            <div class="card-body">
+                <div class="skeleton-box" style="height:12px;margin-bottom:8px;"></div>
+                <div class="skeleton-box" style="height:12px;margin-bottom:8px;width:90%;"></div>
+                <div class="skeleton-box" style="height:12px;width:75%;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Risultati analisi (visibili dopo l'analisi) -->
 <div id="risultati" class="hidden">
 
@@ -359,6 +397,20 @@ Includi: nome, titolo, descrizione, esperienze lavorative, formazione, competenz
 {% endblock %}
 
 {% block scripts %}
+<style>
+.skeleton-box {
+    background: linear-gradient(90deg, #e8ecf0 25%, #f4f6f8 50%, #e8ecf0 75%);
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.4s infinite;
+    border-radius: 6px;
+    width: 100%;
+    height: 14px;
+}
+@keyframes skeleton-shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+</style>
 <script>
 // ---- Auto-avvio da ricerca candidati ----
 (function() {
@@ -476,47 +528,98 @@ document.querySelectorAll('input[name="tipo_profilo"]').forEach(radio => {
 });
 
 async function avviaAnalisi() {
-    const testo = document.getElementById('testo-profilo').value.trim();
+    const testo       = document.getElementById('testo-profilo').value.trim();
     const tipoProfilo = document.querySelector('input[name="tipo_profilo"]:checked').value;
     const candidatoId = document.getElementById('candidato-id')?.value || null;
-    const nomeContatto = '';
 
     if (!testo) {
         mostraErrore('Inserire il testo del profilo LinkedIn prima di procedere.');
         return;
     }
 
-    // Salva il testo per eventuali rigenerazioni successive
     testoProfiloCorrente = testo;
-
-    // Mostra stato caricamento
     impostaCaricamento(true);
     nascondi('risultati');
     nascondi('errore-box');
+    nascondi('skeleton-results');
+
+    // Mostra l'anteprima streaming
+    const previewEl  = document.getElementById('stream-preview');
+    const streamTxt  = document.getElementById('stream-testo');
+    streamTxt.textContent = '';
+    previewEl.classList.remove('hidden');
 
     try {
-        const risposta = await fetch('/valutazione/analizza', {
+        const risposta = await fetch('/valutazione/analizza_stream', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                testo_profilo: testo,
-                tipo_profilo: tipoProfilo,
-                candidato_id: candidatoId
-            })
+            body: JSON.stringify({ testo_profilo: testo, tipo_profilo: tipoProfilo, candidato_id: candidatoId })
         });
 
-        const dati = await jsonSicuro(risposta);
-
         if (!risposta.ok) {
-            throw new Error(dati.errore || 'Errore durante l\'analisi');
+            throw new Error('Errore HTTP ' + risposta.status);
         }
 
-        mostraRisultati(dati);
-        // Il nome contatto viene estratto da Claude e restituito nel JSON
-        aggiornaCronologia(dati, tipoProfilo, testo, dati.nome_contatto || '');
+        const reader  = risposta.body.getReader();
+        const decoder = new TextDecoder('utf-8');
+        let buffer = '';
+        let risultatoFinale = null;
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+
+            // SSE: "data: {...}\n\n" — split sui doppi newline
+            const parti = buffer.split('\n\n');
+            buffer = parti.pop();  // frammento incompleto → rimane nel buffer
+
+            for (const parte of parti) {
+                const linea = parte.trim();
+                if (!linea.startsWith('data:')) continue;
+
+                let evento;
+                try { evento = JSON.parse(linea.slice(5).trim()); }
+                catch (e) { console.error('[stream] parse evento fallito:', linea); continue; }
+
+                if (evento.type === 'chunk') {
+                    streamTxt.textContent += evento.text;
+                    streamTxt.scrollTop = streamTxt.scrollHeight;
+                } else if (evento.type === 'done') {
+                    risultatoFinale = evento.risultato;
+                } else if (evento.type === 'errore') {
+                    previewEl.classList.add('hidden');
+                    mostraErrore('Errore AI: ' + evento.messaggio);
+                    return;
+                }
+            }
+        }
+
+        if (!risultatoFinale) {
+            throw new Error('Analisi non completata: risposta incompleta.');
+        }
+
+        previewEl.classList.add('hidden');
+
+        // Mostra skeleton mentre organizziamo i risultati
+        mostra('skeleton-results');
+        await new Promise(r => setTimeout(r, 200));
+        nascondi('skeleton-results');
+
+        mostraRisultati(risultatoFinale);
+        aggiornaCronologia(risultatoFinale, tipoProfilo, testo, risultatoFinale.nome_contatto || '');
         document.getElementById('testo-profilo').value = '';
 
+        // Salva nel DB in background (fire-and-forget)
+        fetch('/valutazione/salva_analisi', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ testo_profilo: testo, tipo_profilo: tipoProfilo, candidato_id: candidatoId, risultato: risultatoFinale })
+        }).catch(function(e) { console.warn('[stream] salvataggio fallito:', e); });
+
     } catch (err) {
+        previewEl.classList.add('hidden');
         mostraErrore('Errore: ' + err.message);
     } finally {
         impostaCaricamento(false);

@@ -22,9 +22,10 @@ APIFY_ACTOR = "harvestapi~linkedin-profile-search"
 APIFY_BASE  = "https://api.apify.com/v2"
 
 
-def cerca_apify(ruolo, citta="", paese="", azienda="", parole_chiave="", num_pagine=1):
+def cerca_apify(ruolo, citta="", paese="", azienda="", parole_chiave="", num_pagine=1, ruoli_lista=None):
     """
     Avvia una run dell'actor Apify e attende i risultati.
+    ruoli_lista: lista di titoli alternativi (usa al posto di ruolo se fornita).
     Restituisce (lista_profili, errore).
     """
     api_key = os.environ.get("APIFY_API_KEY", "")
@@ -37,7 +38,10 @@ def cerca_apify(ruolo, citta="", paese="", azienda="", parole_chiave="", num_pag
         "startPage": 1,
     }
 
-    if ruolo:
+    # Usa lista di ruoli se fornita (ricerca automatica), altrimenti singolo ruolo
+    if ruoli_lista:
+        run_input["currentJobTitles"] = [r for r in ruoli_lista if r][:5]
+    elif ruolo:
         run_input["currentJobTitles"] = [ruolo]
     if parole_chiave:
         run_input["keywords"] = parole_chiave
@@ -107,6 +111,42 @@ def _costruisci_testo_profilo(p):
     if p.get("linkedin"):
         parti.append(f"LinkedIn: {_str(p['linkedin'])}")
     return "\n".join(parti)
+
+
+def _filtro_locale(p: dict, imp: dict) -> tuple:
+    """
+    Filtra velocemente un profilo normalizzato contro le impostazioni configurate.
+    Non fa chiamate API — solo string matching locale.
+    Ritorna (passa: bool, motivo_scarto: str).
+    Più permissivo che restrittivo: se le impostazioni sono vuote, tutto passa.
+    """
+    testo = " ".join(filter(None, [
+        str(p.get('ruolo', '') or ''),
+        str(p.get('azienda', '') or ''),
+        str(p.get('sommario', '') or ''),
+    ])).lower()
+
+    if not testo.strip() and not p.get('nome') and not p.get('cognome'):
+        return False, "Profilo vuoto o senza dati"
+
+    # 1. Keyword negative → scarto immediato
+    kw_neg = [k.strip().lower() for k in (imp.get('keyword_negative', '') or '').split(',') if k.strip()]
+    for kw in kw_neg:
+        if kw in testo:
+            return False, f"Keyword negativa: «{kw}»"
+
+    # 2. Almeno un termine positivo (ruoli, settori/istituti, keyword pos) deve matchare
+    ruoli    = [r.strip().lower() for r in (imp.get('ruoli_target', '') or '').split(',') if r.strip()]
+    settori  = [s.strip().lower() for s in (imp.get('settori', '') or '').split(',') if s.strip()]
+    istituti = [i.strip().lower() for i in (imp.get('istituti', '') or '').split(',') if i.strip()]
+    kw_pos   = [k.strip().lower() for k in (imp.get('keyword_positive', '') or '').split(',') if k.strip()]
+
+    positivi = ruoli + settori + istituti + kw_pos
+    if positivi and testo:
+        if not any(term in testo for term in positivi):
+            return False, "Nessun ruolo/settore target rilevato nel profilo"
+
+    return True, ""
 
 
 def normalizza_profilo(p):
@@ -250,33 +290,35 @@ def automatica():
 
     imp = dict(imp_row)
 
-    # Costruisci la query per Apify dai parametri delle impostazioni
-    ruoli_raw = imp.get("ruoli_target", "") or ""
-    ruoli = [r.strip() for r in ruoli_raw.split(",") if r.strip()]
+    # Costruisci la query Apify usando TUTTI i parametri configurati
+    ruoli_raw   = imp.get("ruoli_target", "") or ""
+    ruoli       = [r.strip() for r in ruoli_raw.split(",") if r.strip()]
 
     kw_positive = imp.get("keyword_positive", "") or ""
-    if tipo_profilo == "A":
-        extra = imp.get("settori", "") or ""
-    else:
-        extra = imp.get("istituti", "") or ""
+    extra_settore = imp.get("settori", "") if tipo_profilo == "A" else imp.get("istituti", "")
+    extra_settore = extra_settore or ""
 
-    kw_parts = [k.strip() for k in kw_positive.split(",") if k.strip()]
-    kw_parts += [s.strip() for s in extra.split(",") if s.strip()]
-    keywords = " ".join(kw_parts[:6])
+    # Parole chiave = keyword positive + settori/istituti (max 8 termini, evita stringhe troppo lunghe)
+    kw_parts  = [k.strip() for k in kw_positive.split(",") if k.strip()]
+    kw_parts += [s.strip() for s in extra_settore.split(",") if s.strip()]
+    keywords  = " ".join(kw_parts[:8])
 
     ruolo_principale = ruoli[0] if ruoli else ""
 
     # Calcola numero pagine (Apify restituisce ~10 profili per pagina)
-    num_pagine = max(1, (max_profili + 9) // 10)
+    # Richiedi più pagine per compensare i profili che verranno filtrati
+    num_pagine = max(1, (max_profili * 2 + 9) // 10)
 
     # Parametri usati per la ricerca (da salvare in cronologia)
     parametri_str = json.dumps({
         'ruolo': ruolo_principale,
+        'ruoli_tutti': ruoli_raw,
         'keywords': keywords,
         'max_profili': max_profili,
     }, ensure_ascii=False)
 
-    items, errore = cerca_apify(ruolo_principale, "", "", "", keywords, num_pagine)
+    # Passa tutti i ruoli configurati ad Apify per una ricerca più precisa
+    items, errore = cerca_apify(ruolo_principale, "", "", "", keywords, num_pagine, ruoli_lista=ruoli)
     if errore:
         # Salva la ricerca fallita nella cronologia
         db_err = get_db()
@@ -290,11 +332,28 @@ def automatica():
         db_err.close()
         return jsonify({"errore": errore}), 500
 
-    items = items[:max_profili]
-    trovati  = len(items)
+    trovati_apify = len(items)
     importati = 0
     valutati  = 0
     punteggi  = []
+    scartati  = 0
+    motivi_scarto: dict = {}   # {motivo: conteggio}
+
+    # Applica il filtro locale prima di importare
+    items_filtrati = []
+    for item in items:
+        p = normalizza_profilo(item)
+        passa, motivo = _filtro_locale(p, imp)
+        if passa:
+            items_filtrati.append((item, p))
+        else:
+            scartati += 1
+            motivi_scarto[motivo] = motivi_scarto.get(motivo, 0) + 1
+
+        if len(items_filtrati) >= max_profili:
+            break  # abbiamo già abbastanza candidati validi
+
+    trovati = len(items_filtrati)
 
     db = get_db()
 
@@ -308,8 +367,7 @@ def automatica():
     ricerca_id = cur_r.lastrowid
     db.commit()
 
-    for item in items:
-        p = normalizza_profilo(item)
+    for item, p in items_filtrati:
         if not p["nome"] and not p["cognome"]:
             continue
 
@@ -389,11 +447,14 @@ def automatica():
     db.close()
 
     return jsonify({
-        "successo": True,
-        "trovati":  trovati,
-        "importati": importati,
-        "valutati":  valutati,
+        "successo":        True,
+        "trovati":         trovati,
+        "trovati_apify":   trovati_apify,
+        "importati":       importati,
+        "valutati":        valutati,
         "punteggio_medio": punteggio_medio,
+        "scartati":        scartati,
+        "motivi_scarto":   motivi_scarto,
     })
 
 
