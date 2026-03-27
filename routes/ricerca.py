@@ -338,6 +338,9 @@ def automatica():
     punteggi  = []
     scartati  = 0
     motivi_scarto: dict = {}   # {motivo: conteggio}
+    # Limite analisi AI per evitare timeout Gunicorn: max 10 profili per ricerca.
+    # I restanti vengono importati in pipeline con stato "Da valutare".
+    MAX_AI_PER_RICERCA = 10
 
     # Applica il filtro locale prima di importare
     items_filtrati = []
@@ -398,6 +401,9 @@ def automatica():
         db.commit()
 
         # Valutazione AI con i parametri delle impostazioni
+        # Skip se già raggiunti i MAX_AI_PER_RICERCA (evita timeout Gunicorn)
+        if valutati >= MAX_AI_PER_RICERCA:
+            continue
         try:
             risultato   = analizza_profilo_linkedin(testo, tipo_profilo, imp)
             punteggio   = int(risultato.get("punteggio") or 0) or None
@@ -455,6 +461,7 @@ def automatica():
         "punteggio_medio": punteggio_medio,
         "scartati":        scartati,
         "motivi_scarto":   motivi_scarto,
+        "ai_limit":        MAX_AI_PER_RICERCA,
     })
 
 

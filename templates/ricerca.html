@@ -373,11 +373,17 @@ function ricercaAutomatica(tipo) {
             ? data.punteggio_medio + '/10' : '—';
 
         const motiviEl = document.getElementById('auto-motivi');
+        var righe = [];
         if (data.scartati > 0 && data.motivi_scarto && Object.keys(data.motivi_scarto).length) {
-            const testo = Object.entries(data.motivi_scarto)
-                .map(function(e) { return e[0] + ' (' + e[1] + ')'; })
-                .join(' · ');
-            motiviEl.textContent = 'Motivi scarto: ' + testo;
+            righe.push('Motivi scarto: ' + Object.entries(data.motivi_scarto)
+                .map(function(e) { return e[0] + ' (' + e[1] + ')'; }).join(' · '));
+        }
+        if (data.ai_limit && data.importati > data.valutati) {
+            righe.push('Analisi AI limitata ai primi ' + data.ai_limit + ' profili — i restanti ' +
+                (data.importati - data.valutati) + ' sono in pipeline con stato "Da valutare".');
+        }
+        if (righe.length) {
+            motiviEl.textContent = righe.join(' | ');
             motiviEl.classList.remove('hidden');
         } else {
             motiviEl.classList.add('hidden');
