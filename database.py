@@ -10,11 +10,9 @@ senza dover modificare nessun file route.
 import os
 import re
 import time
-import threading
 import logging
 import psycopg2
 import psycopg2.extras
-import psycopg2.pool
 from datetime import datetime, date
 
 _log = logging.getLogger(__name__)
@@ -28,8 +26,8 @@ _SLOW_QUERY_DEBUG = 0.02   # DEBUG   se supera 20ms
 # Helpers interni
 # ─────────────────────────────────────────────
 
-def _get_db_url():
-    """Restituisce DATABASE_URL normalizzata per psycopg2."""
+def _get_raw_connection():
+    """Apre una connessione psycopg2 usando DATABASE_URL."""
     url = os.environ.get("DATABASE_URL", "")
     if not url:
         raise RuntimeError(
@@ -38,33 +36,7 @@ def _get_db_url():
         )
     if url.startswith("postgres://"):
         url = url.replace("postgres://", "postgresql://", 1)
-    return url
-
-
-def _get_raw_connection():
-    """Apre una connessione psycopg2 usando DATABASE_URL."""
-    return psycopg2.connect(_get_db_url(), cursor_factory=psycopg2.extras.RealDictCursor)
-
-
-# ── Connection pool (Thread-safe) ──────────────────────────────────────────────
-_pool: psycopg2.pool.ThreadedConnectionPool | None = None
-_pool_lock = threading.Lock()
-
-
-def _get_pool() -> psycopg2.pool.ThreadedConnectionPool:
-    """Restituisce il pool condiviso, creandolo al primo utilizzo."""
-    global _pool
-    if _pool is None:
-        with _pool_lock:
-            if _pool is None:
-                _pool = psycopg2.pool.ThreadedConnectionPool(
-                    minconn=2,
-                    maxconn=10,
-                    dsn=_get_db_url(),
-                    cursor_factory=psycopg2.extras.RealDictCursor,
-                )
-                _log.info("Connection pool creato (min=2, max=10)")
-    return _pool
+    return psycopg2.connect(url, cursor_factory=psycopg2.extras.RealDictCursor)
 
 
 def _serialize_row(row):
@@ -123,12 +95,10 @@ class _PgConnection:
     Connessione compatibile con sqlite3.
     Converte automaticamente i placeholder ? in %s e aggiunge
     RETURNING id agli INSERT per emulare cur.lastrowid.
-    Quando chiusa, restituisce la connessione al pool invece di chiuderla.
     """
 
-    def __init__(self, conn, pool=None):
+    def __init__(self, conn):
         self._conn = conn
-        self._pool = pool          # None → connessione diretta (non dal pool)
         self._cur = conn.cursor()
 
     def execute(self, sql, params=None):
@@ -169,17 +139,10 @@ class _PgConnection:
             self._cur.close()
         except Exception:
             pass
-        if self._pool is not None:
-            # Restituisce la connessione al pool
-            try:
-                self._pool.putconn(self._conn)
-            except Exception:
-                pass
-        else:
-            try:
-                self._conn.close()
-            except Exception:
-                pass
+        try:
+            self._conn.close()
+        except Exception:
+            pass
 
 
 # ─────────────────────────────────────────────
@@ -187,10 +150,8 @@ class _PgConnection:
 # ─────────────────────────────────────────────
 
 def get_db():
-    """Restituisce una connessione al database pronta all'uso (dal pool)."""
-    pool = _get_pool()
-    conn = pool.getconn()
-    return _PgConnection(conn, pool=pool)
+    """Restituisce una connessione al database pronta all'uso."""
+    return _PgConnection(_get_raw_connection())
 
 
 def init_db():
