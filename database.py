@@ -122,9 +122,12 @@ class _PgConnection:
                     self._cur.execute(pg_sql_ret, params)
                 else:
                     self._cur.execute(pg_sql_ret)
-                self._cur.execute("RELEASE SAVEPOINT _ret")
+                # fetchone() deve avvenire PRIMA di RELEASE SAVEPOINT:
+                # dopo il RELEASE il cursore punta al risultato del comando DDL
+                # (nessuna riga), causando ProgrammingError: no results to fetch
                 row = self._cur.fetchone()
                 lastrowid = row["id"] if row else None
+                self._cur.execute("RELEASE SAVEPOINT _ret")
             except psycopg2.errors.UndefinedColumn:
                 # Tabella senza colonna 'id' — esegui senza RETURNING
                 self._cur.execute("ROLLBACK TO SAVEPOINT _ret")
