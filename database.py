@@ -270,6 +270,18 @@ def init_db():
             data_trovato  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )""",
 
+        # ── Tabella job ricerche asincrone ─────────────────────────────────────
+        """CREATE TABLE IF NOT EXISTS job_ricerche (
+            job_id      TEXT PRIMARY KEY,
+            tipo_profilo TEXT DEFAULT 'A',
+            status      TEXT DEFAULT 'avviato',
+            step        TEXT DEFAULT '',
+            risultati   TEXT,
+            errore      TEXT,
+            data_inizio TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            data_fine   TIMESTAMP
+        )""",
+
         # ── Migrazioni colonne ─────────────────────────────────────────────
         "ALTER TABLE valutazioni          ADD COLUMN IF NOT EXISTS nome_contatto TEXT",
         "ALTER TABLE valutazioni          ADD COLUMN IF NOT EXISTS ruolo_attuale TEXT",

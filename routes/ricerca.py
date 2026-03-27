@@ -9,6 +9,8 @@ import csv
 import json
 import os
 import time
+import threading
+import uuid
 import requests
 from flask import Blueprint, render_template, request, jsonify, Response
 from database import get_db
@@ -267,17 +269,166 @@ def cerca():
     })
 
 
+def _esegui_ricerca_background(job_id, tipo_profilo, max_profili, imp):
+    """Thread daemon: esegue la ricerca Apify + analisi AI in background."""
+    import logging
+    log = logging.getLogger(__name__)
+    db = get_db()
+
+    def aggiorna(status=None, step=None):
+        sets, vals = [], []
+        if status is not None:
+            sets.append("status=?"); vals.append(status)
+        if step is not None:
+            sets.append("step=?"); vals.append(step)
+        vals.append(job_id)
+        db.execute("UPDATE job_ricerche SET " + ", ".join(sets) + " WHERE job_id=?", vals)
+        db.commit()
+
+    try:
+        aggiorna(status='in_corso', step='Connessione ad Apify...')
+
+        ruoli_raw        = imp.get("ruoli_target", "") or ""
+        ruoli            = [r.strip() for r in ruoli_raw.split(",") if r.strip()]
+        kw_positive      = imp.get("keyword_positive", "") or ""
+        extra_settore    = (imp.get("settori", "") if tipo_profilo == "A" else imp.get("istituti", "")) or ""
+        kw_parts         = [k.strip() for k in kw_positive.split(",") if k.strip()]
+        kw_parts        += [s.strip() for s in extra_settore.split(",") if s.strip()]
+        keywords         = " ".join(kw_parts[:8])
+        ruolo_principale = ruoli[0] if ruoli else ""
+        num_pagine       = max(1, (max_profili * 2 + 9) // 10)
+        parametri_str    = json.dumps({
+            'ruolo': ruolo_principale, 'ruoli_tutti': ruoli_raw,
+            'keywords': keywords, 'max_profili': max_profili,
+        }, ensure_ascii=False)
+
+        aggiorna(step='Ricerca profili su LinkedIn...')
+        items, errore = cerca_apify(ruolo_principale, "", "", "", keywords, num_pagine, ruoli_lista=ruoli)
+
+        if errore:
+            db.execute(
+                "INSERT INTO ricerche_automatiche (tipo_profilo, parametri, profili_trovati, profili_importati, stato) VALUES (?, ?, 0, 0, 'errore')",
+                (tipo_profilo, parametri_str)
+            )
+            db.commit()
+            aggiorna(status='errore', step=errore)
+            return
+
+        trovati_apify = len(items)
+        importati = valutati = scartati = 0
+        punteggi: list = []
+        motivi_scarto: dict = {}
+
+        aggiorna(step=f'Filtraggio di {trovati_apify} profili trovati...')
+
+        items_filtrati = []
+        for item in items:
+            p = normalizza_profilo(item)
+            passa, motivo = _filtro_locale(p, imp)
+            if passa:
+                items_filtrati.append((item, p))
+            else:
+                scartati += 1
+                motivi_scarto[motivo] = motivi_scarto.get(motivo, 0) + 1
+            if len(items_filtrati) >= max_profili:
+                break
+
+        trovati = len(items_filtrati)
+        aggiorna(step=f'Importazione di {trovati} candidati...')
+
+        cur_r = db.execute(
+            "INSERT INTO ricerche_automatiche (tipo_profilo, parametri, profili_trovati, fonte, stato) VALUES (?, ?, ?, 'apify', 'in_corso')",
+            (tipo_profilo, parametri_str, trovati)
+        )
+        ricerca_id = cur_r.lastrowid
+        db.commit()
+
+        for item, p in items_filtrati:
+            if not p["nome"] and not p["cognome"]:
+                continue
+
+            testo = _costruisci_testo_profilo(p)
+            cur = db.execute(
+                "INSERT INTO candidati (nome, cognome, ruolo_attuale, azienda, profilo_linkedin, tipo_profilo, stato, note, ricerca_id) VALUES (?, ?, ?, ?, ?, ?, 'Da valutare', ?, ?)",
+                (p["nome"], p["cognome"], p["ruolo"], p["azienda"], p["linkedin"], tipo_profilo, p["headline"], ricerca_id)
+            )
+            db.commit()
+            candidato_id = cur.lastrowid
+            importati += 1
+
+            db.execute(
+                "INSERT INTO profili_ricerca (ricerca_id, nome, cognome, ruolo, azienda, location, linkedin_url, testo_profilo, candidato_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (ricerca_id, p["nome"], p["cognome"], p["ruolo"], p["azienda"], p["location"], p["linkedin"], testo, candidato_id)
+            )
+            db.commit()
+
+            if valutati < 10:
+                aggiorna(step=f'Analisi AI candidato {valutati + 1}/{min(trovati, 10)}...')
+                try:
+                    risultato     = analizza_profilo_linkedin(testo, tipo_profilo, imp)
+                    punteggio     = int(risultato.get("punteggio") or 0) or None
+                    spunti_raw    = risultato.get("spunti_contatto", [])
+                    spunti_json   = json.dumps(spunti_raw if isinstance(spunti_raw, list) else [], ensure_ascii=False)
+                    analisi_str   = str(risultato.get("analisi_percorso") or "")
+                    messaggio_str = str(risultato.get("messaggio_outreach") or "")
+                    db.execute(
+                        "UPDATE candidati SET punteggio=?, analisi=?, spunti=?, messaggio_outreach=?, stato='Da contattare', data_aggiornamento=CURRENT_TIMESTAMP WHERE id=?",
+                        (punteggio, analisi_str, spunti_json, messaggio_str, candidato_id)
+                    )
+                    nome_completo = f"{p['nome']} {p['cognome']}".strip() or None
+                    anteprima     = f"{p['nome']} {p['cognome']} — {p['ruolo']}".strip()[:120]
+                    db.execute(
+                        "INSERT INTO valutazioni (nome_contatto, ruolo_attuale, azienda, tipo_profilo, anteprima_testo, punteggio, analisi, spunti, messaggio_outreach, candidato_id, fonte) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        (nome_completo, p['ruolo'] or None, p['azienda'] or None, tipo_profilo, anteprima, punteggio, analisi_str, spunti_json, messaggio_str, candidato_id, 'ricerca_automatica')
+                    )
+                    db.commit()
+                    valutati += 1
+                    if punteggio:
+                        punteggi.append(punteggio)
+                except Exception:
+                    log.exception("Errore analisi AI per %s %s", p.get('nome'), p.get('cognome'))
+
+        punteggio_medio = round(sum(punteggi) / len(punteggi), 1) if punteggi else None
+        db.execute(
+            "UPDATE ricerche_automatiche SET profili_importati=?, punteggio_medio=?, stato='completata' WHERE id=?",
+            (importati, punteggio_medio, ricerca_id)
+        )
+        db.commit()
+
+        risultati_json = json.dumps({
+            "trovati": trovati, "trovati_apify": trovati_apify,
+            "importati": importati, "valutati": valutati,
+            "punteggio_medio": punteggio_medio,
+            "scartati": scartati, "motivi_scarto": motivi_scarto,
+        }, ensure_ascii=False)
+
+        db.execute(
+            "UPDATE job_ricerche SET status='completato', step='Completato', risultati=?, data_fine=CURRENT_TIMESTAMP WHERE job_id=?",
+            (risultati_json, job_id)
+        )
+        db.commit()
+
+    except Exception as e:
+        log.exception("Errore background job=%s", job_id)
+        try:
+            db.execute(
+                "UPDATE job_ricerche SET status='errore', errore=?, step=?, data_fine=CURRENT_TIMESTAMP WHERE job_id=?",
+                (str(e), f"Errore: {str(e)[:200]}", job_id)
+            )
+            db.commit()
+        except Exception:
+            pass
+    finally:
+        db.close()
+
+
 @ricerca_bp.route("/ricerca/automatica", methods=["POST"])
 def automatica():
-    """
-    Ricerca automatica basata sui parametri delle impostazioni.
-    Importa i candidati trovati e lancia la valutazione AI per ciascuno.
-    """
-    dati = request.get_json()
+    """Avvia la ricerca automatica in background e restituisce subito un job_id."""
+    dati         = request.get_json()
     tipo_profilo = dati.get("tipo_profilo", "A")
     max_profili  = max(1, min(int(dati.get("max_profili", 20)), 100))
 
-    # Leggi impostazioni del profilo selezionato
     db = get_db()
     imp_row = db.execute(
         "SELECT * FROM impostazioni_profilo WHERE profilo = ?", (tipo_profilo,)
@@ -285,184 +436,45 @@ def automatica():
     db.close()
 
     if not imp_row:
-        return jsonify({"errore": f"Impostazioni Profilo {tipo_profilo} non ancora configurate. "
-                                  f"Vai in Impostazioni e salva i parametri prima di usare la ricerca automatica."}), 400
+        return jsonify({"errore": f"Impostazioni Profilo {tipo_profilo} non configurate. "
+                                  f"Vai in Impostazioni e salva i parametri."}), 400
 
-    imp = dict(imp_row)
+    imp    = dict(imp_row)
+    job_id = str(uuid.uuid4())
 
-    # Costruisci la query Apify usando TUTTI i parametri configurati
-    ruoli_raw   = imp.get("ruoli_target", "") or ""
-    ruoli       = [r.strip() for r in ruoli_raw.split(",") if r.strip()]
-
-    kw_positive = imp.get("keyword_positive", "") or ""
-    extra_settore = imp.get("settori", "") if tipo_profilo == "A" else imp.get("istituti", "")
-    extra_settore = extra_settore or ""
-
-    # Parole chiave = keyword positive + settori/istituti (max 8 termini, evita stringhe troppo lunghe)
-    kw_parts  = [k.strip() for k in kw_positive.split(",") if k.strip()]
-    kw_parts += [s.strip() for s in extra_settore.split(",") if s.strip()]
-    keywords  = " ".join(kw_parts[:8])
-
-    ruolo_principale = ruoli[0] if ruoli else ""
-
-    # Calcola numero pagine (Apify restituisce ~10 profili per pagina)
-    # Richiedi più pagine per compensare i profili che verranno filtrati
-    num_pagine = max(1, (max_profili * 2 + 9) // 10)
-
-    # Parametri usati per la ricerca (da salvare in cronologia)
-    parametri_str = json.dumps({
-        'ruolo': ruolo_principale,
-        'ruoli_tutti': ruoli_raw,
-        'keywords': keywords,
-        'max_profili': max_profili,
-    }, ensure_ascii=False)
-
-    # Passa tutti i ruoli configurati ad Apify per una ricerca più precisa
-    items, errore = cerca_apify(ruolo_principale, "", "", "", keywords, num_pagine, ruoli_lista=ruoli)
-    if errore:
-        # Salva la ricerca fallita nella cronologia
-        db_err = get_db()
-        db_err.execute(
-            """INSERT INTO ricerche_automatiche
-               (tipo_profilo, parametri, profili_trovati, profili_importati, stato)
-               VALUES (?, ?, 0, 0, 'errore')""",
-            (tipo_profilo, parametri_str)
-        )
-        db_err.commit()
-        db_err.close()
-        return jsonify({"errore": errore}), 500
-
-    trovati_apify = len(items)
-    importati = 0
-    valutati  = 0
-    punteggi  = []
-    scartati  = 0
-    motivi_scarto: dict = {}   # {motivo: conteggio}
-    # Limite analisi AI per evitare timeout Gunicorn: max 10 profili per ricerca.
-    # I restanti vengono importati in pipeline con stato "Da valutare".
-    MAX_AI_PER_RICERCA = 10
-
-    # Applica il filtro locale prima di importare
-    items_filtrati = []
-    for item in items:
-        p = normalizza_profilo(item)
-        passa, motivo = _filtro_locale(p, imp)
-        if passa:
-            items_filtrati.append((item, p))
-        else:
-            scartati += 1
-            motivi_scarto[motivo] = motivi_scarto.get(motivo, 0) + 1
-
-        if len(items_filtrati) >= max_profili:
-            break  # abbiamo già abbastanza candidati validi
-
-    trovati = len(items_filtrati)
-
-    db = get_db()
-
-    # Crea il record ricerca PRIMA del loop per ottenere l'ID da passare ai candidati
-    cur_r = db.execute(
-        """INSERT INTO ricerche_automatiche
-           (tipo_profilo, parametri, profili_trovati, fonte, stato)
-           VALUES (?, ?, ?, 'apify', 'in_corso')""",
-        (tipo_profilo, parametri_str, trovati)
+    db2 = get_db()
+    db2.execute(
+        "INSERT INTO job_ricerche (job_id, tipo_profilo, status, step) VALUES (?, ?, 'avviato', ?)",
+        (job_id, tipo_profilo, 'Preparazione ricerca...')
     )
-    ricerca_id = cur_r.lastrowid
-    db.commit()
+    db2.commit()
+    db2.close()
 
-    for item, p in items_filtrati:
-        if not p["nome"] and not p["cognome"]:
-            continue
-
-        testo = _costruisci_testo_profilo(p)
-
-        # Importa nella pipeline con stato "Da valutare" e ricerca_id
-        cur = db.execute(
-            """INSERT INTO candidati
-               (nome, cognome, ruolo_attuale, azienda, profilo_linkedin,
-                tipo_profilo, stato, note, ricerca_id)
-               VALUES (?, ?, ?, ?, ?, ?, 'Da valutare', ?, ?)""",
-            (p["nome"], p["cognome"], p["ruolo"], p["azienda"],
-             p["linkedin"], tipo_profilo, p["headline"], ricerca_id)
-        )
-        db.commit()
-        candidato_id = cur.lastrowid
-        importati += 1
-
-        # Salva il profilo completo in profili_ricerca
-        db.execute(
-            """INSERT INTO profili_ricerca
-               (ricerca_id, nome, cognome, ruolo, azienda, location, linkedin_url,
-                testo_profilo, candidato_id)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (ricerca_id, p["nome"], p["cognome"], p["ruolo"], p["azienda"],
-             p["location"], p["linkedin"], testo, candidato_id)
-        )
-        db.commit()
-
-        # Valutazione AI con i parametri delle impostazioni
-        # Skip se già raggiunti i MAX_AI_PER_RICERCA (evita timeout Gunicorn)
-        if valutati >= MAX_AI_PER_RICERCA:
-            continue
-        try:
-            risultato   = analizza_profilo_linkedin(testo, tipo_profilo, imp)
-            punteggio   = int(risultato.get("punteggio") or 0) or None
-            spunti_raw  = risultato.get("spunti_contatto", [])
-            spunti_json = json.dumps(spunti_raw if isinstance(spunti_raw, list) else [], ensure_ascii=False)
-            analisi_str  = str(risultato.get("analisi_percorso") or "")
-            messaggio_str = str(risultato.get("messaggio_outreach") or "")
-            db.execute(
-                """UPDATE candidati SET
-                   punteggio=?, analisi=?, spunti=?, messaggio_outreach=?,
-                   stato='Da contattare', data_aggiornamento=CURRENT_TIMESTAMP
-                   WHERE id=?""",
-                (punteggio, analisi_str, spunti_json, messaggio_str, candidato_id)
-            )
-            # Salva nella cronologia valutazioni con fonte 'ricerca_automatica'
-            nome_completo = f"{p['nome']} {p['cognome']}".strip() or None
-            anteprima = f"{p['nome']} {p['cognome']} — {p['ruolo']}".strip()[:120]
-            db.execute(
-                """INSERT INTO valutazioni
-                   (nome_contatto, ruolo_attuale, azienda, tipo_profilo,
-                    anteprima_testo, punteggio, analisi, spunti, messaggio_outreach,
-                    candidato_id, fonte)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (nome_completo, p['ruolo'] or None, p['azienda'] or None,
-                 tipo_profilo, anteprima, punteggio,
-                 analisi_str, spunti_json, messaggio_str,
-                 candidato_id, 'ricerca_automatica')
-            )
-            db.commit()
-            valutati += 1
-            if punteggio:
-                punteggi.append(punteggio)
-        except Exception:
-            import logging
-            logging.getLogger(__name__).exception("Errore analisi AI in automatica() per %s %s", p.get('nome'), p.get('cognome'))
-
-    punteggio_medio = round(sum(punteggi) / len(punteggi), 1) if punteggi else None
-
-    # Aggiorna il record ricerca con i conteggi finali
-    db.execute(
-        """UPDATE ricerche_automatiche
-           SET profili_importati=?, punteggio_medio=?, stato='completata'
-           WHERE id=?""",
-        (importati, punteggio_medio, ricerca_id)
+    t = threading.Thread(
+        target=_esegui_ricerca_background,
+        args=(job_id, tipo_profilo, max_profili, imp),
+        daemon=True
     )
-    db.commit()
+    t.start()
+
+    return jsonify({"job_id": job_id, "status": "avviato"})
+
+
+@ricerca_bp.route("/ricerca/stato/<job_id>")
+def stato_job(job_id):
+    """Restituisce lo stato attuale di un job di ricerca."""
+    db  = get_db()
+    row = db.execute("SELECT * FROM job_ricerche WHERE job_id = ?", (job_id,)).fetchone()
     db.close()
-
-    return jsonify({
-        "successo":        True,
-        "trovati":         trovati,
-        "trovati_apify":   trovati_apify,
-        "importati":       importati,
-        "valutati":        valutati,
-        "punteggio_medio": punteggio_medio,
-        "scartati":        scartati,
-        "motivi_scarto":   motivi_scarto,
-        "ai_limit":        MAX_AI_PER_RICERCA,
-    })
+    if not row:
+        return jsonify({"errore": "Job non trovato"}), 404
+    row = dict(row)
+    if row.get("risultati"):
+        try:
+            row["risultati"] = json.loads(row["risultati"])
+        except Exception:
+            pass
+    return jsonify(row)
 
 
 @ricerca_bp.route("/ricerca/export_csv")

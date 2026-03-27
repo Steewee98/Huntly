@@ -58,6 +58,24 @@
                 <a href="/pipeline" class="btn btn-primary btn-sm">&#9776; Vai alla Pipeline</a>
             </div>
         </div>
+
+        <!-- Box progresso ricerca asincrona -->
+        <div id="auto-progresso" class="hidden" style="margin-top:1.5rem;padding:1rem 1.25rem;
+             background:#f0f7ff;border-radius:var(--radius);border:1px solid #bfdbfe;">
+            <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.75rem;">
+                <span class="spinner"></span>
+                <span id="auto-step-msg" style="font-size:0.95rem;color:var(--blu-scuro);font-weight:500;">
+                    Preparazione ricerca...
+                </span>
+            </div>
+            <div style="background:#dbeafe;border-radius:4px;height:6px;overflow:hidden;position:relative;">
+                <div style="position:absolute;height:100%;background:var(--azzurro);border-radius:4px;
+                            animation:progress-indeterminate 1.6s ease-in-out infinite;width:35%;"></div>
+            </div>
+            <p style="margin-top:0.6rem;font-size:0.8rem;color:var(--grigio-testo);">
+                La ricerca può richiedere 2–4 minuti. Puoi navigare altrove — i risultati saranno in Pipeline.
+            </p>
+        </div>
     </div>
 </div>
 
@@ -337,18 +355,24 @@ let ricercaIdCorrente      = null;  // id del record ricerche_automatiche corren
 let personaInAnalisi       = null;  // candidato che sta per essere analizzato
 
 /* ------------------------------------------------------------------ */
-/* Ricerca Automatica                                                   */
+/* Ricerca Automatica (asincrona con polling)                          */
 /* ------------------------------------------------------------------ */
+var _pollingTimer  = null;
+var _jobTipoCorrente = null;
+
 function ricercaAutomatica(tipo) {
-    const maxProfili = parseInt(document.getElementById('max-profili').value, 10) || 20;
-    const btnA = document.getElementById('btn-auto-a');
-    const btnB = document.getElementById('btn-auto-b');
-    const btn  = tipo === 'A' ? btnA : btnB;
+    var maxProfili = parseInt(document.getElementById('max-profili').value, 10) || 20;
+    var btnA = document.getElementById('btn-auto-a');
+    var btnB = document.getElementById('btn-auto-b');
+    var btn  = tipo === 'A' ? btnA : btnB;
 
     btnA.disabled = true;
     btnB.disabled = true;
-    btn.innerHTML = '<span class="spinner"></span> Ricerca in corso...';
+    btn.innerHTML = '<span class="spinner"></span> Avvio ricerca...';
     document.getElementById('auto-risultato').classList.add('hidden');
+    document.getElementById('auto-progresso').classList.remove('hidden');
+    document.getElementById('auto-step-msg').textContent = 'Preparazione ricerca...';
+    _jobTipoCorrente = tipo;
 
     fetch('/ricerca/automatica', {
         method: 'POST',
@@ -356,48 +380,86 @@ function ricercaAutomatica(tipo) {
         body: JSON.stringify({ tipo_profilo: tipo, max_profili: maxProfili })
     })
     .then(function(r) {
-        if (!r.ok) return r.text().then(function(t) { throw new Error('Errore server ' + r.status + (t ? ': ' + t.substring(0, 200) : '')); });
-        return r.json();
+        if (!r.ok) return r.text().then(function(t) { throw new Error('Errore server ' + r.status + ': ' + t.substring(0, 200)); });
+        return jsonSicuro(r);
     })
     .then(function(data) {
-        {% if imp_a_configurato %}btnA.disabled = false;{% endif %}
-        {% if imp_b_configurato %}btnB.disabled = false;{% endif %}
         btn.innerHTML = '&#128100; Ricerca Automatica Profilo ' + tipo;
-
-        if (data.errore) { alert('Errore: ' + data.errore); return; }
-
-        document.getElementById('auto-trovati').textContent  = data.trovati ?? '—';
-        document.getElementById('auto-scartati').textContent = data.scartati ?? '0';
-        document.getElementById('auto-valutati').textContent = data.valutati ?? '—';
-        document.getElementById('auto-punteggio').textContent = data.punteggio_medio != null
-            ? data.punteggio_medio + '/10' : '—';
-
-        const motiviEl = document.getElementById('auto-motivi');
-        var righe = [];
-        if (data.scartati > 0 && data.motivi_scarto && Object.keys(data.motivi_scarto).length) {
-            righe.push('Motivi scarto: ' + Object.entries(data.motivi_scarto)
-                .map(function(e) { return e[0] + ' (' + e[1] + ')'; }).join(' · '));
+        if (data.errore) {
+            _ripristinaBtn(tipo);
+            alert('Errore: ' + data.errore);
+            return;
         }
-        if (data.ai_limit && data.importati > data.valutati) {
-            righe.push('Analisi AI limitata ai primi ' + data.ai_limit + ' profili — i restanti ' +
-                (data.importati - data.valutati) + ' sono in pipeline con stato "Da valutare".');
-        }
-        if (righe.length) {
-            motiviEl.textContent = righe.join(' | ');
-            motiviEl.classList.remove('hidden');
-        } else {
-            motiviEl.classList.add('hidden');
-        }
-
-        document.getElementById('auto-risultato').classList.remove('hidden');
+        _avviaPolling(data.job_id, tipo);
     })
     .catch(function(err) {
-        {% if imp_a_configurato %}btnA.disabled = false;{% endif %}
-        {% if imp_b_configurato %}btnB.disabled = false;{% endif %}
-        btn.innerHTML = '&#128100; Ricerca Automatica Profilo ' + tipo;
+        _ripristinaBtn(tipo);
         alert('Errore di connessione: ' + err);
     });
 }
+
+function _avviaPolling(jobId, tipo) {
+    if (_pollingTimer) clearInterval(_pollingTimer);
+    _pollingTimer = setInterval(function() {
+        fetch('/ricerca/stato/' + jobId)
+        .then(function(r) { return jsonSicuro(r); })
+        .then(function(data) {
+            document.getElementById('auto-step-msg').textContent = data.step || '...';
+            if (data.status === 'completato') {
+                clearInterval(_pollingTimer);
+                _pollingTimer = null;
+                _ripristinaBtn(tipo);
+                document.getElementById('auto-progresso').classList.add('hidden');
+                _mostraRiepilogo(data.risultati || {});
+            } else if (data.status === 'errore') {
+                clearInterval(_pollingTimer);
+                _pollingTimer = null;
+                _ripristinaBtn(tipo);
+                document.getElementById('auto-progresso').classList.add('hidden');
+                alert('Ricerca fallita: ' + (data.errore || data.step || 'errore sconosciuto'));
+            }
+        })
+        .catch(function(err) { console.error('[polling]', err); });
+    }, 3000);
+}
+
+function _ripristinaBtn(tipo) {
+    {% if imp_a_configurato %}document.getElementById('btn-auto-a').disabled = false;{% endif %}
+    {% if imp_b_configurato %}document.getElementById('btn-auto-b').disabled = false;{% endif %}
+}
+
+function _mostraRiepilogo(data) {
+    document.getElementById('auto-trovati').textContent   = data.trovati ?? '—';
+    document.getElementById('auto-scartati').textContent  = data.scartati ?? '0';
+    document.getElementById('auto-valutati').textContent  = data.valutati ?? '—';
+    document.getElementById('auto-punteggio').textContent = data.punteggio_medio != null
+        ? data.punteggio_medio + '/10' : '—';
+
+    var motiviEl = document.getElementById('auto-motivi');
+    var righe = [];
+    if (data.scartati > 0 && data.motivi_scarto && Object.keys(data.motivi_scarto).length) {
+        righe.push('Motivi scarto: ' + Object.entries(data.motivi_scarto)
+            .map(function(e) { return e[0] + ' (' + e[1] + ')'; }).join(' · '));
+    }
+    if (data.importati > data.valutati) {
+        righe.push('Analisi AI completata per i primi 10 profili. I restanti ' +
+            (data.importati - data.valutati) + ' sono in pipeline con stato "Da valutare".');
+    }
+    if (righe.length) {
+        motiviEl.textContent = righe.join(' | ');
+        motiviEl.classList.remove('hidden');
+    } else {
+        motiviEl.classList.add('hidden');
+    }
+    document.getElementById('auto-risultato').classList.remove('hidden');
+}
+
+<style>
+@keyframes progress-indeterminate {
+    0%   { left: -35%; }
+    100% { left: 100%; }
+}
+</style>
 
 /* ------------------------------------------------------------------ */
 /* Tipo profilo form ricerca                                            */
