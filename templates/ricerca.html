@@ -41,16 +41,32 @@
         <!-- Box riepilogo risultati ricerca automatica -->
         <div id="auto-risultato" class="hidden" style="margin-top:1.5rem;padding:1rem 1.25rem;
              background:var(--azzurro-light);border-radius:var(--radius);border:1px solid #c5deff;">
-            <h4 style="margin-bottom:0.5rem;color:var(--azzurro);">Riepilogo ricerca</h4>
-            <div style="display:flex;gap:2rem;flex-wrap:wrap;">
-                <div><span style="font-size:1.5rem;font-weight:700;" id="auto-trovati">—</span>
-                     <div style="font-size:0.8rem;color:var(--grigio-testo);">Profili importati</div></div>
-                <div><span style="font-size:1.5rem;font-weight:700;color:#dc2626;" id="auto-scartati">—</span>
-                     <div style="font-size:0.8rem;color:var(--grigio-testo);">Scartati dal filtro</div></div>
-                <div><span style="font-size:1.5rem;font-weight:700;" id="auto-valutati">—</span>
-                     <div style="font-size:0.8rem;color:var(--grigio-testo);">Valutati dall'AI</div></div>
-                <div><span style="font-size:1.5rem;font-weight:700;" id="auto-punteggio">—</span>
-                     <div style="font-size:0.8rem;color:var(--grigio-testo);">Punteggio medio</div></div>
+            <h4 style="margin-bottom:0.75rem;color:var(--azzurro);">Riepilogo ricerca</h4>
+            <div style="display:flex;gap:1.5rem;flex-wrap:wrap;margin-bottom:0.5rem;">
+                <div style="text-align:center;">
+                    <span style="font-size:1.5rem;font-weight:700;" id="auto-trovati-apify">—</span>
+                    <div style="font-size:0.78rem;color:var(--grigio-testo);">Trovati da Apify</div>
+                </div>
+                <div style="text-align:center;">
+                    <span style="font-size:1.5rem;font-weight:700;color:#2563eb;" id="auto-filtrati">—</span>
+                    <div style="font-size:0.78rem;color:var(--grigio-testo);">Passati il filtro</div>
+                </div>
+                <div style="text-align:center;">
+                    <span style="font-size:1.5rem;font-weight:700;color:#d97706;" id="auto-presenti">—</span>
+                    <div style="font-size:0.78rem;color:var(--grigio-testo);">Già presenti</div>
+                </div>
+                <div style="text-align:center;">
+                    <span style="font-size:1.5rem;font-weight:700;color:#16a34a;" id="auto-importati">—</span>
+                    <div style="font-size:0.78rem;color:var(--grigio-testo);">Importati</div>
+                </div>
+                <div style="text-align:center;">
+                    <span style="font-size:1.5rem;font-weight:700;" id="auto-valutati">—</span>
+                    <div style="font-size:0.78rem;color:var(--grigio-testo);">Valutati AI</div>
+                </div>
+                <div style="text-align:center;">
+                    <span style="font-size:1.5rem;font-weight:700;" id="auto-punteggio">—</span>
+                    <div style="font-size:0.78rem;color:var(--grigio-testo);">Punteggio medio</div>
+                </div>
             </div>
             <div id="auto-motivi" class="hidden"
                  style="margin-top:0.5rem;font-size:0.82rem;color:#dc2626;"></div>
@@ -429,24 +445,36 @@ function _ripristinaBtn(tipo) {
 }
 
 function _mostraRiepilogo(data) {
-    document.getElementById('auto-trovati').textContent   = data.trovati ?? '—';
-    document.getElementById('auto-scartati').textContent  = data.scartati ?? '0';
-    document.getElementById('auto-valutati').textContent  = data.valutati ?? '—';
-    document.getElementById('auto-punteggio').textContent = data.punteggio_medio != null
+    document.getElementById('auto-trovati-apify').textContent = data.trovati_apify ?? '—';
+    document.getElementById('auto-filtrati').textContent      = data.filtrati ?? '—';
+    document.getElementById('auto-presenti').textContent      = data.gia_presenti ?? '0';
+    document.getElementById('auto-importati').textContent     = data.importati ?? '—';
+    document.getElementById('auto-valutati').textContent      = data.valutati ?? '—';
+    document.getElementById('auto-punteggio').textContent     = data.punteggio_medio != null
         ? data.punteggio_medio + '/10' : '—';
 
     var motiviEl = document.getElementById('auto-motivi');
     var righe = [];
-    if (data.scartati > 0 && data.motivi_scarto && Object.keys(data.motivi_scarto).length) {
-        righe.push('Motivi scarto: ' + Object.entries(data.motivi_scarto)
-            .map(function(e) { return e[0] + ' (' + e[1] + ')'; }).join(' · '));
+
+    // Motivi scarto qualità
+    if (data.scartati_qualita > 0 && data.motivi_qualita && Object.keys(data.motivi_qualita).length) {
+        righe.push('Scartati qualità (' + data.scartati_qualita + '): ' +
+            Object.entries(data.motivi_qualita)
+                .map(function(e) { return e[0] + ' (' + e[1] + ')'; }).join(' · '));
     }
+    // Motivi scarto filtro locale
+    if (data.scartati_filtro > 0 && data.motivi_filtro && Object.keys(data.motivi_filtro).length) {
+        righe.push('Scartati filtro (' + data.scartati_filtro + '): ' +
+            Object.entries(data.motivi_filtro)
+                .map(function(e) { return e[0] + ' (' + e[1] + ')'; }).join(' · '));
+    }
+    // AI limit
     if (data.importati > data.valutati) {
-        righe.push('Analisi AI completata per i primi 10 profili. I restanti ' +
+        righe.push('Analisi AI sui primi 10. I restanti ' +
             (data.importati - data.valutati) + ' sono in pipeline con stato "Da valutare".');
     }
     if (righe.length) {
-        motiviEl.textContent = righe.join(' | ');
+        motiviEl.innerHTML = righe.map(function(r) { return '• ' + r; }).join('<br>');
         motiviEl.classList.remove('hidden');
     } else {
         motiviEl.classList.add('hidden');

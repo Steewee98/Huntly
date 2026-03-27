@@ -24,37 +24,47 @@ APIFY_ACTOR = "harvestapi~linkedin-profile-search"
 APIFY_BASE  = "https://api.apify.com/v2"
 
 
-def cerca_apify(ruolo, citta="", paese="", azienda="", parole_chiave="", num_pagine=1, ruoli_lista=None):
+def cerca_apify(ruolo, citta="", paese="", azienda="", parole_chiave="", num_pagine=1,
+                ruoli_lista=None, forza_italia=True):
     """
     Avvia una run dell'actor Apify e attende i risultati.
     ruoli_lista: lista di titoli alternativi (usa al posto di ruolo se fornita).
+    forza_italia: se True e nessuna città/paese specificato, aggiunge Italy come filtro.
     Restituisce (lista_profili, errore).
     """
     api_key = os.environ.get("APIFY_API_KEY", "")
     if not api_key:
         return None, "APIFY_API_KEY non configurata nel file .env"
 
-    # Costruisce l'input dell'actor
     run_input = {
         "takePages": num_pagine,
         "startPage": 1,
     }
 
-    # Usa lista di ruoli se fornita (ricerca automatica), altrimenti singolo ruolo
-    if ruoli_lista:
-        run_input["currentJobTitles"] = [r for r in ruoli_lista if r][:5]
-    elif ruolo:
-        run_input["currentJobTitles"] = [ruolo]
+    # Titoli di lavoro correnti — usa lista se fornita, altrimenti singolo ruolo
+    titoli = [r for r in ruoli_lista if r][:5] if ruoli_lista else ([ruolo] if ruolo else [])
+    if titoli:
+        run_input["currentJobTitles"] = titoli
+
+    # Keywords: combina ruoli + parole_chiave per migliorare la copertura di ricerca
+    kw_parts = []
+    if titoli:
+        kw_parts.append(" OR ".join(f'"{t}"' for t in titoli[:3]))
     if parole_chiave:
-        run_input["keywords"] = parole_chiave
+        kw_parts.append(parole_chiave)
+    if kw_parts:
+        run_input["keywords"] = " ".join(kw_parts)
+
+    # Location: sempre Italia se non specificato (migliora rilevanza risultati)
     if citta or paese:
-        location = ", ".join(filter(None, [citta, paese]))
-        run_input["locations"] = [location]
+        run_input["locations"] = [", ".join(filter(None, [citta, paese]))]
+    elif forza_italia:
+        run_input["locations"] = ["Italy"]
+
     if azienda:
         run_input["currentCompanies"] = [azienda]
 
     try:
-        # Avvia la run in modalità sincrona (attende max 120s e restituisce il dataset)
         resp = requests.post(
             f"{APIFY_BASE}/acts/{APIFY_ACTOR}/run-sync-get-dataset-items",
             json=run_input,
@@ -64,7 +74,6 @@ def cerca_apify(ruolo, citta="", paese="", azienda="", parole_chiave="", num_pag
         resp.raise_for_status()
         items = resp.json()
 
-        # L'endpoint può restituire una lista diretta o un oggetto con "items"
         if isinstance(items, list):
             return items, None
         if isinstance(items, dict):
@@ -113,6 +122,76 @@ def _costruisci_testo_profilo(p):
     if p.get("linkedin"):
         parti.append(f"LinkedIn: {_str(p['linkedin'])}")
     return "\n".join(parti)
+
+
+# Termini che indicano location italiana (usati da _filtro_qualita)
+_LOCATION_ITALIANE = {
+    'italy', 'italia', 'milan', 'milano', 'roma', 'rome', 'napoli', 'naples',
+    'torino', 'turin', 'firenze', 'florence', 'bologna', 'venezia', 'venice',
+    'genova', 'genoa', 'palermo', 'bari', 'catania', 'verona', 'padova',
+    'trieste', 'brescia', 'parma', 'modena', 'reggio', 'perugia', 'siena',
+    'trento', 'trentino', 'sardegna', 'sicilia', 'lombardia', 'piemonte',
+    'toscana', 'veneto', 'lazio', 'campania', 'puglia', 'calabria',
+}
+
+
+def _filtro_qualita(p: dict) -> tuple:
+    """
+    Scarta profili senza dati essenziali o non italiani.
+    Va applicato PRIMA di _filtro_locale per eliminare il rumore di Apify.
+    Ritorna (passa: bool, motivo_scarto: str).
+    """
+    # 1. Senza nome
+    if not p.get('nome') and not p.get('cognome'):
+        return False, "Senza nome"
+
+    # 2. Senza ruolo attuale
+    if not p.get('ruolo'):
+        return False, "Senza ruolo attuale"
+
+    # 3. Testo totale insufficiente
+    testo = " ".join(filter(None, [
+        p.get('nome', ''), p.get('cognome', ''), p.get('ruolo', ''),
+        p.get('azienda', ''), p.get('sommario', ''),
+    ]))
+    if len(testo) < 50:
+        return False, "Profilo incompleto (< 50 caratteri)"
+
+    # 4. Location presente ma chiaramente non italiana
+    location = (p.get('location') or '').lower()
+    if location and not any(t in location for t in _LOCATION_ITALIANE):
+        return False, f"Location non italiana: {p.get('location', '')[:40]}"
+
+    return True, ""
+
+
+def _controlla_duplicato(db, p: dict) -> bool:
+    """
+    Controlla se il profilo esiste già in candidati.
+    Prima verifica l'URL LinkedIn; fallback su nome + cognome + azienda.
+    Ritorna True se duplicato.
+    """
+    linkedin = (p.get('linkedin') or '').strip()
+    if linkedin:
+        row = db.execute(
+            "SELECT id FROM candidati WHERE profilo_linkedin = ?", (linkedin,)
+        ).fetchone()
+        if row:
+            return True
+
+    # Fallback nome + cognome + azienda (case-insensitive)
+    nome    = (p.get('nome', '') or '').strip().lower()
+    cognome = (p.get('cognome', '') or '').strip().lower()
+    azienda = (p.get('azienda', '') or '').strip().lower()
+    if nome and cognome and azienda:
+        row = db.execute(
+            "SELECT id FROM candidati WHERE LOWER(nome)=? AND LOWER(cognome)=? AND LOWER(azienda)=?",
+            (nome, cognome, azienda)
+        ).fetchone()
+        if row:
+            return True
+
+    return False
 
 
 def _filtro_locale(p: dict, imp: dict) -> tuple:
@@ -294,16 +373,23 @@ def _esegui_ricerca_background(job_id, tipo_profilo, max_profili, imp):
         extra_settore    = (imp.get("settori", "") if tipo_profilo == "A" else imp.get("istituti", "")) or ""
         kw_parts         = [k.strip() for k in kw_positive.split(",") if k.strip()]
         kw_parts        += [s.strip() for s in extra_settore.split(",") if s.strip()]
-        keywords         = " ".join(kw_parts[:8])
+        keywords         = " ".join(kw_parts[:6])
         ruolo_principale = ruoli[0] if ruoli else ""
-        num_pagine       = max(1, (max_profili * 2 + 9) // 10)
-        parametri_str    = json.dumps({
+
+        # Richiedi il doppio dei profili necessari per compensare filtri e duplicati
+        num_pagine = max(1, (max_profili * 2 + 9) // 10)
+
+        parametri_str = json.dumps({
             'ruolo': ruolo_principale, 'ruoli_tutti': ruoli_raw,
             'keywords': keywords, 'max_profili': max_profili,
+            'location': 'Italy',
         }, ensure_ascii=False)
 
-        aggiorna(step='Ricerca profili su LinkedIn...')
-        items, errore = cerca_apify(ruolo_principale, "", "", "", keywords, num_pagine, ruoli_lista=ruoli)
+        aggiorna(step='Ricerca profili su LinkedIn (Italy)...')
+        items, errore = cerca_apify(
+            ruolo_principale, "", "", "", keywords, num_pagine,
+            ruoli_lista=ruoli, forza_italia=True
+        )
 
         if errore:
             db.execute(
@@ -314,39 +400,60 @@ def _esegui_ricerca_background(job_id, tipo_profilo, max_profili, imp):
             aggiorna(status='errore', step=errore)
             return
 
-        trovati_apify = len(items)
-        importati = valutati = scartati = 0
-        punteggi: list = []
-        motivi_scarto: dict = {}
+        trovati_apify     = len(items)
+        scartati_qualita  = 0    # profili vuoti/non italiani/incompleti
+        scartati_filtro   = 0    # non superano il filtro keyword locale
+        gia_presenti      = 0    # già in database
+        importati         = 0
+        valutati          = 0
+        punteggi: list    = []
+        motivi_qualita: dict = {}
+        motivi_filtro:  dict = {}
 
         aggiorna(step=f'Filtraggio di {trovati_apify} profili trovati...')
 
-        items_filtrati = []
+        # ── Pipeline di filtraggio ─────────────────────────────────────────────
+        # 1. Qualità (profili vuoti / non italiani)
+        # 2. Filtro locale (keyword matching con impostazioni)
+        # 3. Deduplicazione contro candidati già presenti
+        items_da_importare = []
         for item in items:
             p = normalizza_profilo(item)
-            passa, motivo = _filtro_locale(p, imp)
-            if passa:
-                items_filtrati.append((item, p))
-            else:
-                scartati += 1
-                motivi_scarto[motivo] = motivi_scarto.get(motivo, 0) + 1
-            if len(items_filtrati) >= max_profili:
+
+            # Filtro qualità
+            ok_q, motivo_q = _filtro_qualita(p)
+            if not ok_q:
+                scartati_qualita += 1
+                motivi_qualita[motivo_q] = motivi_qualita.get(motivo_q, 0) + 1
+                continue
+
+            # Filtro locale (ruoli, settori, keyword)
+            ok_l, motivo_l = _filtro_locale(p, imp)
+            if not ok_l:
+                scartati_filtro += 1
+                motivi_filtro[motivo_l] = motivi_filtro.get(motivo_l, 0) + 1
+                continue
+
+            # Deduplicazione
+            if _controlla_duplicato(db, p):
+                gia_presenti += 1
+                continue
+
+            items_da_importare.append(p)
+            if len(items_da_importare) >= max_profili:
                 break
 
-        trovati = len(items_filtrati)
-        aggiorna(step=f'Importazione di {trovati} candidati...')
+        trovati_filtrati = len(items_da_importare)
+        aggiorna(step=f'Importazione di {trovati_filtrati} nuovi candidati...')
 
         cur_r = db.execute(
             "INSERT INTO ricerche_automatiche (tipo_profilo, parametri, profili_trovati, fonte, stato) VALUES (?, ?, ?, 'apify', 'in_corso')",
-            (tipo_profilo, parametri_str, trovati)
+            (tipo_profilo, parametri_str, trovati_apify)
         )
         ricerca_id = cur_r.lastrowid
         db.commit()
 
-        for item, p in items_filtrati:
-            if not p["nome"] and not p["cognome"]:
-                continue
-
+        for p in items_da_importare:
             testo = _costruisci_testo_profilo(p)
             cur = db.execute(
                 "INSERT INTO candidati (nome, cognome, ruolo_attuale, azienda, profilo_linkedin, tipo_profilo, stato, note, ricerca_id) VALUES (?, ?, ?, ?, ?, ?, 'Da valutare', ?, ?)",
@@ -363,7 +470,7 @@ def _esegui_ricerca_background(job_id, tipo_profilo, max_profili, imp):
             db.commit()
 
             if valutati < 10:
-                aggiorna(step=f'Analisi AI candidato {valutati + 1}/{min(trovati, 10)}...')
+                aggiorna(step=f'Analisi AI candidato {valutati + 1}/{min(importati, 10)}...')
                 try:
                     risultato     = analizza_profilo_linkedin(testo, tipo_profilo, imp)
                     punteggio     = int(risultato.get("punteggio") or 0) or None
@@ -396,10 +503,18 @@ def _esegui_ricerca_background(job_id, tipo_profilo, max_profili, imp):
         db.commit()
 
         risultati_json = json.dumps({
-            "trovati": trovati, "trovati_apify": trovati_apify,
-            "importati": importati, "valutati": valutati,
-            "punteggio_medio": punteggio_medio,
-            "scartati": scartati, "motivi_scarto": motivi_scarto,
+            # Contatori separati per trasparenza
+            "trovati_apify":    trovati_apify,
+            "filtrati":         trovati_filtrati,
+            "gia_presenti":     gia_presenti,
+            "importati":        importati,
+            "valutati":         valutati,
+            "punteggio_medio":  punteggio_medio,
+            # Dettaglio motivi scarto
+            "scartati_qualita": scartati_qualita,
+            "scartati_filtro":  scartati_filtro,
+            "motivi_qualita":   motivi_qualita,
+            "motivi_filtro":    motivi_filtro,
         }, ensure_ascii=False)
 
         db.execute(

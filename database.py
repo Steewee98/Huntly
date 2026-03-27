@@ -311,6 +311,8 @@ def init_db():
         "ALTER TABLE valutazioni          ADD COLUMN IF NOT EXISTS fonte TEXT DEFAULT 'manuale'",
         "ALTER TABLE candidati            ADD COLUMN IF NOT EXISTS ricerca_id INTEGER",
         "ALTER TABLE ricerche_automatiche ADD COLUMN IF NOT EXISTS fonte TEXT DEFAULT 'apify'",
+        # Deduplicazione: indice su URL LinkedIn (partial — esclude NULL e stringa vuota)
+        "CREATE INDEX IF NOT EXISTS idx_candidati_linkedin ON candidati(profilo_linkedin) WHERE profilo_linkedin IS NOT NULL AND profilo_linkedin <> ''",
 
         # ── Indici per performance query ───────────────────────────────────
         "CREATE INDEX IF NOT EXISTS idx_candidati_tipo_profilo  ON candidati(tipo_profilo)",
