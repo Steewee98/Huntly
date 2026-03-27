@@ -354,18 +354,20 @@ def _esegui_ricerca_background(job_id, tipo_profilo, max_profili, imp):
     log = logging.getLogger(__name__)
     db = get_db()
 
-    def aggiorna(status=None, step=None):
+    def aggiorna(status=None, step=None, pct=None):
         sets, vals = [], []
         if status is not None:
             sets.append("status=?"); vals.append(status)
         if step is not None:
             sets.append("step=?"); vals.append(step)
+        if pct is not None:
+            sets.append("percentuale=?"); vals.append(pct)
         vals.append(job_id)
         db.execute("UPDATE job_ricerche SET " + ", ".join(sets) + " WHERE job_id=?", vals)
         db.commit()
 
     try:
-        aggiorna(status='in_corso', step='Connessione ad Apify...')
+        aggiorna(status='in_corso', step='Connessione ad Apify...', pct=10)
 
         ruoli_raw        = imp.get("ruoli_target", "") or ""
         ruoli            = [r.strip() for r in ruoli_raw.split(",") if r.strip()]
@@ -385,7 +387,7 @@ def _esegui_ricerca_background(job_id, tipo_profilo, max_profili, imp):
             'location': 'Italy',
         }, ensure_ascii=False)
 
-        aggiorna(step='Ricerca profili su LinkedIn (Italy)...')
+        aggiorna(step='Ricerca profili su LinkedIn (Italy)...', pct=25)
         items, errore = cerca_apify(
             ruolo_principale, "", "", "", keywords, num_pagine,
             ruoli_lista=ruoli, forza_italia=True
@@ -410,7 +412,7 @@ def _esegui_ricerca_background(job_id, tipo_profilo, max_profili, imp):
         motivi_qualita: dict = {}
         motivi_filtro:  dict = {}
 
-        aggiorna(step=f'Filtraggio di {trovati_apify} profili trovati...')
+        aggiorna(step=f'{trovati_apify} profili trovati da Apify. Filtraggio in corso...', pct=50)
 
         # ── Pipeline di filtraggio ─────────────────────────────────────────────
         # 1. Qualità (profili vuoti / non italiani)
@@ -444,7 +446,7 @@ def _esegui_ricerca_background(job_id, tipo_profilo, max_profili, imp):
                 break
 
         trovati_filtrati = len(items_da_importare)
-        aggiorna(step=f'Importazione di {trovati_filtrati} nuovi candidati...')
+        aggiorna(step=f'Filtraggio completato. Importazione {trovati_filtrati} candidati...', pct=70)
 
         cur_r = db.execute(
             "INSERT INTO ricerche_automatiche (tipo_profilo, parametri, profili_trovati, fonte, stato) VALUES (?, ?, ?, 'apify', 'in_corso')",
@@ -470,7 +472,9 @@ def _esegui_ricerca_background(job_id, tipo_profilo, max_profili, imp):
             db.commit()
 
             if valutati < 10:
-                aggiorna(step=f'Analisi AI candidato {valutati + 1}/{min(importati, 10)}...')
+                _ai_total = min(len(items_da_importare), 10)
+                _ai_pct   = 85 + int((valutati / max(1, _ai_total)) * 10)
+                aggiorna(step=f'Analisi AI candidato {valutati + 1}/{_ai_total}...', pct=_ai_pct)
                 try:
                     risultato     = analizza_profilo_linkedin(testo, tipo_profilo, imp)
                     punteggio     = int(risultato.get("punteggio") or 0) or None
@@ -518,7 +522,7 @@ def _esegui_ricerca_background(job_id, tipo_profilo, max_profili, imp):
         }, ensure_ascii=False)
 
         db.execute(
-            "UPDATE job_ricerche SET status='completato', step='Completato', risultati=?, data_fine=CURRENT_TIMESTAMP WHERE job_id=?",
+            "UPDATE job_ricerche SET status='completato', step='Ricerca completata!', risultati=?, percentuale=100, data_fine=CURRENT_TIMESTAMP WHERE job_id=?",
             (risultati_json, job_id)
         )
         db.commit()

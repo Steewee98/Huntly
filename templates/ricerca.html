@@ -78,15 +78,19 @@
         <!-- Box progresso ricerca asincrona -->
         <div id="auto-progresso" class="hidden" style="margin-top:1.5rem;padding:1rem 1.25rem;
              background:#f0f7ff;border-radius:var(--radius);border:1px solid #bfdbfe;">
-            <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.75rem;">
-                <span class="spinner"></span>
-                <span id="auto-step-msg" style="font-size:0.95rem;color:var(--blu-scuro);font-weight:500;">
-                    Preparazione ricerca...
-                </span>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.5rem;">
+                <div style="display:flex;align-items:center;gap:0.75rem;">
+                    <span class="spinner" id="auto-spinner"></span>
+                    <span id="auto-step-msg" style="font-size:0.95rem;color:var(--blu-scuro);font-weight:500;">
+                        Preparazione ricerca...
+                    </span>
+                </div>
+                <span id="auto-pct-label" style="font-size:0.9rem;font-weight:700;color:var(--azzurro);white-space:nowrap;">0%</span>
             </div>
-            <div style="background:#dbeafe;border-radius:4px;height:6px;overflow:hidden;position:relative;">
-                <div style="position:absolute;height:100%;background:var(--azzurro);border-radius:4px;
-                            animation:progress-indeterminate 1.6s ease-in-out infinite;width:35%;"></div>
+            <div style="background:#dbeafe;border-radius:4px;height:8px;overflow:hidden;">
+                <div id="auto-progress-bar"
+                     style="height:100%;background:var(--azzurro);border-radius:4px;
+                            width:0%;transition:width 0.5s ease;"></div>
             </div>
             <p style="margin-top:0.6rem;font-size:0.8rem;color:var(--grigio-testo);">
                 La ricerca può richiedere 2–4 minuti. Puoi navigare altrove — i risultati saranno in Pipeline.
@@ -388,6 +392,11 @@ function ricercaAutomatica(tipo) {
     document.getElementById('auto-risultato').classList.add('hidden');
     document.getElementById('auto-progresso').classList.remove('hidden');
     document.getElementById('auto-step-msg').textContent = 'Preparazione ricerca...';
+    document.getElementById('auto-step-msg').style.color = 'var(--blu-scuro)';
+    document.getElementById('auto-progress-bar').style.width = '0%';
+    document.getElementById('auto-progress-bar').style.background = 'var(--azzurro)';
+    document.getElementById('auto-pct-label').textContent = '0%';
+    document.getElementById('auto-pct-label').style.color = 'var(--azzurro)';
     _jobTipoCorrente = tipo;
 
     fetch('/ricerca/automatica', {
@@ -420,7 +429,13 @@ function _avviaPolling(jobId, tipo) {
         fetch('/ricerca/stato/' + jobId)
         .then(function(r) { return jsonSicuro(r); })
         .then(function(data) {
+            // Aggiorna messaggio step
             document.getElementById('auto-step-msg').textContent = data.step || '...';
+            // Aggiorna barra deterministica
+            var pct = data.percentuale || 0;
+            document.getElementById('auto-progress-bar').style.width = pct + '%';
+            document.getElementById('auto-pct-label').textContent = pct + '%';
+
             if (data.status === 'completato') {
                 clearInterval(_pollingTimer);
                 _pollingTimer = null;
@@ -431,12 +446,18 @@ function _avviaPolling(jobId, tipo) {
                 clearInterval(_pollingTimer);
                 _pollingTimer = null;
                 _ripristinaBtn(tipo);
-                document.getElementById('auto-progresso').classList.add('hidden');
+                // Mostra barra rossa e messaggio errore
+                document.getElementById('auto-progress-bar').style.background = '#dc2626';
+                document.getElementById('auto-pct-label').style.color = '#dc2626';
+                document.getElementById('auto-step-msg').style.color = '#dc2626';
+                setTimeout(function() {
+                    document.getElementById('auto-progresso').classList.add('hidden');
+                }, 4000);
                 alert('Ricerca fallita: ' + (data.errore || data.step || 'errore sconosciuto'));
             }
         })
         .catch(function(err) { console.error('[polling]', err); });
-    }, 3000);
+    }, 2000);
 }
 
 function _ripristinaBtn(tipo) {
@@ -482,12 +503,6 @@ function _mostraRiepilogo(data) {
     document.getElementById('auto-risultato').classList.remove('hidden');
 }
 
-<style>
-@keyframes progress-indeterminate {
-    0%   { left: -35%; }
-    100% { left: 100%; }
-}
-</style>
 
 /* ------------------------------------------------------------------ */
 /* Tipo profilo form ricerca                                            */
@@ -535,7 +550,7 @@ function cercaFigure() {
     })
     .then(function(r) {
         if (!r.ok) return r.text().then(function(t) { throw new Error('Errore server ' + r.status + (t ? ': ' + t.substring(0, 200) : '')); });
-        return r.json();
+        return jsonSicuro(r);
     })
     .then(function(data) {
         btn.disabled = false;
