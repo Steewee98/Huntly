@@ -636,6 +636,29 @@ body {
 .stato-select:focus { border-color: var(--azzurro); }
 .stato-select.select-saved { border-color: var(--verde); }
 
+/* Colori select per valore stato */
+.stato-select[data-stato="Da valutare"]       { border-color: #9CA3AF; color: #6B7280; }
+.stato-select[data-stato="Da contattare"]     { border-color: #2563EB; color: #1D4ED8; }
+.stato-select[data-stato="Richiesta Inviata"] { border-color: #D97706; color: #92400E; }
+.stato-select[data-stato="Risposto"]          { border-color: #16A34A; color: #15803D; }
+.stato-select[data-stato="In valutazione"]    { border-color: #7C3AED; color: #6D28D9; }
+.stato-select[data-stato="Chiuso"]            { border-color: #DC2626; color: #B91C1C; }
+
+/* Badge stato (usato in ricerca_dettaglio e altrove) */
+.badge-stato {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    border-radius: 20px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+.badge-stato-da-valutare        { background: #F3F4F6; color: #6B7280; }
+.badge-stato-da-contattare      { background: #DBEAFE; color: #1D4ED8; }
+.badge-stato-richiesta-inviata  { background: #FEF3C7; color: #D97706; }
+.badge-stato-risposto           { background: #DCFCE7; color: #16A34A; }
+.badge-stato-in-valutazione     { background: #F3E8FF; color: #7C3AED; }
+.badge-stato-chiuso             { background: #FEE2E2; color: #DC2626; }
+
 .azioni-group {
     display: flex;
     gap: 0.4rem;
