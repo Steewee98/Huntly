@@ -233,7 +233,10 @@ function salvaImpostazioni(e, profilo) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(dati)
     })
-    .then(function(r) { return r.json(); })
+    .then(function(r) {
+        if (!r.ok) return r.text().then(function(t) { throw new Error('Errore server ' + r.status + ': ' + t.substring(0, 200)); });
+        return r.json();
+    })
     .then(function(data) {
         btn.disabled = false;
         btn.innerHTML = '&#10003; Salva Profilo ' + profilo;

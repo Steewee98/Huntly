@@ -196,7 +196,7 @@ async function generaContenuti() {
             body: JSON.stringify({ tema, tono, profilo })
         });
 
-        const dati = await risposta.json();
+        const dati = await jsonSicuro(risposta);
 
         if (!risposta.ok) throw new Error(dati.errore || 'Errore nella generazione');
 
@@ -255,7 +255,7 @@ async function generaImmagine(num) {
                 prompt_custom: document.getElementById(`prompt-custom-${num}`).value.trim(),
             })
         });
-        const dati = await resp.json();
+        const dati = await jsonSicuro(resp);
         if (dati.errore) { alert('Errore: ' + dati.errore); return; }
 
         // Imposta l'immagine — Pollinations la genera al caricamento

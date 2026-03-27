@@ -218,7 +218,7 @@ async function generaFollowup(id, nome) {
     try {
         const risposta = await fetch(`/pipeline/followup/${id}`, { method: 'POST' });
         console.log('[pipeline] followup response:', risposta.status, risposta.headers.get('content-type'));
-        const dati = await risposta.json();
+        const dati = await jsonSicuro(risposta);
 
         if (risposta.ok) {
             impostaTestoFollowup(dati.messaggio);
@@ -283,7 +283,7 @@ async function chiamaRigeneraFollowup(istruzioni) {
             body: JSON.stringify({ messaggio_attuale: messaggioAttuale, istruzioni })
         });
         console.log('[pipeline] rigenera_followup response:', risposta.status, risposta.headers.get('content-type'));
-        const dati = await risposta.json();
+        const dati = await jsonSicuro(risposta);
         if (!risposta.ok) throw new Error(dati.errore || 'Errore');
 
         const box = document.getElementById('followup-testo');

@@ -325,7 +325,10 @@ function analizzaSingolo(idx, btnEl) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
     })
-    .then(function(r) { return r.json(); })
+    .then(function(r) {
+        if (!r.ok) return r.text().then(function(t) { throw new Error('Errore server ' + r.status + ': ' + t.substring(0, 200)); });
+        return r.json();
+    })
     .then(function(data) {
         if (data.errore) {
             btnEl.disabled = false;
@@ -398,7 +401,10 @@ function analizzaTutti() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
         })
-        .then(function(r) { return r.json(); })
+        .then(function(r) {
+            if (!r.ok) return r.text().then(function(t) { throw new Error('Errore server ' + r.status + ': ' + t.substring(0, 200)); });
+            return r.json();
+        })
         .then(function(data) {
             completati++;
             barEl.style.width   = Math.round(completati / totale * 100) + '%';

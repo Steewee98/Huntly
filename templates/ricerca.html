@@ -353,7 +353,10 @@ function ricercaAutomatica(tipo) {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ tipo_profilo: tipo, max_profili: maxProfili })
     })
-    .then(function(r) { return r.json(); })
+    .then(function(r) {
+        if (!r.ok) return r.text().then(function(t) { throw new Error('Errore server ' + r.status + (t ? ': ' + t.substring(0, 200) : '')); });
+        return r.json();
+    })
     .then(function(data) {
         {% if imp_a_configurato %}btnA.disabled = false;{% endif %}
         {% if imp_b_configurato %}btnB.disabled = false;{% endif %}
@@ -420,7 +423,10 @@ function cercaFigure() {
             tipo_profilo:  tipoCercaSelezionato,
         })
     })
-    .then(function(r) { return r.json(); })
+    .then(function(r) {
+        if (!r.ok) return r.text().then(function(t) { throw new Error('Errore server ' + r.status + (t ? ': ' + t.substring(0, 200) : '')); });
+        return r.json();
+    })
     .then(function(data) {
         btn.disabled = false;
         btn.innerHTML = '&#128269; Cerca Candidati';
@@ -507,7 +513,10 @@ function confermaImport() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(persona)
     })
-    .then(function(r) { return r.json(); })
+    .then(function(r) {
+        if (!r.ok) return r.text().then(function(t) { throw new Error('Errore server ' + r.status + ': ' + t.substring(0, 200)); });
+        return r.json();
+    })
     .then(function(data) {
         chiudiModal();
         if (data.successo) {
@@ -586,7 +595,10 @@ function avviaAnalisi() {
             ricerca_id:         ricercaIdCorrente,
         })
     })
-    .then(function(r) { return r.json(); })
+    .then(function(r) {
+        if (!r.ok) return r.text().then(function(t) { throw new Error('Errore server ' + r.status + (t ? ': ' + t.substring(0, 200) : '')); });
+        return r.json();
+    })
     .then(function(data) {
         if (data.errore) {
             btn.disabled = false;

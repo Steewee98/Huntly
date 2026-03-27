@@ -41,3 +41,19 @@ document.addEventListener('keydown', function(e) {
         });
     }
 });
+
+/**
+ * Legge la response come testo e poi fa JSON.parse con gestione errori esplicita.
+ * Evita il SyntaxError di Safari quando il server restituisce HTML invece di JSON.
+ * @param {Response} response - oggetto Response da fetch()
+ * @returns {Promise<any>} - dati JSON parsati
+ */
+async function jsonSicuro(response) {
+    const testo = await response.text();
+    try {
+        return JSON.parse(testo);
+    } catch (e) {
+        console.error('[jsonSicuro] Risposta non JSON (status ' + response.status + '):', testo.substring(0, 300));
+        throw new Error('Risposta del server non valida: ' + testo.substring(0, 100));
+    }
+}

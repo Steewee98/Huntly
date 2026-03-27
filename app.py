@@ -84,13 +84,23 @@ def admin_init_db():
 def handle_exception(e):
     """
     Restituisce sempre JSON invece di HTML in caso di errore non gestito.
-    Evita che il browser riceva una pagina HTML quando si aspetta JSON.
+    Evita il SyntaxError di Safari quando il browser si aspetta JSON ma riceve HTML.
     """
     import traceback, logging
     logging.getLogger(__name__).error("Unhandled exception: %s", traceback.format_exc())
     from flask import request as flask_request
-    # Per richieste AJAX (Accept: application/json o X-Requested-With) restituisce JSON
-    if flask_request.is_json or flask_request.headers.get("X-Requested-With") == "XMLHttpRequest":
+    # Restituisce JSON per tutte le chiamate AJAX/fetch:
+    # - Content-Type: application/json (POST con corpo JSON)
+    # - X-Requested-With: XMLHttpRequest (jQuery legacy)
+    # - Accept: application/json
+    # - Metodi non-GET senza HTML nel Accept (DELETE, PUT, PATCH)
+    is_ajax = (
+        flask_request.is_json
+        or flask_request.headers.get("X-Requested-With") == "XMLHttpRequest"
+        or "application/json" in flask_request.headers.get("Accept", "")
+        or flask_request.method in ("DELETE", "PUT", "PATCH")
+    )
+    if is_ajax:
         return jsonify({"errore": str(e), "tipo": type(e).__name__}), 500
     # Per pagine HTML rilancia l'eccezione normale di Flask
     raise e

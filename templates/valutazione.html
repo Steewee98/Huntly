@@ -398,7 +398,7 @@ async function cercaPerNome() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ nome, cognome })
         });
-        const dati = await resp.json();
+        const dati = await jsonSicuro(resp);
         if (dati.errore) { alert('Errore: ' + dati.errore); return; }
 
         // Polling ogni 5 secondi fino a completamento
@@ -424,7 +424,7 @@ async function pollFinoAlCompletamento(runId) {
     for (let i = 0; i < 40; i++) {
         await new Promise(r => setTimeout(r, 5000));
         const r = await fetch('/valutazione/poll_run/' + runId);
-        const d = await r.json();
+        const d = await jsonSicuro(r);
         if (d.errore) { alert('Errore: ' + d.errore); return null; }
         if (d.status === 'done') return d.profili;
         // se status === 'running', continua il loop
@@ -505,7 +505,7 @@ async function avviaAnalisi() {
             })
         });
 
-        const dati = await risposta.json();
+        const dati = await jsonSicuro(risposta);
 
         if (!risposta.ok) {
             throw new Error(dati.errore || 'Errore durante l\'analisi');
@@ -595,7 +595,7 @@ async function chiamaRigenera(istruzioni) {
             })
         });
 
-        const dati = await risposta.json();
+        const dati = await jsonSicuro(risposta);
         if (!risposta.ok) throw new Error(dati.errore || 'Errore');
 
         // Aggiorna il messaggio con animazione breve
@@ -689,7 +689,7 @@ async function salvaCandidatoDaCronologia() {
             })
         });
 
-        const dati = await risposta.json();
+        const dati = await jsonSicuro(risposta);
         if (!risposta.ok) throw new Error(dati.errore || 'Errore');
 
         // Mostra conferma con link alla pipeline
