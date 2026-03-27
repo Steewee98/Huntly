@@ -105,16 +105,40 @@ class _PgConnection:
         # Converti placeholder SQLite → psycopg2
         pg_sql = sql.replace("?", "%s")
 
-        # Aggiunge RETURNING id agli INSERT per ottenere lastrowid
+        # Aggiunge RETURNING id agli INSERT per ottenere lastrowid.
+        # Usa un savepoint: se la tabella non ha colonna 'id' (es. job_ricerche),
+        # fa rollback al savepoint ed esegue senza RETURNING.
         is_insert = bool(re.match(r"\s*INSERT\b", pg_sql, re.IGNORECASE))
-        if is_insert and "RETURNING" not in pg_sql.upper():
-            pg_sql = pg_sql.rstrip().rstrip(";") + " RETURNING id"
+        needs_returning = is_insert and "RETURNING" not in pg_sql.upper()
+        pg_sql_ret = (pg_sql.rstrip().rstrip(";") + " RETURNING id") if needs_returning else pg_sql
 
         t0 = time.perf_counter()
-        if params is not None:
-            self._cur.execute(pg_sql, params)
+        lastrowid = None
+
+        if needs_returning:
+            self._cur.execute("SAVEPOINT _ret")
+            try:
+                if params is not None:
+                    self._cur.execute(pg_sql_ret, params)
+                else:
+                    self._cur.execute(pg_sql_ret)
+                self._cur.execute("RELEASE SAVEPOINT _ret")
+                row = self._cur.fetchone()
+                lastrowid = row["id"] if row else None
+            except psycopg2.errors.UndefinedColumn:
+                # Tabella senza colonna 'id' — esegui senza RETURNING
+                self._cur.execute("ROLLBACK TO SAVEPOINT _ret")
+                self._cur.execute("RELEASE SAVEPOINT _ret")
+                if params is not None:
+                    self._cur.execute(pg_sql, params)
+                else:
+                    self._cur.execute(pg_sql)
         else:
-            self._cur.execute(pg_sql)
+            if params is not None:
+                self._cur.execute(pg_sql, params)
+            else:
+                self._cur.execute(pg_sql)
+
         elapsed = time.perf_counter() - t0
 
         # Log query lente
@@ -122,12 +146,6 @@ class _PgConnection:
             _log.warning("Query lenta (%.0fms): %s", elapsed * 1000, pg_sql.strip()[:120])
         elif elapsed >= _SLOW_QUERY_DEBUG:
             _log.debug("Query (%.0fms): %s", elapsed * 1000, pg_sql.strip()[:120])
-
-        # Cattura subito l'id restituito prima che il cursore cambi stato
-        lastrowid = None
-        if is_insert:
-            row = self._cur.fetchone()
-            lastrowid = row["id"] if row else None
 
         return _PgCursor(self._cur, lastrowid)
 
