@@ -5,8 +5,22 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}SABIA Recruiting Tool{% endblock %}</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <style>
+        #nav-progress {
+            position: fixed;
+            top: 0; left: 0;
+            height: 3px;
+            width: 0%;
+            background: #2E7CF6;
+            z-index: 9999;
+            transition: width 0.3s ease, opacity 0.4s ease;
+            opacity: 0;
+            pointer-events: none;
+        }
+    </style>
 </head>
 <body>
+<div id="nav-progress"></div>
 
 <!-- Sidebar di navigazione -->
 <aside class="sidebar">
@@ -83,6 +97,48 @@
 </main>
 
 <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+<script>
+(function () {
+    var bar = document.getElementById('nav-progress');
+    var timer = null;
+    var width = 0;
+
+    function startProgress() {
+        width = 0;
+        bar.style.width = '0%';
+        bar.style.opacity = '1';
+        timer = setInterval(function () {
+            // Avanza velocemente fino a 80%, poi rallenta
+            var step = width < 50 ? 4 : width < 80 ? 1.5 : 0.3;
+            width = Math.min(width + step, 90);
+            bar.style.width = width + '%';
+        }, 80);
+    }
+
+    function finishProgress() {
+        clearInterval(timer);
+        bar.style.width = '100%';
+        setTimeout(function () { bar.style.opacity = '0'; }, 350);
+        setTimeout(function () { bar.style.width = '0%'; }, 750);
+    }
+
+    // Mostra barra dopo 80ms (evita flash su navigazioni veloci/cache)
+    document.querySelectorAll('.nav-item, .nav-subitem').forEach(function (link) {
+        link.addEventListener('click', function (e) {
+            var href = link.getAttribute('href');
+            if (!href || href === '#') return;
+            var delay = setTimeout(startProgress, 80);
+            // Se la pagina si carica prima — cancella il timer via beforeunload
+            window.addEventListener('beforeunload', function () {
+                clearTimeout(delay);
+            }, { once: true });
+        });
+    });
+
+    // Completa la barra quando la pagina è pronta
+    window.addEventListener('pageshow', finishProgress);
+})();
+</script>
 {% block scripts %}{% endblock %}
 </body>
 </html>
