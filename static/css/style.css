@@ -689,6 +689,7 @@ body {
 .stato-select[data-stato="Da valutare"]       { border-color: #9CA3AF; color: #6B7280; }
 .stato-select[data-stato="Da contattare"]     { border-color: #2563EB; color: #1D4ED8; }
 .stato-select[data-stato="Richiesta Inviata"] { border-color: #D97706; color: #92400E; }
+.stato-select[data-stato="Messaggio Inviato"] { border-color: #F59E0B; color: #B45309; }
 .stato-select[data-stato="Risposto"]          { border-color: #16A34A; color: #15803D; }
 .stato-select[data-stato="In valutazione"]    { border-color: #7C3AED; color: #6D28D9; }
 .stato-select[data-stato="Chiuso"]            { border-color: #DC2626; color: #B91C1C; }
@@ -704,6 +705,7 @@ body {
 .badge-stato-da-valutare        { background: #F3F4F6; color: #6B7280; }
 .badge-stato-da-contattare      { background: #DBEAFE; color: #1D4ED8; }
 .badge-stato-richiesta-inviata  { background: #FEF3C7; color: #D97706; }
+.badge-stato-messaggio-inviato  { background: #FDE68A; color: #B45309; }
 .badge-stato-risposto           { background: #DCFCE7; color: #16A34A; }
 .badge-stato-in-valutazione     { background: #F3E8FF; color: #7C3AED; }
 .badge-stato-chiuso             { background: #FEE2E2; color: #DC2626; }
