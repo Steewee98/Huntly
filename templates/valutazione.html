@@ -42,62 +42,42 @@
             </div>
         </div>
 
-        <!-- Toggle modalità input -->
+        <!-- Testo profilo (nascosto nel DOM, usato dal JS per l'analisi) -->
+        <textarea id="testo-profilo" class="hidden"></textarea>
+
+        <!-- Ricerca per nome -->
         <div class="form-group">
-            <div style="display:flex;gap:0.5rem;margin-bottom:1.25rem;">
-                <button id="tab-testo" class="btn btn-primary btn-sm" onclick="switchTab('testo')">
-                    &#128203; Incolla testo
-                </button>
-                <button id="tab-nome" class="btn btn-secondary btn-sm" onclick="switchTab('nome')">
-                    &#128269; Cerca per nome
-                </button>
+            <div class="form-row" style="margin-bottom:0.75rem;">
+                <div class="form-group">
+                    <label class="form-label">Nome</label>
+                    <input type="text" id="cerca-nome" class="form-input" placeholder="es. Mario">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Cognome</label>
+                    <input type="text" id="cerca-cognome" class="form-input" placeholder="es. Rossi">
+                </div>
             </div>
+            <button class="btn btn-outline" id="btn-cerca-nome" onclick="cercaPerNome()">
+                <span id="cerca-nome-testo">&#128269; Trova su LinkedIn</span>
+                <span id="cerca-nome-loading" class="hidden"><span class="spinner" style="border-top-color:var(--azzurro);border-color:rgba(46,124,246,0.3)"></span> Ricerca in corso...</span>
+            </button>
 
-            <!-- Tab: incolla testo -->
-            <div id="panel-testo">
-                <label class="form-label" for="testo-profilo">Testo Profilo LinkedIn</label>
-                <textarea id="testo-profilo" class="form-textarea"
-                          placeholder="Incolla qui il testo del profilo LinkedIn del candidato...
-
-Includi: nome, titolo, descrizione, esperienze lavorative, formazione, competenze."
-                          rows="12"></textarea>
+            <!-- Risultati ricerca per nome -->
+            <div id="risultati-nome" class="hidden" style="margin-top:1.25rem;">
+                <p style="font-size:0.85rem;color:var(--grigio-testo);margin-bottom:0.75rem;">
+                    Seleziona il profilo corretto e clicca Analizza:
+                </p>
+                <div id="lista-profili-nome" style="display:flex;flex-direction:column;gap:0.75rem;"></div>
             </div>
-
-            <!-- Tab: cerca per nome -->
-            <div id="panel-nome" class="hidden">
-                <div class="form-row" style="margin-bottom:0.75rem;">
-                    <div class="form-group">
-                        <label class="form-label">Nome</label>
-                        <input type="text" id="cerca-nome" class="form-input" placeholder="es. Mario">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Cognome</label>
-                        <input type="text" id="cerca-cognome" class="form-input" placeholder="es. Rossi">
-                    </div>
-                </div>
-                <button class="btn btn-outline" id="btn-cerca-nome" onclick="cercaPerNome()">
-                    <span id="cerca-nome-testo">&#128269; Trova su LinkedIn</span>
-                    <span id="cerca-nome-loading" class="hidden"><span class="spinner" style="border-top-color:var(--azzurro);border-color:rgba(46,124,246,0.3)"></span> Ricerca in corso...</span>
-                </button>
-
-                <!-- Risultati ricerca per nome -->
-                <div id="risultati-nome" class="hidden" style="margin-top:1.25rem;">
-                    <p style="font-size:0.85rem;color:var(--grigio-testo);margin-bottom:0.75rem;">
-                        Seleziona il profilo corretto:
-                    </p>
-                    <div id="lista-profili-nome" style="display:flex;flex-direction:column;gap:0.75rem;"></div>
-                </div>
-                <div id="nessun-profilo-nome" class="hidden alert alert-info" style="margin-top:1rem;">
-                    Nessun profilo trovato. Prova con un nome diverso.
-                </div>
+            <div id="nessun-profilo-nome" class="hidden alert alert-info" style="margin-top:1rem;">
+                Nessun profilo trovato. Prova con un nome diverso.
             </div>
         </div>
 
-        <button id="btn-analizza" class="btn btn-primary btn-lg" onclick="avviaAnalisi()">
-            <span id="btn-testo">&#9733; Analizza Profilo</span>
-            <span id="btn-loading" class="hidden">
-                <span class="spinner"></span> Analisi in corso...
-            </span>
+        <!-- Bottone analisi nascosto — usato dal JS per loading state e auto-avvio da sessionStorage -->
+        <button id="btn-analizza" class="hidden" onclick="avviaAnalisi()">
+            <span id="btn-testo"></span>
+            <span id="btn-loading" class="hidden"><span class="spinner"></span></span>
         </button>
     </div>
 </div>
@@ -418,19 +398,9 @@ Includi: nome, titolo, descrizione, esperienze lavorative, formazione, competenz
     if (testo) {
         sessionStorage.removeItem('profilo_da_analizzare');
         document.getElementById('testo-profilo').value = testo;
-        // Avvia analisi automaticamente dopo che la pagina è pronta
         setTimeout(avviaAnalisi, 300);
     }
 })();
-
-// ---- Tab incolla/cerca ----
-function switchTab(tab) {
-    const isProfilo = tab === 'testo';
-    document.getElementById('panel-testo').classList.toggle('hidden', !isProfilo);
-    document.getElementById('panel-nome').classList.toggle('hidden', isProfilo);
-    document.getElementById('tab-testo').className = 'btn btn-sm ' + (isProfilo ? 'btn-primary' : 'btn-secondary');
-    document.getElementById('tab-nome').className  = 'btn btn-sm ' + (!isProfilo ? 'btn-primary' : 'btn-secondary');
-}
 
 async function cercaPerNome() {
     const nome    = document.getElementById('cerca-nome').value.trim();
@@ -503,7 +473,7 @@ function renderProfilieNome(profili) {
                 ${linkedinLink}
             </div>
             <button class="btn btn-primary btn-sm" onclick='selezionaProfilo(${JSON.stringify(p).replace(/'/g,"&#39;")})'>
-                Seleziona
+                &#9733; Analizza
             </button>`;
         lista.appendChild(div);
     });
@@ -511,12 +481,9 @@ function renderProfilieNome(profili) {
 }
 
 function selezionaProfilo(p) {
-    // Pre-compila il textarea con il testo profilo costruito da Apify
+    // Imposta il testo profilo nel campo nascosto e avvia direttamente l'analisi
     document.getElementById('testo-profilo').value = p.testo_profilo || '';
-    // Torna al tab testo e scorre all'area di analisi
-    switchTab('testo');
-    document.getElementById('testo-profilo').scrollIntoView({ behavior: 'smooth' });
-    document.getElementById('testo-profilo').focus();
+    avviaAnalisi();
 }
 
 // ---- Tipo profilo toggle ----
