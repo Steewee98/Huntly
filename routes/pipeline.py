@@ -14,6 +14,9 @@ pipeline_bp = Blueprint("pipeline", __name__)
 # Stati disponibili nel processo di selezione
 STATI_VALIDI = ["Da valutare", "Da contattare", "Richiesta Inviata", "Risposto", "In valutazione", "Chiuso"]
 
+# Gestori disponibili
+GESTORI_VALIDI = ["Salvatore Sabia", "Firdaous Filahi", "Non assegnato"]
+
 
 @pipeline_bp.route("/pipeline")
 def index():
@@ -38,7 +41,8 @@ def index():
     return render_template(
         "pipeline.html",
         candidati=candidati_lista,
-        stati=STATI_VALIDI
+        stati=STATI_VALIDI,
+        gestori=GESTORI_VALIDI
     )
 
 
@@ -61,6 +65,27 @@ def aggiorna_stato():
     db.close()
 
     return jsonify({"successo": True, "stato": nuovo_stato})
+
+
+@pipeline_bp.route("/pipeline/aggiorna_gestore", methods=["POST"])
+def aggiorna_gestore():
+    """Endpoint AJAX per aggiornare il gestore di un candidato."""
+    dati = request.get_json()
+    candidato_id = dati.get("id")
+    nuovo_gestore = dati.get("gestore")
+
+    if nuovo_gestore not in GESTORI_VALIDI:
+        return jsonify({"errore": "Gestore non valido"}), 400
+
+    db = get_db()
+    db.execute(
+        "UPDATE candidati SET gestore = ?, data_aggiornamento = CURRENT_TIMESTAMP WHERE id = ?",
+        (nuovo_gestore, candidato_id),
+    )
+    db.commit()
+    db.close()
+
+    return jsonify({"successo": True, "gestore": nuovo_gestore})
 
 
 @pipeline_bp.route("/pipeline/followup/<int:candidato_id>", methods=["POST"])

@@ -33,6 +33,9 @@ def inserisci():
         flash("Nome e cognome sono obbligatori.", "errore")
         return redirect(url_for("candidati.index"))
 
+    # Gestore di default in base al profilo
+    gestore_default = "Salvatore Sabia" if tipo_profilo == "A" else ("Firdaous Filahi" if tipo_profilo == "B" else "Non assegnato")
+
     # Snapshot dei parametri usati per questa inserzione manuale
     parametri_str = json.dumps({
         'nome': nome,
@@ -55,9 +58,9 @@ def inserisci():
 
     cur = db.execute(
         """INSERT INTO candidati
-           (nome, cognome, ruolo_attuale, azienda, anni_esperienza, note, tipo_profilo, ricerca_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-        (nome, cognome, ruolo_attuale, azienda, anni_esperienza, note, tipo_profilo, ricerca_id),
+           (nome, cognome, ruolo_attuale, azienda, anni_esperienza, note, tipo_profilo, ricerca_id, gestore)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (nome, cognome, ruolo_attuale, azienda, anni_esperienza, note, tipo_profilo, ricerca_id, gestore_default),
     )
     db.commit()
     nuovo_id = cur.lastrowid
@@ -86,6 +89,9 @@ def da_cronologia():
     if not nome or not cognome:
         return jsonify({"errore": "Nome e cognome sono obbligatori"}), 400
 
+    # Gestore di default in base al profilo
+    gestore_default = "Salvatore Sabia" if tipo_profilo == "A" else ("Firdaous Filahi" if tipo_profilo == "B" else "Non assegnato")
+
     db = get_db()
 
     # Recupera i dati della valutazione per copiarli sul candidato
@@ -98,14 +104,15 @@ def da_cronologia():
     cur = db.execute(
         """INSERT INTO candidati
            (nome, cognome, ruolo_attuale, azienda, anni_esperienza, note, tipo_profilo,
-            punteggio, analisi, spunti, messaggio_outreach)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            punteggio, analisi, spunti, messaggio_outreach, gestore)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             nome, cognome, ruolo_attuale, azienda, anni_esperienza, note, tipo_profilo,
             val["punteggio"] if val else None,
             val["analisi"] if val else None,
             val["spunti"] if val else None,
             val["messaggio_outreach"] if val else None,
+            gestore_default,
         ),
     )
     db.commit()

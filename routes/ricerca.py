@@ -457,9 +457,10 @@ def _esegui_ricerca_background(job_id, tipo_profilo, max_profili, imp):
 
         for p in items_da_importare:
             testo = _costruisci_testo_profilo(p)
+            _gestore = "Salvatore Sabia" if tipo_profilo == "A" else ("Firdaous Filahi" if tipo_profilo == "B" else "Non assegnato")
             cur = db.execute(
-                "INSERT INTO candidati (nome, cognome, ruolo_attuale, azienda, profilo_linkedin, tipo_profilo, stato, note, ricerca_id) VALUES (?, ?, ?, ?, ?, ?, 'Da valutare', ?, ?)",
-                (p["nome"], p["cognome"], p["ruolo"], p["azienda"], p["linkedin"], tipo_profilo, p["headline"], ricerca_id)
+                "INSERT INTO candidati (nome, cognome, ruolo_attuale, azienda, profilo_linkedin, tipo_profilo, stato, note, ricerca_id, gestore) VALUES (?, ?, ?, ?, ?, ?, 'Da valutare', ?, ?, ?)",
+                (p["nome"], p["cognome"], p["ruolo"], p["azienda"], p["linkedin"], tipo_profilo, p["headline"], ricerca_id, _gestore)
             )
             db.commit()
             candidato_id = cur.lastrowid
@@ -753,15 +754,16 @@ def analizza_candidato():
         )
     else:
         # Crea nuovo candidato direttamente in pipeline come "Da contattare"
+        _gestore = "Salvatore Sabia" if tipo_profilo == "A" else ("Firdaous Filahi" if tipo_profilo == "B" else "Non assegnato")
         cur = db.execute(
             """INSERT INTO candidati
                (nome, cognome, ruolo_attuale, azienda, profilo_linkedin,
                 tipo_profilo, stato, punteggio, analisi, spunti,
-                messaggio_outreach, ricerca_id)
-               VALUES (?, ?, ?, ?, ?, ?, 'Da contattare', ?, ?, ?, ?, ?)""",
+                messaggio_outreach, ricerca_id, gestore)
+               VALUES (?, ?, ?, ?, ?, ?, 'Da contattare', ?, ?, ?, ?, ?, ?)""",
             (nome, cognome, ruolo_ai, azienda_ai, linkedin,
              tipo_profilo, punteggio, analisi_str,
-             spunti_json, messaggio_str, ricerca_id)
+             spunti_json, messaggio_str, ricerca_id, _gestore)
         )
         candidato_id = cur.lastrowid
 
@@ -945,12 +947,13 @@ def importa():
     if not nome and not cognome:
         return jsonify({"errore": "Nome o cognome mancante"}), 400
 
+    _gestore = "Salvatore Sabia" if tipo_profilo == "A" else ("Firdaous Filahi" if tipo_profilo == "B" else "Non assegnato")
     db = get_db()
     cur = db.execute(
         """INSERT INTO candidati
-           (nome, cognome, ruolo_attuale, azienda, profilo_linkedin, tipo_profilo, note)
-           VALUES (?, ?, ?, ?, ?, ?, ?)""",
-        (nome, cognome, ruolo_attuale, azienda, linkedin, tipo_profilo, note),
+           (nome, cognome, ruolo_attuale, azienda, profilo_linkedin, tipo_profilo, note, gestore)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+        (nome, cognome, ruolo_attuale, azienda, linkedin, tipo_profilo, note, _gestore),
     )
     db.commit()
     nuovo_id = cur.lastrowid

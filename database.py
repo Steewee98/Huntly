@@ -313,6 +313,10 @@ def init_db():
         "ALTER TABLE ricerche_automatiche ADD COLUMN IF NOT EXISTS fonte TEXT DEFAULT 'apify'",
         # Deduplicazione: indice su URL LinkedIn (partial — esclude NULL e stringa vuota)
         "CREATE INDEX IF NOT EXISTS idx_candidati_linkedin ON candidati(profilo_linkedin) WHERE profilo_linkedin IS NOT NULL AND profilo_linkedin <> ''",
+        # Percentuale avanzamento ricerca asincrona
+        "ALTER TABLE job_ricerche ADD COLUMN IF NOT EXISTS percentuale INTEGER DEFAULT 0",
+        # Gestore candidato
+        "ALTER TABLE candidati ADD COLUMN IF NOT EXISTS gestore TEXT DEFAULT 'Non assegnato'",
 
         # ── Indici per performance query ───────────────────────────────────
         "CREATE INDEX IF NOT EXISTS idx_candidati_tipo_profilo  ON candidati(tipo_profilo)",

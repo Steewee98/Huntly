@@ -619,6 +619,55 @@ body {
 .score-badge-medio { background: #FEF3C7; color: #D97706; }
 .score-badge-basso { background: #FEE2E2; color: #DC2626; }
 
+/* Badge gestore */
+.badge-gestore {
+    display: inline-block;
+    padding: 0.2rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.badge-gestore-sabia    { background: #1A2E4A; color: #fff; }
+.badge-gestore-filahi   { background: #B8860B; color: #fff; }
+.badge-gestore-nessuno  { background: #E5E7EB; color: #6B7280; }
+
+/* Filtri gestore */
+.filtri-gestore {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    margin-bottom: 1.25rem;
+    align-items: center;
+}
+.filtri-gestore span {
+    font-size: 0.8rem;
+    color: var(--grigio-testo);
+    margin-right: 0.25rem;
+}
+.btn-filtro {
+    padding: 0.3rem 0.9rem;
+    border: 1.5px solid #D1D5DB;
+    border-radius: 999px;
+    background: #fff;
+    font-size: 0.78rem;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.btn-filtro:hover { background: #F3F4F6; }
+.btn-filtro.attivo { background: #1A2E4A; color: #fff; border-color: #1A2E4A; }
+
+/* Select gestore */
+.gestore-select {
+    border: 1.5px solid var(--grigio-bordo);
+    border-radius: 6px;
+    padding: 0.25rem 0.5rem;
+    font-size: 0.78rem;
+    background: #fff;
+    cursor: pointer;
+    max-width: 140px;
+}
+
 /* Select stato */
 .stato-select {
     border: 1.5px solid var(--grigio-bordo);

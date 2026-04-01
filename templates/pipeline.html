@@ -18,6 +18,15 @@
 </div>
 {% else %}
 
+<!-- Filtri per gestore -->
+<div class="filtri-gestore">
+    <span>Gestore:</span>
+    <button class="btn-filtro attivo" onclick="filtraGestore('tutti', this)">Tutti</button>
+    {% for g in gestori %}
+    <button class="btn-filtro" onclick="filtraGestore('{{ g }}', this)">{{ g }}</button>
+    {% endfor %}
+</div>
+
 <!-- Tabella candidati -->
 <div class="card table-card">
     <div class="card-header">
@@ -33,12 +42,13 @@
                     <th>Profilo</th>
                     <th>Punteggio</th>
                     <th>Stato</th>
+                    <th>Gestore</th>
                     <th>Azioni</th>
                 </tr>
             </thead>
             <tbody>
                 {% for c in candidati %}
-                <tr id="row-{{ c.id }}">
+                <tr id="row-{{ c.id }}" data-gestore="{{ c.gestore or 'Non assegnato' }}">
                     <td>
                         <div class="candidato-nome">{{ c.nome }} {{ c.cognome }}</div>
                         <div class="candidato-meta">{{ c.data_inserimento[:10] if c.data_inserimento else '' }}</div>
@@ -70,6 +80,24 @@
                                     {% if c.stato == stato %}selected{% endif %}>
                                 {{ stato }}
                             </option>
+                            {% endfor %}
+                        </select>
+                    </td>
+                    <td>
+                        {% set g = c.gestore or 'Non assegnato' %}
+                        {% if g == 'Salvatore Sabia' %}
+                            {% set badge_cls = 'badge-gestore-sabia' %}
+                        {% elif g == 'Firdaous Filahi' %}
+                            {% set badge_cls = 'badge-gestore-filahi' %}
+                        {% else %}
+                            {% set badge_cls = 'badge-gestore-nessuno' %}
+                        {% endif %}
+                        <span class="badge-gestore {{ badge_cls }}" id="gestore-badge-{{ c.id }}">{{ g }}</span>
+                        <br>
+                        <select class="gestore-select" data-id="{{ c.id }}"
+                                onchange="aggiornaGestore(this)" style="margin-top:0.3rem">
+                            {% for gestore in gestori %}
+                            <option value="{{ gestore }}" {% if g == gestore %}selected{% endif %}>{{ gestore }}</option>
                             {% endfor %}
                         </select>
                     </td>
@@ -148,6 +176,59 @@ let candidatiData = [];
 try {
     candidatiData = JSON.parse(document.getElementById('candidati-data').textContent);
 } catch(e) { console.error('[pipeline] JSON.parse candidati-data:', e); }
+
+// Mappa gestore → classe badge CSS
+const GESTORE_BADGE = {
+    'Salvatore Sabia': 'badge-gestore-sabia',
+    'Firdaous Filahi': 'badge-gestore-filahi',
+    'Non assegnato':   'badge-gestore-nessuno'
+};
+
+async function aggiornaGestore(select) {
+    const id = select.dataset.id;
+    const gestore = select.value;
+
+    try {
+        const risposta = await fetch('/pipeline/aggiorna_gestore', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, gestore })
+        });
+        if (risposta.ok) {
+            // Aggiorna badge
+            const badge = document.getElementById(`gestore-badge-${id}`);
+            if (badge) {
+                badge.textContent = gestore;
+                badge.className = 'badge-gestore ' + (GESTORE_BADGE[gestore] || 'badge-gestore-nessuno');
+            }
+            // Aggiorna data-gestore sulla riga per il filtro
+            const row = document.getElementById(`row-${id}`);
+            if (row) row.dataset.gestore = gestore;
+
+            select.classList.add('select-saved');
+            setTimeout(() => select.classList.remove('select-saved'), 1500);
+        }
+    } catch(e) { console.error('[pipeline] aggiornaGestore fetch error:', e); }
+}
+
+let filtroGestoreAttivo = 'tutti';
+
+function filtraGestore(gestore, btn) {
+    filtroGestoreAttivo = gestore;
+
+    // Aggiorna pulsanti
+    document.querySelectorAll('.btn-filtro').forEach(b => b.classList.remove('attivo'));
+    btn.classList.add('attivo');
+
+    // Mostra/nascondi righe
+    document.querySelectorAll('tbody tr').forEach(row => {
+        if (gestore === 'tutti' || row.dataset.gestore === gestore) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+}
 
 async function aggiornaStato(select) {
     const id = select.dataset.id;
