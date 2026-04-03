@@ -43,6 +43,7 @@
                     <th>Punteggio</th>
                     <th>Stato</th>
                     <th>Gestore</th>
+                    <th>Prossimo App.</th>
                     <th>Azioni</th>
                 </tr>
             </thead>
@@ -102,6 +103,15 @@
                         </select>
                     </td>
                     <td>
+                        {% set papp = prossimi_app.get(c.id) %}
+                        {% if papp %}
+                            <div style="font-size:0.82rem;font-weight:600;color:var(--testo);">{{ papp[:10] }}</div>
+                            <div class="candidato-meta">{{ papp[11:16] }}</div>
+                        {% else %}
+                            <span class="text-muted" style="font-size:0.8rem;">—</span>
+                        {% endif %}
+                    </td>
+                    <td>
                         <div class="azioni-group">
                             {% if c.analisi %}
                             <button class="btn btn-outline btn-xs"
@@ -116,6 +126,8 @@
                                     onclick="generaFollowup({{ c.id }}, '{{ c.nome }} {{ c.cognome }}')">
                                 Follow-up
                             </button>
+                            <a href="/calendario?candidato_id={{ c.id }}&open=1"
+                               class="btn btn-outline btn-xs">&#128197;</a>
                             <button class="btn btn-danger btn-xs"
                                     onclick="eliminaCandidato({{ c.id }}, '{{ c.nome }} {{ c.cognome }}')">
                                 &#215;

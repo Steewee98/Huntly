@@ -1,0 +1,425 @@
+{% extends "base.html" %}
+{% block title %}Calendario — SABIA{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Calendario</h1>
+        <p class="page-subtitle">Appuntamenti con i candidati</p>
+    </div>
+    <button class="btn btn-primary" onclick="apriModalNuovo()">+ Nuovo Appuntamento</button>
+</div>
+
+<!-- Calendario mensile -->
+<div class="card" style="margin-bottom:1.5rem;">
+    <div class="card-body" style="padding:1.25rem;">
+        <div class="cal-nav">
+            <button class="btn btn-outline btn-sm" onclick="cambaMese(-1)">&#8249; Prec</button>
+            <span class="cal-mese" id="cal-titolo-mese"></span>
+            <button class="btn btn-outline btn-sm" onclick="cambaMese(1)">Succ &#8250;</button>
+        </div>
+        <div class="cal-grid" id="cal-grid">
+            <div class="cal-dow">Lun</div>
+            <div class="cal-dow">Mar</div>
+            <div class="cal-dow">Mer</div>
+            <div class="cal-dow">Gio</div>
+            <div class="cal-dow">Ven</div>
+            <div class="cal-dow">Sab</div>
+            <div class="cal-dow">Dom</div>
+        </div>
+        <div id="cal-dettaglio" class="hidden" style="margin-top:1rem;">
+            <div class="cal-popup">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+                    <h4 id="cal-dettaglio-titolo" style="font-size:0.95rem;font-weight:700;"></h4>
+                    <button class="btn btn-outline btn-xs" onclick="nascondi('cal-dettaglio')">✕</button>
+                </div>
+                <div id="cal-dettaglio-body"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Lista appuntamenti -->
+<div class="card">
+    <div class="card-header">
+        <h3>Tutti gli Appuntamenti</h3>
+        <div style="display:flex;gap:0.5rem;align-items:center;">
+            <select id="filtro-stato-cal" class="form-input form-select" style="padding:0.3rem 0.6rem;font-size:0.85rem;height:auto;" onchange="filtraLista()">
+                <option value="">Tutti gli stati</option>
+                {% for s in stati %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+            </select>
+            <select id="filtro-gestore-cal" class="form-input form-select" style="padding:0.3rem 0.6rem;font-size:0.85rem;height:auto;" onchange="filtraLista()">
+                <option value="">Tutti i gestori</option>
+                {% for g in gestori %}<option value="{{ g }}">{{ g }}</option>{% endfor %}
+            </select>
+        </div>
+    </div>
+
+    {% if appuntamenti %}
+    <div class="table-responsive">
+        <table class="data-table" id="tabella-appuntamenti">
+            <thead>
+                <tr>
+                    <th>Data / Ora</th>
+                    <th>Tipo</th>
+                    <th>Candidato</th>
+                    <th>Gestore</th>
+                    <th>Note</th>
+                    <th>Stato</th>
+                    <th>Azioni</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for a in appuntamenti %}
+                <tr data-stato="{{ a.stato }}" data-gestore="{{ a.gestore }}">
+                    <td style="white-space:nowrap;">
+                        <div style="font-weight:600;">{{ a.data_ora[:10] if a.data_ora else '—' }}</div>
+                        <div class="candidato-meta">{{ a.data_ora[11:16] if a.data_ora else '' }}</div>
+                    </td>
+                    <td>
+                        <span class="badge-tipo-app badge-tipo-{{ a.tipo | lower | replace(' ', '-') }}">
+                            {{ a.tipo }}
+                        </span>
+                    </td>
+                    <td>{{ a.candidato_nome or '—' }}</td>
+                    <td>
+                        {% if a.gestore == 'Salvatore Sabia' %}
+                            <span class="badge-gestore badge-gestore-sabia">{{ a.gestore }}</span>
+                        {% else %}
+                            <span class="badge-gestore badge-gestore-filahi">{{ a.gestore }}</span>
+                        {% endif %}
+                    </td>
+                    <td style="font-size:0.82rem;color:var(--grigio-testo);max-width:200px;">{{ a.note or '—' }}</td>
+                    <td>
+                        <span class="badge-stato-app badge-stato-app-{{ a.stato | lower | replace(' ', '-') }}">
+                            {{ a.stato }}
+                        </span>
+                    </td>
+                    <td>
+                        <div class="azioni-group">
+                            <button class="btn btn-outline btn-xs" onclick="apriModalModifica({{ a.id }})">Modifica</button>
+                            <button class="btn btn-danger btn-xs" onclick="eliminaAppuntamento({{ a.id }})">✕</button>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="card-body">
+        <div class="empty-state" style="padding:2rem;">
+            <div class="empty-icon">&#128197;</div>
+            <p>Nessun appuntamento ancora. Crea il primo con il bottone "+ Nuovo Appuntamento".</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Modal nuovo/modifica appuntamento -->
+<div id="modal-appuntamento" class="modal-overlay hidden" onclick="if(event.target===this)chiudiModalApp()">
+    <div class="modal">
+        <div class="modal-header">
+            <h3 id="modal-app-titolo">Nuovo Appuntamento</h3>
+            <button class="modal-close" onclick="chiudiModalApp()">&times;</button>
+        </div>
+        <div class="modal-body" style="overflow-y:auto;">
+            <input type="hidden" id="app-edit-id">
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Data e Ora <span class="required">*</span></label>
+                    <input type="datetime-local" id="app-data-ora" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Tipo <span class="required">*</span></label>
+                    <select id="app-tipo" class="form-input form-select">
+                        {% for t in tipi %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Candidato</label>
+                <select id="app-candidato" class="form-input form-select">
+                    <option value="">— Nessun candidato —</option>
+                    {% for c in candidati %}
+                    <option value="{{ c.id }}">{{ c.cognome }} {{ c.nome }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Gestore <span class="required">*</span></label>
+                <select id="app-gestore" class="form-input form-select">
+                    {% for g in gestori %}<option value="{{ g }}">{{ g }}</option>{% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Stato</label>
+                <select id="app-stato" class="form-input form-select">
+                    {% for s in stati %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label class="form-label">Note</label>
+                <textarea id="app-note" class="form-textarea" rows="3" placeholder="Argomenti da trattare, link, ecc."></textarea>
+            </div>
+
+            <div id="app-errore" class="hidden alert alert-errore"></div>
+
+            <div class="form-actions">
+                <button class="btn btn-primary" onclick="salvaAppuntamento()">
+                    <span id="app-btn-testo">Salva</span>
+                    <span id="app-btn-loading" class="hidden"><span class="spinner"></span></span>
+                </button>
+                <button class="btn btn-outline" onclick="chiudiModalApp()">Annulla</button>
+                <button id="app-btn-elimina" class="btn btn-danger hidden" onclick="eliminaAppuntamentoDaModal()">Elimina</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Dati appuntamenti per JS -->
+<script id="appuntamenti-data" type="application/json">{{ appuntamenti | tojson }}</script>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let appuntamentiData = [];
+try { appuntamentiData = JSON.parse(document.getElementById('appuntamenti-data').textContent); }
+catch(e) { console.error('[calendario] parse appuntamenti:', e); }
+
+const MESI = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno',
+              'Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+const NOMI_MESI_BREVI = ['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+
+let calAnno  = new Date().getFullYear();
+let calMese  = new Date().getMonth();
+
+// Avvio
+renderCalendar();
+
+// Auto-apri modal se ?open=1 (es. da pipeline "Fissa Appuntamento")
+(function() {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('open') === '1') {
+        const cid = params.get('candidato_id') || '';
+        apriModalNuovo(cid);
+    }
+})();
+
+function cambaMese(delta) {
+    calMese += delta;
+    if (calMese > 11) { calMese = 0; calAnno++; }
+    if (calMese < 0)  { calMese = 11; calAnno--; }
+    nascondi('cal-dettaglio');
+    renderCalendar();
+}
+
+function renderCalendar() {
+    document.getElementById('cal-titolo-mese').textContent = MESI[calMese] + ' ' + calAnno;
+
+    // Rimuovi celle giorno precedenti (mantieni le 7 intestazioni)
+    const grid = document.getElementById('cal-grid');
+    grid.querySelectorAll('.cal-day').forEach(c => c.remove());
+
+    const oggi = new Date();
+    const giorniNelMese = new Date(calAnno, calMese + 1, 0).getDate();
+    // Offset lunedì-based: 0=Lun .. 6=Dom
+    const primoGiorno = new Date(calAnno, calMese, 1).getDay();
+    const offset = (primoGiorno === 0) ? 6 : primoGiorno - 1;
+
+    // Celle mese precedente
+    for (let i = 0; i < offset; i++) {
+        const d = new Date(calAnno, calMese, -offset + i + 1);
+        grid.appendChild(creaCella(d.getDate(), false, null));
+    }
+
+    // Celle mese corrente
+    for (let g = 1; g <= giorniNelMese; g++) {
+        const dataStr = `${calAnno}-${pad(calMese+1)}-${pad(g)}`;
+        const isOggi = (g === oggi.getDate() && calMese === oggi.getMonth() && calAnno === oggi.getFullYear());
+        const eventi = appuntamentiData.filter(a => a.data_ora && a.data_ora.startsWith(dataStr));
+        grid.appendChild(creaCella(g, true, dataStr, eventi, isOggi));
+    }
+
+    // Celle mese successivo
+    const totalCells = offset + giorniNelMese;
+    const remaining = (7 - (totalCells % 7)) % 7;
+    for (let i = 1; i <= remaining; i++) {
+        grid.appendChild(creaCella(i, false, null));
+    }
+}
+
+function creaCella(num, corrente, dataStr, eventi, isOggi) {
+    const div = document.createElement('div');
+    div.className = 'cal-day' + (corrente ? '' : ' altro-mese') + (isOggi ? ' oggi' : '');
+    if (corrente && dataStr) {
+        div.dataset.data = dataStr;
+        div.onclick = () => mostraGiorno(dataStr);
+    }
+
+    // Numero giorno
+    const numEl = document.createElement('div');
+    numEl.className = 'cal-day-num';
+    numEl.textContent = num;
+    div.appendChild(numEl);
+
+    // Chips eventi (max 2 visibili)
+    if (eventi && eventi.length > 0) {
+        const visible = eventi.slice(0, 2);
+        visible.forEach(ev => {
+            const chip = document.createElement('span');
+            chip.className = 'cal-event ' + getEventClass(ev);
+            chip.textContent = (ev.data_ora ? ev.data_ora.substr(11,5) + ' ' : '') + ev.tipo.split(' ')[0];
+            chip.title = `${ev.tipo} — ${ev.candidato_nome || ''}\n${ev.note || ''}`;
+            chip.onclick = e => { e.stopPropagation(); apriModalModifica(ev.id); };
+            div.appendChild(chip);
+        });
+        if (eventi.length > 2) {
+            const more = document.createElement('span');
+            more.className = 'cal-event cal-event-altro';
+            more.textContent = '+' + (eventi.length - 2);
+            div.appendChild(more);
+        }
+    }
+    return div;
+}
+
+function getEventClass(ev) {
+    if (ev.stato === 'Annullato') return 'cal-event-annullato';
+    if (ev.stato === 'Completato') return 'cal-event-completato';
+    if (ev.tipo === 'Chiamata') return 'cal-event-chiamata';
+    if (ev.tipo === 'Video call') return 'cal-event-video';
+    return 'cal-event-incontro';
+}
+
+function mostraGiorno(dataStr) {
+    document.querySelectorAll('.cal-day.selezionato').forEach(d => d.classList.remove('selezionato'));
+    const cella = document.querySelector(`.cal-day[data-data="${dataStr}"]`);
+    if (cella) cella.classList.add('selezionato');
+
+    const eventi = appuntamentiData.filter(a => a.data_ora && a.data_ora.startsWith(dataStr));
+    const [anno, mese, giorno] = dataStr.split('-');
+    document.getElementById('cal-dettaglio-titolo').textContent =
+        `${parseInt(giorno)} ${MESI[parseInt(mese)-1]} ${anno}`;
+
+    const body = document.getElementById('cal-dettaglio-body');
+    if (eventi.length === 0) {
+        body.innerHTML = '<p style="color:var(--grigio-testo);font-size:0.85rem;">Nessun appuntamento in questo giorno.</p>';
+    } else {
+        body.innerHTML = eventi.map(ev => `
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;padding:0.6rem 0;border-bottom:1px solid var(--grigio-bordo);">
+                <div>
+                    <span style="font-weight:600;font-size:0.9rem;">${ev.data_ora ? ev.data_ora.substr(11,5) : ''}</span>
+                    <span class="badge-tipo-app badge-tipo-${ev.tipo.toLowerCase().replace(/ /g,'-')}" style="margin-left:0.4rem;">${ev.tipo}</span>
+                    <div style="font-size:0.82rem;color:var(--grigio-testo);margin-top:2px;">${ev.candidato_nome || ''} — ${ev.gestore}</div>
+                    ${ev.note ? `<div style="font-size:0.8rem;color:var(--grigio-testo);margin-top:2px;">${ev.note}</div>` : ''}
+                </div>
+                <button class="btn btn-outline btn-xs" onclick="apriModalModifica(${ev.id})">Modifica</button>
+            </div>`).join('');
+    }
+
+    mostra('cal-dettaglio');
+    document.getElementById('cal-dettaglio').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+// ---- Modal appuntamento ----
+function apriModalNuovo(candidatoIdPre) {
+    document.getElementById('modal-app-titolo').textContent = 'Nuovo Appuntamento';
+    document.getElementById('app-edit-id').value = '';
+    document.getElementById('app-data-ora').value = '';
+    document.getElementById('app-tipo').value = 'Chiamata';
+    document.getElementById('app-candidato').value = candidatoIdPre || '';
+    document.getElementById('app-gestore').value = 'Salvatore Sabia';
+    document.getElementById('app-stato').value = 'Da fare';
+    document.getElementById('app-note').value = '';
+    nascondi('app-errore');
+    nascondi('app-btn-elimina');
+    mostra('modal-appuntamento');
+}
+
+function apriModalModifica(id) {
+    const ev = appuntamentiData.find(a => a.id === id);
+    if (!ev) return;
+    document.getElementById('modal-app-titolo').textContent = 'Modifica Appuntamento';
+    document.getElementById('app-edit-id').value = id;
+    // datetime-local vuole YYYY-MM-DDTHH:MM
+    document.getElementById('app-data-ora').value = ev.data_ora ? ev.data_ora.substr(0,16).replace(' ','T') : '';
+    document.getElementById('app-tipo').value = ev.tipo || 'Chiamata';
+    document.getElementById('app-candidato').value = ev.candidato_id || '';
+    document.getElementById('app-gestore').value = ev.gestore || 'Salvatore Sabia';
+    document.getElementById('app-stato').value = ev.stato || 'Da fare';
+    document.getElementById('app-note').value = ev.note || '';
+    nascondi('app-errore');
+    mostra('app-btn-elimina');
+    mostra('modal-appuntamento');
+}
+
+function chiudiModalApp() { nascondi('modal-appuntamento'); }
+
+async function salvaAppuntamento() {
+    const editId = document.getElementById('app-edit-id').value;
+    const payload = {
+        candidato_id: document.getElementById('app-candidato').value || null,
+        gestore:   document.getElementById('app-gestore').value,
+        tipo:      document.getElementById('app-tipo').value,
+        data_ora:  document.getElementById('app-data-ora').value,
+        note:      document.getElementById('app-note').value,
+        stato:     document.getElementById('app-stato').value
+    };
+
+    if (!payload.data_ora || !payload.gestore || !payload.tipo) {
+        document.getElementById('app-errore').textContent = 'Compila data/ora, tipo e gestore.';
+        mostra('app-errore'); return;
+    }
+
+    document.getElementById('app-btn-testo').classList.add('hidden');
+    document.getElementById('app-btn-loading').classList.remove('hidden');
+
+    const url = editId ? `/calendario/aggiorna/${editId}` : '/calendario/nuovo';
+    try {
+        const resp = await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+        });
+        const dati = await jsonSicuro(resp);
+        if (!resp.ok) throw new Error(dati.errore || 'Errore');
+        window.location.reload();
+    } catch(e) {
+        document.getElementById('app-errore').textContent = 'Errore: ' + e.message;
+        mostra('app-errore');
+    } finally {
+        document.getElementById('app-btn-testo').classList.remove('hidden');
+        document.getElementById('app-btn-loading').classList.add('hidden');
+    }
+}
+
+async function eliminaAppuntamento(id) {
+    if (!confirm('Eliminare questo appuntamento?')) return;
+    const resp = await fetch(`/calendario/elimina/${id}`, { method: 'DELETE' });
+    if (resp.ok) window.location.reload();
+}
+
+async function eliminaAppuntamentoDaModal() {
+    const id = document.getElementById('app-edit-id').value;
+    if (id) await eliminaAppuntamento(parseInt(id));
+}
+
+function filtraLista() {
+    const statoFiltro   = document.getElementById('filtro-stato-cal').value;
+    const gestoreFiltro = document.getElementById('filtro-gestore-cal').value;
+    document.querySelectorAll('#tabella-appuntamenti tbody tr').forEach(tr => {
+        const okStato   = !statoFiltro   || tr.dataset.stato   === statoFiltro;
+        const okGestore = !gestoreFiltro || tr.dataset.gestore === gestoreFiltro;
+        tr.style.display = (okStato && okGestore) ? '' : 'none';
+    });
+}
+
+function pad(n) { return String(n).padStart(2, '0'); }
+</script>
+{% endblock %}

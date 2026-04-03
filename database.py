@@ -318,6 +318,18 @@ def init_db():
         # Gestore candidato
         "ALTER TABLE candidati ADD COLUMN IF NOT EXISTS gestore TEXT DEFAULT 'Non assegnato'",
 
+        # ── Tabella appuntamenti ────────────────────────────────────────────
+        """CREATE TABLE IF NOT EXISTS appuntamenti (
+    id              SERIAL PRIMARY KEY,
+    candidato_id    INTEGER,
+    gestore         TEXT NOT NULL,
+    tipo            TEXT NOT NULL,
+    data_ora        TIMESTAMP NOT NULL,
+    note            TEXT,
+    stato           TEXT DEFAULT 'Da fare',
+    data_creazione  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)""",
+
         # ── Indici per performance query ───────────────────────────────────
         "CREATE INDEX IF NOT EXISTS idx_candidati_tipo_profilo  ON candidati(tipo_profilo)",
         "CREATE INDEX IF NOT EXISTS idx_candidati_stato          ON candidati(stato)",

@@ -67,6 +67,11 @@
             <span class="nav-icon">&#9776;</span>
             <span>Pipeline Candidati</span>
         </a>
+        <a href="{{ url_for('calendario.index') }}"
+           class="nav-item {% if request.blueprint == 'calendario' %}active{% endif %}">
+            <span class="nav-icon">&#128197;</span>
+            <span>Calendario</span>
+        </a>
         <a href="{{ url_for('contenuti.index') }}"
            class="nav-item {% if request.blueprint == 'contenuti' %}active{% endif %}">
             <span class="nav-icon">&#9998;</span>
@@ -92,6 +97,12 @@
             {% endfor %}
         {% endif %}
     {% endwith %}
+
+    <!-- Banner promemoria appuntamenti -->
+    <div id="banner-promemoria" class="banner-promemoria hidden">
+        <span id="banner-testo">&#128197; Hai <strong id="banner-count">0</strong> appuntamenti nelle prossime 24 ore</span>
+        <a href="/calendario">Vai al Calendario &rarr;</a>
+    </div>
 
     {% block content %}{% endblock %}
 </main>
@@ -137,6 +148,19 @@
 
     // Completa la barra quando la pagina è pronta
     window.addEventListener('pageshow', finishProgress);
+})();
+</script>
+<script>
+(function() {
+    fetch('/calendario/prossimi')
+        .then(r => r.json())
+        .then(function(d) {
+            if (d.totale > 0) {
+                document.getElementById('banner-count').textContent = d.totale;
+                document.getElementById('banner-promemoria').classList.remove('hidden');
+            }
+        })
+        .catch(function() {});
 })();
 </script>
 {% block scripts %}{% endblock %}

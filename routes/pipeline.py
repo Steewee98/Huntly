@@ -25,7 +25,6 @@ def index():
     candidati = db.execute(
         "SELECT * FROM candidati ORDER BY data_aggiornamento DESC"
     ).fetchall()
-    db.close()
 
     # Converti Row in dizionari per passarli al template
     candidati_lista = [dict(c) for c in candidati]
@@ -38,11 +37,28 @@ def index():
             except Exception:
                 c["spunti"] = []
 
+    # Prossimo appuntamento per ogni candidato
+    prossimi_app = {}
+    try:
+        righe = db.execute(
+            """SELECT candidato_id, MIN(data_ora) as prossimo
+               FROM appuntamenti
+               WHERE stato = 'Da fare' AND data_ora >= CURRENT_TIMESTAMP
+               GROUP BY candidato_id"""
+        ).fetchall()
+        for r in righe:
+            prossimi_app[r['candidato_id']] = r['prossimo']
+    except Exception:
+        pass
+
+    db.close()
+
     return render_template(
         "pipeline.html",
         candidati=candidati_lista,
         stati=STATI_VALIDI,
-        gestori=GESTORI_VALIDI
+        gestori=GESTORI_VALIDI,
+        prossimi_app=prossimi_app
     )
 
 
