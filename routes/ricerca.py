@@ -313,7 +313,7 @@ def cerca():
     with concurrent.futures.ThreadPoolExecutor(max_workers=1) as _pool:
         _fut = _pool.submit(cerca_apify, ruolo, citta, paese, azienda, parole_chiave, num_pagine)
         try:
-            items, errore = _fut.result(timeout=150)
+            items, errore = _fut.result(timeout=100)
         except concurrent.futures.TimeoutError:
             return jsonify({"errore": "La ricerca ha impiegato troppo tempo. Prova con meno pagine o criteri più specifici."}), 408
 

@@ -61,7 +61,12 @@ def home():
 
 # Inizializza il database all'avvio dell'app
 with app.app_context():
-    init_db()
+    try:
+        init_db()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error("ERRORE INIT DB: %s", e, exc_info=True)
+        print(f"ERRORE INIT DB: {e}")
 
 
 @app.route("/admin/init-db")
