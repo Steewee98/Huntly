@@ -6,7 +6,6 @@ e le importa nella pipeline.
 
 import io
 import csv
-import concurrent.futures
 import json
 import os
 import time
@@ -26,11 +25,13 @@ APIFY_BASE  = "https://api.apify.com/v2"
 
 
 def cerca_apify(ruolo, citta="", paese="", azienda="", parole_chiave="", num_pagine=1,
-                ruoli_lista=None, forza_italia=True):
+                ruoli_lista=None, forza_italia=True, progress_cb=None):
     """
-    Avvia una run dell'actor Apify e attende i risultati.
-    ruoli_lista: lista di titoli alternativi (usa al posto di ruolo se fornita).
-    forza_italia: se True e nessuna città/paese specificato, aggiunge Italy come filtro.
+    Flusso asincrono Apify in due step:
+      STEP 1 — POST /acts/{actor}/runs  → avvia run, ottieni run_id
+      STEP 2 — GET  /actor-runs/{id}    → poll ogni 5s finché SUCCEEDED
+      STEP 3 — GET  /datasets/{id}/items → recupera risultati (max 10)
+    progress_cb(pct, messaggio) viene chiamata ad ogni step se fornita.
     Restituisce (lista_profili, errore).
     """
     api_key = os.environ.get("APIFY_API_KEY", "")
@@ -40,6 +41,7 @@ def cerca_apify(ruolo, citta="", paese="", azienda="", parole_chiave="", num_pag
     run_input = {
         "takePages": num_pagine,
         "startPage": 1,
+        "maxResults": 10,   # max 10 risultati per ricerca
     }
 
     # Titoli di lavoro correnti — usa lista se fornita, altrimenti singolo ruolo
@@ -65,15 +67,73 @@ def cerca_apify(ruolo, citta="", paese="", azienda="", parole_chiave="", num_pag
     if azienda:
         run_input["currentCompanies"] = [azienda]
 
+    # ── STEP 1: Avvia run (non blocca) ────────────────────────────────────────
+    if progress_cb:
+        progress_cb(0, "Avvio ricerca Apify")
+
     try:
         resp = requests.post(
-            f"{APIFY_BASE}/acts/{APIFY_ACTOR}/run-sync-get-dataset-items",
+            f"{APIFY_BASE}/acts/{APIFY_ACTOR}/runs",
             json=run_input,
-            params={"token": api_key, "timeout": 120},
-            timeout=130,
+            params={"token": api_key},
+            timeout=30,
         )
         resp.raise_for_status()
-        items = resp.json()
+        run_data   = resp.json()["data"]
+        run_id     = run_data["id"]
+        dataset_id = run_data["defaultDatasetId"]
+    except requests.exceptions.HTTPError:
+        return None, f"Errore avvio ricerca Apify: {resp.status_code} — {resp.text[:300]}"
+    except requests.exceptions.RequestException as e:
+        return None, f"Errore avvio ricerca: {str(e)}"
+
+    # ── STEP 2: Poll ogni 5s — max 3 minuti ──────────────────────────────────
+    if progress_cb:
+        progress_cb(20, "Ricerca in corso su LinkedIn")
+
+    max_wait      = 180   # 3 minuti
+    poll_interval = 5
+    elapsed       = 0
+
+    while elapsed < max_wait:
+        time.sleep(poll_interval)
+        elapsed += poll_interval
+
+        try:
+            status_resp = requests.get(
+                f"{APIFY_BASE}/actor-runs/{run_id}",
+                params={"token": api_key},
+                timeout=10,
+            )
+            status_resp.raise_for_status()
+            run_status = status_resp.json()["data"]
+            status     = run_status.get("status", "")
+
+            if status == "SUCCEEDED":
+                dataset_id = run_status.get("defaultDatasetId", dataset_id)
+                break
+            elif status in ("FAILED", "TIMED-OUT", "ABORTED"):
+                return None, f"Ricerca Apify terminata con stato: {status}"
+            # RUNNING / READY → continua il polling
+
+        except requests.exceptions.RequestException:
+            # Errore temporaneo di rete: riprova al prossimo ciclo
+            pass
+    else:
+        return None, "Timeout: la ricerca ha impiegato più di 3 minuti. Riprova con criteri più specifici."
+
+    # ── STEP 3: Recupera risultati dal dataset ────────────────────────────────
+    if progress_cb:
+        progress_cb(50, "Elaborazione risultati")
+
+    try:
+        items_resp = requests.get(
+            f"{APIFY_BASE}/datasets/{dataset_id}/items",
+            params={"token": api_key, "limit": 10},
+            timeout=30,
+        )
+        items_resp.raise_for_status()
+        items = items_resp.json()
 
         if isinstance(items, list):
             return items, None
@@ -82,9 +142,9 @@ def cerca_apify(ruolo, citta="", paese="", azienda="", parole_chiave="", num_pag
         return [], None
 
     except requests.exceptions.HTTPError:
-        return None, f"Errore API Apify: {resp.status_code} — {resp.text[:300]}"
+        return None, f"Errore recupero risultati: {items_resp.status_code} — {items_resp.text[:200]}"
     except requests.exceptions.RequestException as e:
-        return None, f"Errore di connessione: {str(e)}"
+        return None, f"Errore recupero risultati: {str(e)}"
 
 
 def _str(val) -> str:
@@ -307,16 +367,7 @@ def cerca():
     if not ruolo and not parole_chiave:
         return jsonify({"errore": "Inserisci almeno il ruolo o delle parole chiave"}), 400
 
-    # Timeout wall-clock garantito: Apify a volte blocca la connessione SSL
-    # senza rispondere, bypassando il timeout di requests. concurrent.futures
-    # impone un limite assoluto di 150s indipendentemente dal comportamento del socket.
-    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as _pool:
-        _fut = _pool.submit(cerca_apify, ruolo, citta, paese, azienda, parole_chiave, num_pagine)
-        try:
-            items, errore = _fut.result(timeout=100)
-        except concurrent.futures.TimeoutError:
-            return jsonify({"errore": "La ricerca ha impiegato troppo tempo. Prova con meno pagine o criteri più specifici."}), 408
-
+    items, errore = cerca_apify(ruolo, citta, paese, azienda, parole_chiave, num_pagine)
     if errore:
         return jsonify({"errore": errore}), 500
 
@@ -377,7 +428,7 @@ def _esegui_ricerca_background(job_id, tipo_profilo, max_profili, imp):
         db.commit()
 
     try:
-        aggiorna(status='in_corso', step='Connessione ad Apify...', pct=10)
+        aggiorna(status='in_corso', step='Avvio ricerca Apify', pct=0)
 
         ruoli_raw        = imp.get("ruoli_target", "") or ""
         ruoli            = [r.strip() for r in ruoli_raw.split(",") if r.strip()]
@@ -397,10 +448,12 @@ def _esegui_ricerca_background(job_id, tipo_profilo, max_profili, imp):
             'location': 'Italy',
         }, ensure_ascii=False)
 
-        aggiorna(step='Ricerca profili su LinkedIn (Italy)...', pct=25)
+        def _progress(pct, step):
+            aggiorna(step=step, pct=pct)
+
         items, errore = cerca_apify(
             ruolo_principale, "", "", "", keywords, num_pagine,
-            ruoli_lista=ruoli, forza_italia=True
+            ruoli_lista=ruoli, forza_italia=True, progress_cb=_progress
         )
 
         if errore:
@@ -422,7 +475,7 @@ def _esegui_ricerca_background(job_id, tipo_profilo, max_profili, imp):
         motivi_qualita: dict = {}
         motivi_filtro:  dict = {}
 
-        aggiorna(step=f'{trovati_apify} profili trovati da Apify. Filtraggio in corso...', pct=50)
+        aggiorna(step=f'{trovati_apify} profili trovati. Filtraggio candidati...', pct=70)
 
         # ── Pipeline di filtraggio ─────────────────────────────────────────────
         # 1. Qualità (profili vuoti / non italiani)
@@ -456,7 +509,7 @@ def _esegui_ricerca_background(job_id, tipo_profilo, max_profili, imp):
                 break
 
         trovati_filtrati = len(items_da_importare)
-        aggiorna(step=f'Filtraggio completato. Importazione {trovati_filtrati} candidati...', pct=70)
+        aggiorna(step=f'Filtraggio completato. Salvataggio {trovati_filtrati} candidati...', pct=90)
 
         cur_r = db.execute(
             "INSERT INTO ricerche_automatiche (tipo_profilo, parametri, profili_trovati, fonte, stato) VALUES (?, ?, ?, 'apify', 'in_corso')",
@@ -484,8 +537,7 @@ def _esegui_ricerca_background(job_id, tipo_profilo, max_profili, imp):
 
             if valutati < 10:
                 _ai_total = min(len(items_da_importare), 10)
-                _ai_pct   = 85 + int((valutati / max(1, _ai_total)) * 10)
-                aggiorna(step=f'Analisi AI candidato {valutati + 1}/{_ai_total}...', pct=_ai_pct)
+                aggiorna(step=f'Salvataggio database — analisi AI candidato {valutati + 1}/{_ai_total}...', pct=90)
                 try:
                     risultato     = analizza_profilo_linkedin(testo, tipo_profilo, imp)
                     punteggio     = int(risultato.get("punteggio") or 0) or None
@@ -533,7 +585,7 @@ def _esegui_ricerca_background(job_id, tipo_profilo, max_profili, imp):
         }, ensure_ascii=False)
 
         db.execute(
-            "UPDATE job_ricerche SET status='completato', step='Ricerca completata!', risultati=?, percentuale=100, data_fine=CURRENT_TIMESTAMP WHERE job_id=?",
+            "UPDATE job_ricerche SET status='completato', step='Completato', risultati=?, percentuale=100, data_fine=CURRENT_TIMESTAMP WHERE job_id=?",
             (risultati_json, job_id)
         )
         db.commit()
