@@ -6,6 +6,7 @@ e le importa nella pipeline.
 
 import io
 import csv
+import concurrent.futures
 import json
 import os
 import time
@@ -306,7 +307,16 @@ def cerca():
     if not ruolo and not parole_chiave:
         return jsonify({"errore": "Inserisci almeno il ruolo o delle parole chiave"}), 400
 
-    items, errore = cerca_apify(ruolo, citta, paese, azienda, parole_chiave, num_pagine)
+    # Timeout wall-clock garantito: Apify a volte blocca la connessione SSL
+    # senza rispondere, bypassando il timeout di requests. concurrent.futures
+    # impone un limite assoluto di 150s indipendentemente dal comportamento del socket.
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as _pool:
+        _fut = _pool.submit(cerca_apify, ruolo, citta, paese, azienda, parole_chiave, num_pagine)
+        try:
+            items, errore = _fut.result(timeout=150)
+        except concurrent.futures.TimeoutError:
+            return jsonify({"errore": "La ricerca ha impiegato troppo tempo. Prova con meno pagine o criteri più specifici."}), 408
+
     if errore:
         return jsonify({"errore": errore}), 500
 
