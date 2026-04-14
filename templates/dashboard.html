@@ -1,0 +1,435 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — SABIA{% endblock %}
+
+{% block content %}
+
+<!-- ════════════════════════════════════════════════════════
+     HEADER
+════════════════════════════════════════════════════════ -->
+<div class="dash-header">
+  <div>
+    <h1 class="page-title">Dashboard</h1>
+    <p class="page-subtitle">Riepilogo in tempo reale &mdash; aggiornato alle <span id="last-update">{{ stats.aggiornato_alle }}</span></p>
+  </div>
+  <div class="dash-header-actions">
+    <span class="refresh-dot" id="refresh-dot" title="Auto-refresh ogni 60s"></span>
+    <a href="{{ url_for('dashboard.report_pdf') }}" class="btn btn-primary" id="btn-export">
+      &#8659; Esporta Report PDF
+    </a>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════
+     CARDS RIEPILOGATIVE
+════════════════════════════════════════════════════════ -->
+<div class="dash-cards" id="dash-cards">
+
+  <!-- TOTALE -->
+  <div class="dash-card dash-card--total">
+    <div class="dash-card__value" id="c-totale">{{ stats.totale }}</div>
+    <div class="dash-card__label">Totale candidati</div>
+    <div class="dash-card__sub">nel database</div>
+  </div>
+
+  {% set stati_cfg = [
+    ("Da valutare",      "#6B7A99", "c-da-valutare"),
+    ("Da contattare",    "#2E7CF6", "c-da-contattare"),
+    ("Richiesta Inviata","#F59E0B", "c-richiesta"),
+    ("Messaggio Inviato","#D97706", "c-messaggio"),
+    ("Risposto",         "#22C55E", "c-risposto"),
+    ("In valutazione",   "#8B5CF6", "c-in-valutazione"),
+    ("Chiuso",           "#EF4444", "c-chiuso"),
+  ] %}
+
+  {% for stato, colore, css_id in stati_cfg %}
+  {% set n = stats.per_stato.get(stato, 0) %}
+  {% set pct = ((n / stats.totale * 100) | round(1)) if stats.totale else 0 %}
+  <div class="dash-card" style="--card-accent: {{ colore }}">
+    <div class="dash-card__value" id="{{ css_id }}">{{ n }}</div>
+    <div class="dash-card__label">{{ stato }}</div>
+    <div class="dash-card__sub">{{ pct }}% del totale</div>
+    <div class="dash-card__bar">
+      <div class="dash-card__bar-fill" style="width: {{ pct }}%; background: {{ colore }}"></div>
+    </div>
+  </div>
+  {% endfor %}
+
+</div>
+
+<!-- ════════════════════════════════════════════════════════
+     SEZIONE CENTRALE — DUE COLONNE
+════════════════════════════════════════════════════════ -->
+<div class="dash-grid">
+
+  <!-- ── COLONNA SINISTRA — Grafici ─────────────────────── -->
+  <div class="dash-col dash-col--left">
+
+    <!-- Distribuzione stati -->
+    <div class="card dash-chart-card">
+      <div class="card-header">
+        <span>Distribuzione per stato</span>
+      </div>
+      <div class="dash-chart-wrap">
+        <canvas id="chartStati" height="220"></canvas>
+      </div>
+    </div>
+
+    <!-- Distribuzione profilo A vs B -->
+    <div class="card dash-chart-card">
+      <div class="card-header">
+        <span>Profilo A vs B</span>
+      </div>
+      <div class="dash-chart-wrap">
+        <canvas id="chartProfilo" height="120"></canvas>
+      </div>
+      <div class="dash-profilo-legend">
+        <span><b>A</b> {{ stats.per_profilo.get('A', 0) }} candidati</span>
+        <span><b>B</b> {{ stats.per_profilo.get('B', 0) }} candidati</span>
+      </div>
+    </div>
+
+    <!-- Distribuzione per gestore -->
+    <div class="card dash-chart-card">
+      <div class="card-header">
+        <span>Per gestore</span>
+      </div>
+      <div class="dash-chart-wrap">
+        <canvas id="chartGestore" height="120"></canvas>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- ── COLONNA DESTRA — Liste ──────────────────────────── -->
+  <div class="dash-col dash-col--right">
+
+    <!-- Ultimi 5 candidati -->
+    <div class="card">
+      <div class="card-header">
+        <span>Ultimi candidati aggiunti</span>
+        <a href="{{ url_for('pipeline.index') }}" class="btn btn-sm">Vedi tutti</a>
+      </div>
+      <div id="lista-candidati">
+        {% if stats.ultimi_candidati %}
+        <ul class="dash-list">
+          {% for c in stats.ultimi_candidati %}
+          <li class="dash-list__item">
+            <div class="dash-list__main">
+              <span class="dash-list__name">{{ c.nome }} {{ c.cognome }}</span>
+              <span class="badge badge-profilo{{ c.tipo_profilo }}">{{ c.tipo_profilo }}</span>
+            </div>
+            <div class="dash-list__meta">
+              {{ c.ruolo_attuale or '—' }}
+              &mdash;
+              <span class="badge-stato-inline" style="color: var(--stato-color, #6B7A99)">{{ c.stato }}</span>
+              {% if c.punteggio %}
+              &mdash; <b>{{ c.punteggio }}/100</b>
+              {% endif %}
+            </div>
+            <div class="dash-list__date">{{ (c.data_inserimento or '')[:10] }}</div>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="dash-empty">Nessun candidato ancora inserito.</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Prossimi appuntamenti -->
+    <div class="card">
+      <div class="card-header">
+        <span>Prossimi appuntamenti</span>
+        <a href="{{ url_for('calendario.index') }}" class="btn btn-sm">Calendario</a>
+      </div>
+      <div id="lista-appuntamenti">
+        {% if stats.prossimi_appuntamenti %}
+        <ul class="dash-list">
+          {% for a in stats.prossimi_appuntamenti %}
+          <li class="dash-list__item">
+            <div class="dash-list__main">
+              <span class="dash-list__name">{{ a.candidato_nome }}</span>
+              <span class="badge badge-tipo-app">{{ a.tipo }}</span>
+            </div>
+            <div class="dash-list__meta">
+              {{ a.gestore }} &mdash; {{ (a.data_ora or '')[:16] | replace('T', ' ') }}
+            </div>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="dash-empty">Nessun appuntamento in programma.</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Ultime ricerche -->
+    <div class="card">
+      <div class="card-header">
+        <span>Ultime ricerche lanciate</span>
+        <a href="{{ url_for('ricerca.index') }}" class="btn btn-sm">Ricerca</a>
+      </div>
+      <div id="lista-ricerche">
+        {% if stats.ultime_ricerche %}
+        <ul class="dash-list">
+          {% for r in stats.ultime_ricerche %}
+          <li class="dash-list__item">
+            <div class="dash-list__main">
+              <span class="dash-list__name">
+                {{ r.parametri.get('ruolo') or r.parametri.get('keywords') or 'Ricerca automatica' }}
+              </span>
+              <span class="badge badge-profilo{{ r.tipo_profilo }}">{{ r.tipo_profilo }}</span>
+            </div>
+            <div class="dash-list__meta">
+              Trovati: <b>{{ r.profili_trovati or 0 }}</b> &mdash;
+              Importati: <b>{{ r.profili_importati or 0 }}</b> &mdash;
+              {{ r.stato }}
+            </div>
+            <div class="dash-list__date">{{ (r.data_ricerca or '')[:10] }}</div>
+          </li>
+          {% endfor %}
+        </ul>
+        {% else %}
+        <p class="dash-empty">Nessuna ricerca effettuata.</p>
+        {% endif %}
+      </div>
+    </div>
+
+  </div><!-- fine colonna destra -->
+</div><!-- fine dash-grid -->
+
+
+<!-- ════════════════════════════════════════════════════════
+     SCRIPTS
+════════════════════════════════════════════════════════ -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+<script>
+// ── Dati iniziali passati da Flask ────────────────────────────────────────────
+let _stats = {{ stats | tojson }};
+
+// ── Palette colori ────────────────────────────────────────────────────────────
+const STATO_COLORS = {
+  "Da valutare":      "#6B7A99",
+  "Da contattare":    "#2E7CF6",
+  "Richiesta Inviata":"#F59E0B",
+  "Messaggio Inviato":"#D97706",
+  "Risposto":         "#22C55E",
+  "In valutazione":   "#8B5CF6",
+  "Chiuso":           "#EF4444",
+};
+
+// ── Inizializza grafici ───────────────────────────────────────────────────────
+let chartStati, chartProfilo, chartGestore;
+
+function buildCharts(stats) {
+  const stati   = Object.keys(stats.per_stato);
+  const cntStati = stati.map(s => stats.per_stato[s]);
+  const colStati  = stati.map(s => STATO_COLORS[s] || "#6B7A99");
+
+  const opts = {
+    responsive: true, maintainAspectRatio: false,
+    plugins: { legend: { position: "right", labels: { font: { size: 11 }, boxWidth: 12 } } }
+  };
+
+  // Doughnut — stati
+  if (chartStati) chartStati.destroy();
+  chartStati = new Chart(document.getElementById("chartStati"), {
+    type: "doughnut",
+    data: {
+      labels: stati,
+      datasets: [{ data: cntStati, backgroundColor: colStati, borderWidth: 2, borderColor: "#fff" }]
+    },
+    options: { ...opts, cutout: "65%" }
+  });
+
+  // Bar — profilo A vs B
+  if (chartProfilo) chartProfilo.destroy();
+  chartProfilo = new Chart(document.getElementById("chartProfilo"), {
+    type: "bar",
+    data: {
+      labels: ["Profilo A", "Profilo B"],
+      datasets: [{
+        data: [stats.per_profilo["A"] || 0, stats.per_profilo["B"] || 0],
+        backgroundColor: ["#2E7CF6", "#8B5CF6"],
+        borderRadius: 6,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+    }
+  });
+
+  // Bar — gestore
+  if (chartGestore) chartGestore.destroy();
+  const gestori = Object.keys(stats.per_gestore);
+  chartGestore = new Chart(document.getElementById("chartGestore"), {
+    type: "bar",
+    data: {
+      labels: gestori.map(g => g === "Non assegnato" ? "Non ass." : g.split(" ")[1] || g),
+      datasets: [{
+        data: gestori.map(g => stats.per_gestore[g] || 0),
+        backgroundColor: ["#2E7CF6", "#22C55E", "#DDE3EE"],
+        borderRadius: 6,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
+    }
+  });
+}
+
+// ── Aggiorna cards ─────────────────────────────────────────────────────────────
+function updateCards(stats) {
+  const IDS = {
+    "totale":           "c-totale",
+    "Da valutare":      "c-da-valutare",
+    "Da contattare":    "c-da-contattare",
+    "Richiesta Inviata":"c-richiesta",
+    "Messaggio Inviato":"c-messaggio",
+    "Risposto":         "c-risposto",
+    "In valutazione":   "c-in-valutazione",
+    "Chiuso":           "c-chiuso",
+  };
+  const el = id => document.getElementById(id);
+  el("c-totale").textContent = stats.totale;
+  Object.entries(stats.per_stato).forEach(([stato, n]) => {
+    const id = IDS[stato];
+    if (id) el(id).textContent = n;
+  });
+  el("last-update").textContent = stats.aggiornato_alle;
+}
+
+// ── Auto-refresh ogni 60s ──────────────────────────────────────────────────────
+function refresh() {
+  const dot = document.getElementById("refresh-dot");
+  dot.classList.add("refreshing");
+  fetch("{{ url_for('dashboard.stats') }}")
+    .then(r => r.json())
+    .then(stats => {
+      updateCards(stats);
+      buildCharts(stats);
+      _stats = stats;
+    })
+    .catch(() => {})
+    .finally(() => { setTimeout(() => dot.classList.remove("refreshing"), 600); });
+}
+
+// Primo render
+buildCharts(_stats);
+setInterval(refresh, 60_000);
+</script>
+
+<!-- ════════════════════════════════════════════════════════
+     STILI LOCALI
+════════════════════════════════════════════════════════ -->
+<style>
+/* ── Header ────────────────────────────────────────────── */
+.dash-header {
+  display: flex; align-items: flex-start;
+  justify-content: space-between; gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+.dash-header-actions {
+  display: flex; align-items: center; gap: .75rem; flex-shrink: 0;
+}
+
+/* Pallino refresh */
+.refresh-dot {
+  width: 10px; height: 10px; border-radius: 50%;
+  background: var(--verde); display: inline-block;
+  box-shadow: 0 0 0 2px #d1fae5;
+  transition: background .3s;
+}
+.refresh-dot.refreshing { background: var(--arancio); box-shadow: 0 0 0 2px #fef3c7; }
+
+/* ── Cards ─────────────────────────────────────────────── */
+.dash-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: .9rem;
+  margin-bottom: 1.75rem;
+}
+.dash-card {
+  background: #fff;
+  border: 1px solid var(--grigio-bordo);
+  border-top: 3px solid var(--card-accent, var(--azzurro));
+  border-radius: var(--radius);
+  padding: 1rem 1.1rem .9rem;
+  box-shadow: var(--shadow);
+  position: relative; overflow: hidden;
+}
+.dash-card--total {
+  --card-accent: var(--blu-scuro);
+  background: var(--blu-scuro); color: #fff;
+}
+.dash-card--total .dash-card__label,
+.dash-card--total .dash-card__sub { color: rgba(255,255,255,.7); }
+.dash-card__value {
+  font-size: 2.1rem; font-weight: 700;
+  color: var(--card-accent, var(--blu-scuro));
+  line-height: 1;
+}
+.dash-card--total .dash-card__value { color: #fff; font-size: 2.4rem; }
+.dash-card__label {
+  font-size: .78rem; font-weight: 600;
+  color: var(--testo); margin-top: .35rem; line-height: 1.2;
+}
+.dash-card__sub { font-size: .7rem; color: var(--grigio-testo); margin-top: .15rem; }
+.dash-card__bar {
+  height: 3px; background: var(--grigio-bordo);
+  border-radius: 2px; margin-top: .65rem;
+}
+.dash-card__bar-fill { height: 3px; border-radius: 2px; transition: width .6s; }
+
+/* ── Grid ──────────────────────────────────────────────── */
+.dash-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.25rem;
+  align-items: start;
+}
+.dash-col { display: flex; flex-direction: column; gap: 1.1rem; }
+
+/* ── Chart cards ────────────────────────────────────────── */
+.dash-chart-card .card-header { border-bottom: 1px solid var(--grigio-bordo); }
+.dash-chart-wrap { padding: 1rem; position: relative; }
+.dash-profilo-legend {
+  display: flex; gap: 1.5rem; padding: .5rem 1.2rem .9rem;
+  font-size: .85rem; color: var(--grigio-testo);
+}
+.dash-profilo-legend b { color: var(--testo); }
+
+/* ── Liste ──────────────────────────────────────────────── */
+.dash-list { list-style: none; padding: 0; margin: 0; }
+.dash-list__item {
+  padding: .75rem 1.2rem;
+  border-bottom: 1px solid var(--grigio-bordo);
+}
+.dash-list__item:last-child { border-bottom: none; }
+.dash-list__main { display: flex; align-items: center; gap: .5rem; }
+.dash-list__name { font-weight: 600; font-size: .9rem; color: var(--testo); }
+.dash-list__meta { font-size: .78rem; color: var(--grigio-testo); margin-top: .2rem; }
+.dash-list__date { font-size: .72rem; color: var(--grigio-testo); margin-top: .1rem; }
+.dash-empty { padding: 1.2rem; color: var(--grigio-testo); font-size: .88rem; text-align: center; }
+
+.badge-tipo-app {
+  display: inline-block; padding: .15em .55em;
+  border-radius: 99px; font-size: .7rem; font-weight: 600;
+  background: var(--azzurro-light); color: var(--azzurro);
+}
+
+/* ── Responsive ─────────────────────────────────────────── */
+@media (max-width: 1100px) {
+  .dash-grid { grid-template-columns: 1fr; }
+}
+@media (max-width: 700px) {
+  .dash-cards { grid-template-columns: repeat(2, 1fr); }
+  .dash-header { flex-direction: column; }
+}
+</style>
+
+{% endblock %}

@@ -16,6 +16,7 @@ from routes.contenuti import contenuti_bp
 from routes.ricerca import ricerca_bp
 from routes.impostazioni import impostazioni_bp
 from routes.calendario import calendario_bp
+from routes.dashboard import dashboard_bp
 
 # Carica le variabili d'ambiente dal file .env (se presente)
 load_dotenv()
@@ -33,9 +34,10 @@ app.register_blueprint(contenuti_bp)
 app.register_blueprint(ricerca_bp)
 app.register_blueprint(impostazioni_bp)
 app.register_blueprint(calendario_bp)
+app.register_blueprint(dashboard_bp)
 
 # Proteggi tutte le view con login_required (eccetto auth)
-for bp in [valutazione_bp, candidati_bp, pipeline_bp, contenuti_bp, ricerca_bp, impostazioni_bp, calendario_bp]:
+for bp in [valutazione_bp, candidati_bp, pipeline_bp, contenuti_bp, ricerca_bp, impostazioni_bp, calendario_bp, dashboard_bp]:
     for endpoint, view_func in app.view_functions.items():
         if endpoint.startswith(bp.name + "."):
             app.view_functions[endpoint] = login_required(view_func)
@@ -55,8 +57,8 @@ def add_cache_headers(response):
 @app.route("/")
 @login_required
 def home():
-    """Reindirizza alla pagina di valutazione candidati come homepage."""
-    return redirect(url_for("valutazione.index"))
+    """Reindirizza alla dashboard principale."""
+    return redirect(url_for("dashboard.index"))
 
 
 # Inizializza il database all'avvio dell'app
