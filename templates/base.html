@@ -22,8 +22,11 @@
 <body>
 <div id="nav-progress"></div>
 
+<!-- Overlay mobile (chiude la sidebar al tap) -->
+<div class="sidebar-overlay" id="sidebar-overlay" onclick="closeSidebar()"></div>
+
 <!-- Sidebar di navigazione -->
-<aside class="sidebar">
+<aside class="sidebar" id="sidebar">
     <div class="sidebar-header">
         <div class="logo-icon">R</div>
         <div class="logo-text">
@@ -95,6 +98,15 @@
 
 <!-- Contenuto principale -->
 <main class="main-content">
+
+    <!-- Hamburger — visibile solo su mobile -->
+    <div class="mobile-topbar">
+        <button class="hamburger-btn" id="hamburger-btn" onclick="openSidebar()" aria-label="Menu">
+            <span></span><span></span><span></span>
+        </button>
+        <span class="mobile-logo">SABIA</span>
+    </div>
+
     <!-- Messaggi flash (errori / conferme) -->
     {% with messages = get_flashed_messages(with_categories=true) %}
         {% if messages %}
@@ -170,5 +182,34 @@
 })();
 </script>
 {% block scripts %}{% endblock %}
+<script>
+// ── Mobile sidebar ────────────────────────────────────────────────────────────
+function openSidebar() {
+    document.getElementById('sidebar').classList.add('open');
+    document.getElementById('sidebar-overlay').classList.add('show');
+    document.body.style.overflow = 'hidden';
+}
+function closeSidebar() {
+    document.getElementById('sidebar').classList.remove('open');
+    document.getElementById('sidebar-overlay').classList.remove('show');
+    document.body.style.overflow = '';
+}
+// Chiudi sidebar quando si naviga a una pagina (mobile)
+document.querySelectorAll('.nav-item, .nav-subitem').forEach(function(link) {
+    link.addEventListener('click', function() {
+        if (window.innerWidth <= 768) closeSidebar();
+    });
+});
+// Swipe verso sinistra chiude la sidebar
+(function() {
+    var startX = 0;
+    document.getElementById('sidebar').addEventListener('touchstart', function(e) {
+        startX = e.touches[0].clientX;
+    }, { passive: true });
+    document.getElementById('sidebar').addEventListener('touchend', function(e) {
+        if (startX - e.changedTouches[0].clientX > 60) closeSidebar();
+    }, { passive: true });
+})();
+</script>
 </body>
 </html>
