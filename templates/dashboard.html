@@ -44,16 +44,64 @@
   {% for stato, colore, css_id in stati_cfg %}
   {% set n = stats.per_stato.get(stato, 0) %}
   {% set pct = ((n / stats.totale * 100) | round(1)) if stats.totale else 0 %}
-  <div class="dash-card" style="--card-accent: {{ colore }}">
+  <div class="dash-card dash-card--clickable"
+       style="--card-accent: {{ colore }}"
+       data-stato="{{ stato }}"
+       data-color="{{ colore }}"
+       onclick="apriStato(this)"
+       title="Clicca per vedere i candidati in {{ stato }}">
     <div class="dash-card__value" id="{{ css_id }}">{{ n }}</div>
     <div class="dash-card__label">{{ stato }}</div>
     <div class="dash-card__sub">{{ pct }}% del totale</div>
     <div class="dash-card__bar">
       <div class="dash-card__bar-fill" style="width: {{ pct }}%; background: {{ colore }}"></div>
     </div>
+    <div class="dash-card__caret">&#9660;</div>
   </div>
   {% endfor %}
 
+</div>
+
+<!-- ════════════════════════════════════════════════════════
+     PANNELLO CANDIDATI PER STATO (espandibile)
+════════════════════════════════════════════════════════ -->
+<div id="stato-panel" class="stato-panel hidden">
+  <div class="stato-panel__header">
+    <div class="stato-panel__title">
+      <span class="stato-panel__dot" id="stato-dot"></span>
+      <span id="stato-label"></span>
+    </div>
+    <button class="stato-panel__close" onclick="chiudiPanel()" title="Chiudi">&#10005;</button>
+  </div>
+
+  <div id="stato-body">
+    <!-- skeleton loader -->
+    <div class="stato-skeleton" id="stato-skeleton">
+      <div class="skel-row"></div>
+      <div class="skel-row"></div>
+      <div class="skel-row"></div>
+    </div>
+
+    <!-- tabella risultati -->
+    <table class="data-table stato-table hidden" id="stato-table">
+      <thead>
+        <tr>
+          <th>Candidato</th>
+          <th>Ruolo / Azienda</th>
+          <th>Profilo</th>
+          <th>Punteggio</th>
+          <th>Gestore</th>
+          <th>Inserito</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody id="stato-tbody"></tbody>
+    </table>
+
+    <p class="stato-empty hidden" id="stato-empty">
+      Nessun candidato in questo stato.
+    </p>
+  </div>
 </div>
 
 <!-- ════════════════════════════════════════════════════════
@@ -321,6 +369,99 @@ function refresh() {
 // Primo render
 buildCharts(_stats);
 setInterval(refresh, 60_000);
+
+// ════════════════════════════════════════════════════════
+// PANNELLO CANDIDATI PER STATO
+// ════════════════════════════════════════════════════════
+let _statoAttivo = null;
+
+function apriStato(card) {
+  const stato = card.dataset.stato;
+  const color = card.dataset.color;
+
+  // Toggle: stessa card → chiudi
+  if (_statoAttivo === stato) {
+    chiudiPanel();
+    return;
+  }
+
+  // Evidenzia card selezionata
+  document.querySelectorAll(".dash-card--clickable").forEach(c => c.classList.remove("dash-card--active"));
+  card.classList.add("dash-card--active");
+  _statoAttivo = stato;
+
+  // Aggiorna header pannello
+  document.getElementById("stato-dot").style.background = color;
+  document.getElementById("stato-label").textContent = "Caricamento…";
+
+  // Mostra pannello con skeleton, nascondi risultati
+  const panel = document.getElementById("stato-panel");
+  panel.classList.remove("hidden");
+  panel.style.setProperty("--panel-accent", color);
+  document.getElementById("stato-skeleton").classList.remove("hidden");
+  document.getElementById("stato-table").classList.add("hidden");
+  document.getElementById("stato-empty").classList.add("hidden");
+
+  // Scroll al pannello
+  setTimeout(() => panel.scrollIntoView({ behavior: "smooth", block: "nearest" }), 80);
+
+  // Fetch candidati
+  fetch("/dashboard/candidati/" + encodeURIComponent(stato))
+    .then(r => r.json())
+    .then(data => {
+      if (_statoAttivo !== stato) return;
+
+      const tot = data.totale || 0;
+      document.getElementById("stato-label").textContent =
+        tot + " candidat" + (tot === 1 ? "o" : "i") + " in stato \u201c" + stato + "\u201d";
+
+      document.getElementById("stato-skeleton").classList.add("hidden");
+
+      if (!data.candidati || data.candidati.length === 0) {
+        document.getElementById("stato-empty").classList.remove("hidden");
+        return;
+      }
+
+      const tbody = document.getElementById("stato-tbody");
+      tbody.innerHTML = data.candidati.map(function(c) {
+        const nome    = [c.nome, c.cognome].filter(Boolean).join(" ") || "\u2014";
+        const ruolo   = c.ruolo_attuale || "\u2014";
+        const azienda = c.azienda || "";
+        const profilo = c.tipo_profilo || "\u2014";
+        const punt    = c.punteggio != null
+          ? "<b>" + c.punteggio + "</b>/100"
+          : "<span style='color:var(--grigio-testo)'>\u2014</span>";
+        const gestore = c.gestore || "\u2014";
+        const data_ins = (c.data_inserimento || "").slice(0, 10);
+        const pBadge  = "<span class='badge badge-profilo" + profilo + "'>" + profilo + "</span>";
+        const gShort  = gestore === "Salvatore Sabia" ? "Sabia"
+                      : gestore === "Firdaous Filahi" ? "Firdaous" : gestore;
+        return "<tr>"
+          + "<td><div class='candidato-nome'>" + nome + "</div></td>"
+          + "<td><div>" + ruolo + "</div><div class='candidato-meta'>" + azienda + "</div></td>"
+          + "<td>" + pBadge + "</td>"
+          + "<td>" + punt + "</td>"
+          + "<td>" + gShort + "</td>"
+          + "<td class='candidato-meta'>" + data_ins + "</td>"
+          + "<td><a href='/pipeline' class='btn btn-sm btn-outline'>Pipeline &rarr;</a></td>"
+          + "</tr>";
+      }).join("");
+
+      document.getElementById("stato-table").classList.remove("hidden");
+    })
+    .catch(function() {
+      document.getElementById("stato-skeleton").classList.add("hidden");
+      document.getElementById("stato-label").textContent = "Errore caricamento \u201c" + stato + "\u201d";
+    });
+}
+
+function chiudiPanel() {
+  _statoAttivo = null;
+  document.getElementById("stato-panel").classList.add("hidden");
+  document.querySelectorAll(".dash-card--clickable").forEach(function(c) {
+    c.classList.remove("dash-card--active");
+  });
+}
 </script>
 
 <!-- ════════════════════════════════════════════════════════
@@ -430,6 +571,84 @@ setInterval(refresh, 60_000);
   .dash-cards { grid-template-columns: repeat(2, 1fr); }
   .dash-header { flex-direction: column; }
 }
+
+/* ── Card cliccabili ─────────────────────────────────────── */
+.dash-card--clickable {
+  cursor: pointer;
+  transition: transform .15s, box-shadow .15s, border-color .15s;
+}
+.dash-card--clickable:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(26,46,74,.14);
+}
+.dash-card__caret {
+  position: absolute; bottom: .5rem; right: .7rem;
+  font-size: .65rem; color: var(--card-accent, #6B7A99);
+  opacity: .5; transition: opacity .2s, transform .2s;
+}
+.dash-card--clickable:hover .dash-card__caret { opacity: 1; }
+.dash-card--active .dash-card__caret { transform: rotate(180deg); opacity: 1; }
+.dash-card--active {
+  border-width: 3px !important;
+  border-color: var(--card-accent, var(--azzurro)) !important;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--card-accent, var(--azzurro)) 20%, transparent);
+  transform: translateY(-2px);
+}
+
+/* ── Pannello stato ──────────────────────────────────────── */
+.stato-panel {
+  background: #fff;
+  border: 1.5px solid var(--panel-accent, var(--azzurro));
+  border-radius: var(--radius);
+  box-shadow: 0 4px 24px rgba(26,46,74,.12);
+  margin-bottom: 1.75rem;
+  overflow: hidden;
+  animation: slideDown .22s ease;
+}
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.stato-panel__header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: .85rem 1.25rem;
+  background: color-mix(in srgb, var(--panel-accent, var(--azzurro)) 8%, white);
+  border-bottom: 1px solid var(--grigio-bordo);
+}
+.stato-panel__title {
+  display: flex; align-items: center; gap: .6rem;
+  font-weight: 700; font-size: .95rem; color: var(--testo);
+}
+.stato-panel__dot {
+  width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0;
+}
+.stato-panel__close {
+  background: none; border: none; cursor: pointer;
+  font-size: .9rem; color: var(--grigio-testo);
+  padding: .2rem .4rem; border-radius: 4px;
+  transition: background .15s, color .15s;
+}
+.stato-panel__close:hover { background: var(--grigio-bordo); color: var(--testo); }
+
+/* Skeleton loader */
+.stato-skeleton { padding: 1rem 1.25rem; display: flex; flex-direction: column; gap: .6rem; }
+.skel-row {
+  height: 14px; border-radius: 4px;
+  background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.2s infinite;
+}
+.skel-row:nth-child(1) { width: 70%; }
+.skel-row:nth-child(2) { width: 90%; }
+.skel-row:nth-child(3) { width: 55%; }
+@keyframes shimmer {
+  0%   { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.stato-table { margin: 0; }
+.stato-empty { padding: 1.5rem; text-align: center; color: var(--grigio-testo); }
+.hidden { display: none !important; }
 </style>
 
 {% endblock %}

@@ -115,6 +115,30 @@ def stats():
     return jsonify(_get_stats())
 
 
+@dashboard_bp.route("/dashboard/candidati/<path:stato>")
+def candidati_per_stato(stato):
+    """Restituisce in JSON i candidati di uno stato, ordinati per punteggio desc."""
+    if stato not in STATI:
+        return jsonify({"errore": "Stato non valido"}), 400
+
+    db = get_db()
+    rows = db.execute(
+        """SELECT id, nome, cognome, ruolo_attuale, azienda,
+                  tipo_profilo, punteggio, gestore, data_inserimento
+           FROM candidati
+           WHERE stato = ?
+           ORDER BY punteggio DESC NULLS LAST, data_inserimento DESC""",
+        (stato,),
+    ).fetchall()
+    db.close()
+
+    return jsonify({
+        "stato": stato,
+        "totale": len(rows),
+        "candidati": [dict(r) for r in rows],
+    })
+
+
 @dashboard_bp.route("/dashboard/report_pdf")
 def report_pdf():
     """Genera il report PDF completo con ReportLab."""
