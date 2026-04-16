@@ -320,6 +320,11 @@ def init_db():
         # Gestore candidato
         "ALTER TABLE candidati ADD COLUMN IF NOT EXISTS gestore TEXT DEFAULT 'Non assegnato'",
 
+        # Arricchimento Proxycurl
+        "ALTER TABLE candidati   ADD COLUMN IF NOT EXISTS dati_proxycurl TEXT",
+        "ALTER TABLE candidati   ADD COLUMN IF NOT EXISTS dati_arricchiti TEXT",
+        "ALTER TABLE valutazioni ADD COLUMN IF NOT EXISTS dati_arricchiti TEXT",
+
         # ── Tabella appuntamenti ────────────────────────────────────────────
         """CREATE TABLE IF NOT EXISTS appuntamenti (
     id              SERIAL PRIMARY KEY,

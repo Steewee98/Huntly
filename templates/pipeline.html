@@ -350,6 +350,79 @@
 <!-- Errore valutazione -->
 <div id="errore-box" class="hidden alert alert-errore"></div>
 
+<!-- Sezione arricchimento Proxycurl -->
+<div id="risultati-arricchiti" class="hidden" style="margin-top:1rem;">
+    <div class="card" style="border-left:4px solid #2E7CF6;">
+        <div class="card-header" style="background:linear-gradient(90deg,rgba(46,124,246,0.08),transparent);">
+            <h3 style="color:var(--azzurro);display:flex;align-items:center;gap:0.5rem;">
+                <span>&#127919;</span> Analisi Arricchita
+                <span class="badge" style="background:#2E7CF6;color:#fff;font-size:0.7rem;padding:2px 8px;border-radius:20px;">Proxycurl</span>
+            </h3>
+        </div>
+        <div class="card-body">
+            <!-- Tre barre score -->
+            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:1.25rem;">
+                <div style="text-align:center;">
+                    <div style="font-size:0.8rem;color:var(--grigio-testo);margin-bottom:0.35rem;">Compatibilità Ruolo</div>
+                    <div style="position:relative;height:8px;background:#e9ecef;border-radius:4px;">
+                        <div id="bar-compatibilita" style="position:absolute;left:0;top:0;height:100%;background:#2E7CF6;border-radius:4px;width:0%;transition:width 0.6s;"></div>
+                    </div>
+                    <div id="val-compatibilita" style="font-weight:700;color:var(--blu-scuro);margin-top:0.3rem;">—</div>
+                </div>
+                <div style="text-align:center;">
+                    <div style="font-size:0.8rem;color:var(--grigio-testo);margin-bottom:0.35rem;">Indice Mobilità</div>
+                    <div style="position:relative;height:8px;background:#e9ecef;border-radius:4px;">
+                        <div id="bar-mobilita" style="position:absolute;left:0;top:0;height:100%;background:#10b981;border-radius:4px;width:0%;transition:width 0.6s;"></div>
+                    </div>
+                    <div id="val-mobilita" style="font-weight:700;color:var(--blu-scuro);margin-top:0.3rem;">—</div>
+                </div>
+                <div style="text-align:center;">
+                    <div style="font-size:0.8rem;color:var(--grigio-testo);margin-bottom:0.35rem;">Qualità Profilo</div>
+                    <div style="position:relative;height:8px;background:#e9ecef;border-radius:4px;">
+                        <div id="bar-qualita" style="position:absolute;left:0;top:0;height:100%;background:#f59e0b;border-radius:4px;width:0%;transition:width 0.6s;"></div>
+                    </div>
+                    <div id="val-qualita" style="font-weight:700;color:var(--blu-scuro);margin-top:0.3rem;">—</div>
+                </div>
+            </div>
+            <!-- Pattern carriera + momento contatto -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">
+                <div>
+                    <div style="font-size:0.8rem;font-weight:600;color:var(--grigio-testo);margin-bottom:0.3rem;">Pattern Carriera</div>
+                    <div id="arric-pattern" style="font-size:0.92rem;color:var(--blu-scuro);">—</div>
+                </div>
+                <div>
+                    <div style="font-size:0.8rem;font-weight:600;color:var(--grigio-testo);margin-bottom:0.3rem;">Momento Contatto</div>
+                    <div id="arric-momento" style="font-size:0.92rem;color:var(--blu-scuro);">—</div>
+                </div>
+            </div>
+            <!-- Segnali positivi / negativi -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">
+                <div>
+                    <div style="font-size:0.8rem;font-weight:600;color:#10b981;margin-bottom:0.4rem;">&#10003; Segnali Positivi</div>
+                    <ul id="arric-positivi" style="margin:0;padding-left:1.2rem;font-size:0.88rem;color:var(--blu-scuro);"></ul>
+                </div>
+                <div>
+                    <div style="font-size:0.8rem;font-weight:600;color:#ef4444;margin-bottom:0.4rem;">&#9888; Segnali Negativi</div>
+                    <ul id="arric-negativi" style="margin:0;padding-left:1.2rem;font-size:0.88rem;color:var(--blu-scuro);"></ul>
+                </div>
+            </div>
+            <!-- Sintesi -->
+            <div style="background:rgba(46,124,246,0.05);border-radius:8px;padding:0.85rem;">
+                <div style="font-size:0.8rem;font-weight:600;color:var(--grigio-testo);margin-bottom:0.4rem;">Sintesi</div>
+                <p id="arric-sintesi" style="margin:0;font-size:0.92rem;color:var(--blu-scuro);"></p>
+            </div>
+            <!-- Messaggio personalizzato -->
+            <div style="margin-top:1rem;">
+                <div style="font-size:0.8rem;font-weight:600;color:var(--grigio-testo);margin-bottom:0.4rem;">Messaggio Personalizzato (basato su attività LinkedIn)</div>
+                <div id="arric-messaggio" class="outreach-box" style="background:#f0f7ff;border-color:#2E7CF6;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Errore valutazione -->
+<div id="errore-box" class="hidden alert alert-errore"></div>
+
 </div><!-- /tab-valutazione -->
 
 
@@ -905,11 +978,33 @@ function mostraReport(id) {
     var spunti = c.spunti || [];
     if (typeof spunti === 'string') { try { spunti = JSON.parse(spunti); } catch(e) { spunti = []; } }
     var spuntiHtml = spunti.map(function(s) { return '<li class="spunto-item">' + s + '</li>'; }).join('');
+    var arricchiti = c.dati_arricchiti || null;
+    if (typeof arricchiti === 'string') { try { arricchiti = JSON.parse(arricchiti); } catch(e) { arricchiti = null; } }
+    var htmlArricchito = '';
+    if (arricchiti) {
+        var liH = function(arr) { return (arr || []).map(function(s) { return '<li>' + s + '</li>'; }).join(''); };
+        htmlArricchito =
+            '<div class="report-sezione" style="border-left:3px solid #2E7CF6;padding-left:0.75rem;">' +
+            '<h4 style="color:#2E7CF6;">&#127919; Analisi Arricchita <span style="font-size:0.7rem;background:#2E7CF6;color:#fff;padding:2px 8px;border-radius:20px;vertical-align:middle;">Proxycurl</span></h4>' +
+            '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.75rem;margin:0.75rem 0;">' +
+            '<div style="text-align:center;"><div style="font-size:0.75rem;color:#6b7280;">Compatibilità</div><strong>' + (arricchiti.punteggio_compatibilita || '—') + '/10</strong></div>' +
+            '<div style="text-align:center;"><div style="font-size:0.75rem;color:#6b7280;">Mobilità</div><strong>' + (arricchiti.indice_mobilita || '—') + '/10</strong></div>' +
+            '<div style="text-align:center;"><div style="font-size:0.75rem;color:#6b7280;">Qualità</div><strong>' + (arricchiti.punteggio_qualita_profilo || '—') + '/10</strong></div>' +
+            '</div>' +
+            '<p><strong>Pattern:</strong> ' + (arricchiti.pattern_carriera || '—') + ' &nbsp;|&nbsp; <strong>Momento:</strong> ' + (arricchiti.momento_contatto || '—') + '</p>' +
+            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;font-size:0.85rem;">' +
+            '<div><div style="color:#10b981;font-weight:600;">&#10003; Positivi</div><ul style="margin:0;padding-left:1rem;">' + liH(arricchiti.segnali_positivi) + '</ul></div>' +
+            '<div><div style="color:#ef4444;font-weight:600;">&#9888; Negativi</div><ul style="margin:0;padding-left:1rem;">' + liH(arricchiti.segnali_negativi) + '</ul></div>' +
+            '</div>' +
+            (arricchiti.sintesi ? '<p style="margin-top:0.5rem;"><em>' + arricchiti.sintesi + '</em></p>' : '') +
+            '</div>';
+    }
     document.getElementById('modal-body').innerHTML =
         '<div class="report-sezione"><div class="report-score ' + getScoreClass(c.punteggio) + '">' + c.punteggio + '/10</div></div>' +
         '<div class="report-sezione"><h4>Analisi del Percorso</h4><p>' + (c.analisi || '—') + '</p></div>' +
         '<div class="report-sezione"><h4>Spunti per il Contatto</h4><ul>' + spuntiHtml + '</ul></div>' +
-        '<div class="report-sezione"><h4>Messaggio di Outreach</h4><div class="outreach-box">' + (c.messaggio_outreach || '—') + '</div></div>';
+        '<div class="report-sezione"><h4>Messaggio di Outreach</h4><div class="outreach-box">' + (c.messaggio_outreach || '—') + '</div></div>' +
+        htmlArricchito;
     mostra('modal-report');
 }
 
@@ -1209,6 +1304,9 @@ async function avviaAnalisi() {
                 if (evento.type === 'chunk') {
                     streamTxt.textContent += evento.text;
                     streamTxt.scrollTop = streamTxt.scrollHeight;
+                } else if (evento.type === 'arricchimento_start') {
+                    streamTxt.textContent += '\n\n⏳ Arricchimento profilo con dati LinkedIn...';
+                    streamTxt.scrollTop = streamTxt.scrollHeight;
                 } else if (evento.type === 'done') {
                     risultatoFinale = evento.risultato;
                 } else if (evento.type === 'errore') {
@@ -1264,6 +1362,33 @@ function mostraRisultatiVal(dati) {
     document.getElementById('char-count').textContent = msg.length;
 
     mostra('risultati');
+
+    // Sezione arricchita (Proxycurl)
+    if (dati.arricchito) {
+        var score10 = function(v) { return v ? Math.min(100, Math.round(v * 10)) : 0; };
+        var c = dati.punteggio_compatibilita || 0;
+        var m = dati.indice_mobilita || 0;
+        var q = dati.punteggio_qualita_profilo || 0;
+        document.getElementById('bar-compatibilita').style.width = score10(c) + '%';
+        document.getElementById('val-compatibilita').textContent = c + '/10';
+        document.getElementById('bar-mobilita').style.width = score10(m) + '%';
+        document.getElementById('val-mobilita').textContent = m + '/10';
+        document.getElementById('bar-qualita').style.width = score10(q) + '%';
+        document.getElementById('val-qualita').textContent = q + '/10';
+        document.getElementById('arric-pattern').textContent = dati.pattern_carriera || '—';
+        document.getElementById('arric-momento').textContent = dati.momento_contatto || '—';
+        var liHtml = function(arr) {
+            return (arr || []).map(function(s) { return '<li>' + s + '</li>'; }).join('');
+        };
+        document.getElementById('arric-positivi').innerHTML = liHtml(dati.segnali_positivi);
+        document.getElementById('arric-negativi').innerHTML = liHtml(dati.segnali_negativi);
+        document.getElementById('arric-sintesi').textContent = dati.sintesi || '—';
+        document.getElementById('arric-messaggio').textContent = dati.messaggio_personalizzato || '—';
+        mostra('risultati-arricchiti');
+    } else {
+        nascondi('risultati-arricchiti');
+    }
+
     document.getElementById('risultati').scrollIntoView({ behavior: 'smooth' });
 }
 
@@ -1368,17 +1493,40 @@ function mostraDettaglioCronologia(id) {
     if (!v) return;
     var spunti = v.spunti || [];
     if (typeof spunti === 'string') { try { spunti = JSON.parse(spunti); } catch(e) { spunti = []; } }
-    mostraReportNelModal({ punteggio: v.punteggio, analisi_percorso: v.analisi, spunti_contatto: spunti, messaggio_outreach: v.messaggio_outreach });
+    var arricchiti = v.dati_arricchiti || null;
+    if (typeof arricchiti === 'string') { try { arricchiti = JSON.parse(arricchiti); } catch(e) { arricchiti = null; } }
+    mostraReportNelModal({ punteggio: v.punteggio, analisi_percorso: v.analisi, spunti_contatto: spunti, messaggio_outreach: v.messaggio_outreach, dati_arricchiti: arricchiti });
 }
 
 function mostraReportNelModal(dati) {
     var spuntiHtml = (dati.spunti_contatto || []).map(function(s) { return '<li class="spunto-item">' + s + '</li>'; }).join('');
     var scoreClass = dati.punteggio >= 8 ? 'score-alto' : (dati.punteggio >= 5 ? 'score-medio' : 'score-basso');
+    var arricchiti = dati.dati_arricchiti || null;
+    var htmlArricchito = '';
+    if (arricchiti) {
+        var liH = function(arr) { return (arr || []).map(function(s) { return '<li>' + s + '</li>'; }).join(''); };
+        htmlArricchito =
+            '<div class="report-sezione" style="border-left:3px solid #2E7CF6;padding-left:0.75rem;">' +
+            '<h4 style="color:#2E7CF6;">&#127919; Analisi Arricchita <span style="font-size:0.7rem;background:#2E7CF6;color:#fff;padding:2px 8px;border-radius:20px;vertical-align:middle;">Proxycurl</span></h4>' +
+            '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.75rem;margin:0.75rem 0;">' +
+            '<div style="text-align:center;"><div style="font-size:0.75rem;color:#6b7280;">Compatibilità</div><strong>' + (arricchiti.punteggio_compatibilita || '—') + '/10</strong></div>' +
+            '<div style="text-align:center;"><div style="font-size:0.75rem;color:#6b7280;">Mobilità</div><strong>' + (arricchiti.indice_mobilita || '—') + '/10</strong></div>' +
+            '<div style="text-align:center;"><div style="font-size:0.75rem;color:#6b7280;">Qualità</div><strong>' + (arricchiti.punteggio_qualita_profilo || '—') + '/10</strong></div>' +
+            '</div>' +
+            '<p><strong>Pattern:</strong> ' + (arricchiti.pattern_carriera || '—') + ' &nbsp;|&nbsp; <strong>Momento:</strong> ' + (arricchiti.momento_contatto || '—') + '</p>' +
+            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;font-size:0.85rem;">' +
+            '<div><div style="color:#10b981;font-weight:600;">&#10003; Positivi</div><ul style="margin:0;padding-left:1rem;">' + liH(arricchiti.segnali_positivi) + '</ul></div>' +
+            '<div><div style="color:#ef4444;font-weight:600;">&#9888; Negativi</div><ul style="margin:0;padding-left:1rem;">' + liH(arricchiti.segnali_negativi) + '</ul></div>' +
+            '</div>' +
+            (arricchiti.sintesi ? '<p style="margin-top:0.5rem;"><em>' + arricchiti.sintesi + '</em></p>' : '') +
+            '</div>';
+    }
     document.getElementById('modal-cronologia-body').innerHTML =
         '<div class="report-sezione"><div class="report-score ' + scoreClass + '">' + dati.punteggio + '/10</div></div>' +
         '<div class="report-sezione"><h4>Analisi del Percorso</h4><p>' + (dati.analisi_percorso || '—') + '</p></div>' +
         '<div class="report-sezione"><h4>Spunti per il Contatto</h4><ul>' + spuntiHtml + '</ul></div>' +
-        '<div class="report-sezione"><h4>Messaggio di Outreach</h4><div class="outreach-box">' + (dati.messaggio_outreach || '—') + '</div></div>';
+        '<div class="report-sezione"><h4>Messaggio di Outreach</h4><div class="outreach-box">' + (dati.messaggio_outreach || '—') + '</div></div>' +
+        htmlArricchito;
     mostra('modal-cronologia');
 }
 

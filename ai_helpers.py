@@ -201,13 +201,90 @@ def analizza_profilo_linkedin(testo_profilo: str, tipo_profilo: str, impostazion
         raise
 
 
-def analizza_profilo_linkedin_stream(testo_profilo: str, tipo_profilo: str, impostazioni: dict = None):
+def analizza_profilo_arricchito(
+    testo_profilo: str,
+    tipo_profilo: str,
+    dati_prx: dict,
+    dati_base: dict,
+) -> dict:
+    """
+    Seconda analisi Claude con dati Proxycurl arricchiti.
+    Restituisce i campi predittivi aggiuntivi (punteggio_compatibilita,
+    indice_mobilita, pattern_carriera, ecc.).
+    In caso di errore restituisce un dict vuoto (il caller usa i dati base).
+    """
+    from proxycurl_helpers import estrai_testo_proxycurl
+
+    testo_prx = estrai_testo_proxycurl(dati_prx)
+    base_str = json.dumps(
+        {k: dati_base.get(k) for k in ["punteggio", "analisi_percorso", "ruolo_attuale", "azienda", "anni_esperienza"]},
+        ensure_ascii=False,
+    )
+
+    prompt = (
+        "Sei un esperto recruiter nel settore della consulenza finanziaria e bancaria.\n"
+        "Disponi di un'analisi base già effettuata e di dati arricchiti da Proxycurl.\n\n"
+        f"ANALISI BASE:\n{base_str}\n\n"
+        f"TESTO PROFILO:\n{clean_text(testo_profilo)[:1500]}\n\n"
+        f"DATI ARRICCHITI PROXYCURL:\n{testo_prx}\n\n"
+        "Fornisci una valutazione predittiva completa ESCLUSIVAMENTE in questo formato JSON valido:\n"
+        "{\n"
+        '  "punteggio_finale": <1-10, aggiornato con tutti i dati>,\n'
+        '  "punteggio_compatibilita": <1-10>,\n'
+        '  "indice_mobilita": <1-10, probabilità di essere aperto a nuove opportunità>,\n'
+        '  "punteggio_qualita_profilo": <1-10, completezza e cura del profilo LinkedIn>,\n'
+        '  "pattern_carriera": "<stabile|dinamico|in_stallo|in_crescita|instabile>",\n'
+        '  "momento_contatto": "<ora|6_mesi|1_anno|non_adatto>",\n'
+        '  "motivazione_probabile": "<1-2 frasi su perché potrebbe essere interessato>",\n'
+        '  "segnali_positivi": ["<segnale 1>", "<segnale 2>", "<segnale 3>"],\n'
+        '  "segnali_negativi": ["<segnale 1>", "<segnale 2>"],\n'
+        '  "rischi": ["<rischio 1>", "<rischio 2>"],\n'
+        '  "analisi_attivita": "<analisi breve dell\'attività LinkedIn recente>",\n'
+        '  "messaggio_personalizzato": "<bozza messaggio LinkedIn personalizzato, max 300 caratteri>",\n'
+        '  "sintesi": "<sintesi del profilo e opportunità in 2-3 righe>"\n'
+        "}"
+    )
+
+    payload = {
+        "model": CLAUDE_MODEL,
+        "max_tokens": 2000,
+        "messages": [{"role": "user", "content": clean_text(prompt)}],
+    }
+    try:
+        risposta = _chiama_api("analizza_profilo_arricchito", payload)
+        testo = risposta.content[0].text.strip()
+        if testo.startswith("```"):
+            testo = testo.split("```")[1]
+            if testo.startswith("json"):
+                testo = testo[4:]
+        result = json.loads(testo)
+        # Usa punteggio_finale per sovrascrivere il punteggio base
+        if "punteggio_finale" in result:
+            result["punteggio"] = result["punteggio_finale"]
+        return result
+    except Exception as e:
+        logger.error("[AI] analizza_profilo_arricchito fallita: %s", e)
+        return {}
+
+
+def analizza_profilo_linkedin_stream(
+    testo_profilo: str,
+    tipo_profilo: str,
+    impostazioni: dict = None,
+    linkedin_url: str = None,
+    dati_proxycurl_cached: dict = None,
+):
     """
     Versione streaming di analizza_profilo_linkedin().
     Genera eventi SSE:
-      - {"type":"chunk","text":"..."}   — testo grezzo in arrivo da Claude
-      - {"type":"done","risultato":{}}  — analisi completa, JSON parsato
-      - {"type":"errore","messaggio":"..."} — in caso di errore
+      - {"type":"chunk","text":"..."}        — testo grezzo in arrivo da Claude
+      - {"type":"arricchimento_start"}       — Proxycurl in corso (solo se applicabile)
+      - {"type":"done","risultato":{}}        — analisi completa, JSON parsato
+      - {"type":"errore","messaggio":"..."}  — in caso di errore
+
+    Se punteggio base >= 6 e linkedin_url disponibile:
+      - Chiama Proxycurl (o usa cache se < 30 giorni)
+      - Esegue seconda analisi Claude con dati arricchiti
     """
     testo_profilo = clean_text(testo_profilo)
 
@@ -297,6 +374,31 @@ def analizza_profilo_linkedin_stream(testo_profilo: str, tipo_profilo: str, impo
             if testo_pulito.startswith("json"):
                 testo_pulito = testo_pulito[4:]
         risultato = json.loads(testo_pulito)
+
+        # ── Arricchimento Proxycurl (solo se punteggio >= 6 e URL disponibile) ──
+        risultato["arricchito"] = False
+        punteggio_base = risultato.get("punteggio", 0) or 0
+        if punteggio_base >= 6 and (linkedin_url or dati_proxycurl_cached):
+            yield f"data: {json.dumps({'type': 'arricchimento_start'}, ensure_ascii=False)}\n\n"
+            try:
+                from proxycurl_helpers import arricchisci_profilo, is_cache_valida
+                dati_prx = None
+                # Usa cache se valida
+                if dati_proxycurl_cached and is_cache_valida(dati_proxycurl_cached):
+                    dati_prx = dati_proxycurl_cached
+                    logger.info("[AI] Proxycurl: uso cache per %s", linkedin_url)
+                elif linkedin_url:
+                    dati_prx = arricchisci_profilo(linkedin_url)
+
+                if dati_prx:
+                    enriched = analizza_profilo_arricchito(testo_profilo, tipo_profilo, dati_prx, risultato)
+                    if enriched:
+                        risultato.update(enriched)
+                        risultato["arricchito"] = True
+                        risultato["dati_proxycurl"] = dati_prx
+            except Exception as e_prx:
+                logger.error("[AI] Errore arricchimento Proxycurl: %s", e_prx)
+
         yield f"data: {json.dumps({'type': 'done', 'risultato': risultato}, ensure_ascii=False)}\n\n"
 
     except json.JSONDecodeError as e:

@@ -118,26 +118,63 @@ def analizza():
 def analizza_stream():
     """
     Endpoint SSE: streama l'analisi profilo LinkedIn chunk per chunk.
-    Restituisce text/event-stream con eventi JSON line-delimited.
+    Se punteggio >= 6 e c'è un URL LinkedIn, arricchisce con Proxycurl.
     """
-    dati = request.get_json()
+    dati          = request.get_json()
     testo_profilo = dati.get("testo_profilo", "").strip()
     tipo_profilo  = dati.get("tipo_profilo", "A")
+    candidato_id  = dati.get("candidato_id")
 
     if not testo_profilo:
         def _err():
             yield f"data: {json.dumps({'type': 'errore', 'messaggio': 'Inserire il testo del profilo LinkedIn'})}\n\n"
         return Response(_err(), mimetype="text/event-stream")
 
+    # Recupera linkedin_url e dati_proxycurl cached dal DB (se candidato noto)
+    linkedin_url           = None
+    dati_proxycurl_cached  = None
+
+    if candidato_id:
+        try:
+            db = get_db()
+            row = db.execute(
+                "SELECT profilo_linkedin, dati_proxycurl FROM candidati WHERE id = ?",
+                (candidato_id,),
+            ).fetchone()
+            db.close()
+            if row:
+                lurl = row.get("profilo_linkedin") or ""
+                if "linkedin.com/in/" in lurl:
+                    linkedin_url = lurl
+                raw_prx = row.get("dati_proxycurl")
+                if raw_prx:
+                    try:
+                        dati_proxycurl_cached = json.loads(raw_prx)
+                    except Exception:
+                        pass
+        except Exception:
+            pass
+
+    # Fallback: estrai URL LinkedIn dal testo profilo
+    if not linkedin_url:
+        import re
+        m = re.search(r"https?://(?:www\.)?linkedin\.com/in/[\w\-]+/?", testo_profilo)
+        if m:
+            linkedin_url = m.group(0)
+
     def _genera():
-        yield from analizza_profilo_linkedin_stream(testo_profilo, tipo_profilo)
+        yield from analizza_profilo_linkedin_stream(
+            testo_profilo, tipo_profilo,
+            linkedin_url=linkedin_url,
+            dati_proxycurl_cached=dati_proxycurl_cached,
+        )
 
     return Response(
         _genera(),
         mimetype="text/event-stream",
         headers={
             "Cache-Control":    "no-cache",
-            "X-Accel-Buffering": "no",   # disabilita buffering Nginx/Railway
+            "X-Accel-Buffering": "no",
         },
     )
 
@@ -170,6 +207,23 @@ def salva_analisi():
     spunti_json     = json.dumps(risultato.get("spunti_contatto", []), ensure_ascii=False)
     anteprima       = testo_profilo[:120].replace("\n", " ").strip()
 
+    # Dati arricchiti Proxycurl (se presenti nel risultato)
+    arricchito = risultato.get("arricchito", False)
+    dati_prx = risultato.get("dati_proxycurl")
+    dati_prx_json = json.dumps(dati_prx, ensure_ascii=False) if dati_prx else None
+
+    if arricchito:
+        enriched_keys = [
+            "punteggio_compatibilita", "indice_mobilita", "punteggio_qualita_profilo",
+            "pattern_carriera", "momento_contatto", "motivazione_probabile",
+            "segnali_positivi", "segnali_negativi", "rischi",
+            "analisi_attivita", "messaggio_personalizzato", "sintesi",
+        ]
+        dati_arricchiti = {k: risultato.get(k) for k in enriched_keys if risultato.get(k) is not None}
+        dati_arricchiti_json = json.dumps(dati_arricchiti, ensure_ascii=False)
+    else:
+        dati_arricchiti_json = None
+
     db = get_db()
 
     if not nome_contatto and candidato_id:
@@ -180,8 +234,9 @@ def salva_analisi():
     db.execute(
         """INSERT INTO valutazioni
            (nome_contatto, ruolo_attuale, azienda, anni_esperienza,
-            tipo_profilo, anteprima_testo, punteggio, analisi, spunti, messaggio_outreach, candidato_id, fonte)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            tipo_profilo, anteprima_testo, punteggio, analisi, spunti, messaggio_outreach,
+            candidato_id, fonte, dati_arricchiti)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (nome_contatto, ruolo_attuale, azienda, anni_esperienza,
          tipo_profilo, anteprima,
          risultato.get("punteggio"),
@@ -189,18 +244,22 @@ def salva_analisi():
          spunti_json,
          risultato.get("messaggio_outreach"),
          candidato_id or None,
-         "manuale"),
+         "manuale",
+         dati_arricchiti_json),
     )
 
     if candidato_id:
         db.execute(
             """UPDATE candidati SET
                punteggio=?, analisi=?, spunti=?, messaggio_outreach=?,
-               tipo_profilo=?, data_aggiornamento=CURRENT_TIMESTAMP
+               tipo_profilo=?,
+               dati_proxycurl=COALESCE(?, dati_proxycurl),
+               dati_arricchiti=COALESCE(?, dati_arricchiti),
+               data_aggiornamento=CURRENT_TIMESTAMP
                WHERE id=?""",
             (risultato.get("punteggio"), risultato.get("analisi_percorso"),
              spunti_json, risultato.get("messaggio_outreach"),
-             tipo_profilo, candidato_id),
+             tipo_profilo, dati_prx_json, dati_arricchiti_json, candidato_id),
         )
 
     db.commit()
