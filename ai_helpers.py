@@ -395,10 +395,14 @@ def analizza_profilo_linkedin_stream(
                     if enriched:
                         risultato.update(enriched)
                         risultato["arricchito"] = True
-                        risultato["dati_proxycurl"] = dati_prx
+                        # Tieni dati_proxycurl separato: yield come evento interno
+                        # (intercettato dal route, non inoltrato al browser)
+                        yield f"data: {json.dumps({'type': '_proxycurl_data', 'dati': dati_prx}, ensure_ascii=False)}\n\n"
             except Exception as e_prx:
                 logger.error("[AI] Errore arricchimento Proxycurl: %s", e_prx)
 
+        # done event senza dati_proxycurl (evita payload > 20 KB che rompe JSON.parse nel browser)
+        risultato.pop("dati_proxycurl", None)
         yield f"data: {json.dumps({'type': 'done', 'risultato': risultato}, ensure_ascii=False)}\n\n"
 
     except json.JSONDecodeError as e:

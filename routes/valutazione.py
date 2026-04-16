@@ -167,11 +167,29 @@ def analizza_stream():
             linkedin_url = m.group(0)
 
     def _genera():
-        yield from analizza_profilo_linkedin_stream(
+        for chunk in analizza_profilo_linkedin_stream(
             testo_profilo, tipo_profilo,
             linkedin_url=linkedin_url,
             dati_proxycurl_cached=dati_proxycurl_cached,
-        )
+        ):
+            # Intercetta l'evento interno _proxycurl_data: salva in DB, non inviare al browser
+            if '"_proxycurl_data"' in chunk:
+                try:
+                    ev = json.loads(chunk[chunk.index('data:') + 5:].strip())
+                    if ev.get("type") == "_proxycurl_data" and candidato_id:
+                        dati_prx_json = json.dumps(ev["dati"], ensure_ascii=False)
+                        db2 = get_db()
+                        db2.execute(
+                            "UPDATE candidati SET dati_proxycurl=? WHERE id=?",
+                            (dati_prx_json, candidato_id),
+                        )
+                        db2.commit()
+                        db2.close()
+                except Exception as e_save:
+                    import logging
+                    logging.getLogger(__name__).error("[stream] salvataggio proxycurl fallito: %s", e_save)
+                continue  # non inoltrare al browser
+            yield chunk
 
     return Response(
         _genera(),

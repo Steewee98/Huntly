@@ -1301,7 +1301,12 @@ async function avviaAnalisi() {
                 var linea = parti[i].trim();
                 if (!linea.startsWith('data:')) continue;
                 var evento;
-                try { evento = JSON.parse(linea.slice(5).trim()); } catch(e) { continue; }
+                try {
+                    evento = JSON.parse(linea.slice(5).trim());
+                } catch(e) {
+                    console.warn('[SSE] JSON.parse fallito (' + linea.length + ' chars):', e.message, linea.slice(5, 120));
+                    continue;
+                }
                 if (evento.type === 'chunk') {
                     streamTxt.textContent += evento.text;
                     streamTxt.scrollTop = streamTxt.scrollHeight;
@@ -1310,6 +1315,7 @@ async function avviaAnalisi() {
                     streamTxt.scrollTop = streamTxt.scrollHeight;
                 } else if (evento.type === 'done') {
                     risultatoFinale = evento.risultato;
+                    console.log('[SSE] done — arricchito:', risultatoFinale.arricchito, '| punteggio:', risultatoFinale.punteggio, '| campi:', Object.keys(risultatoFinale).join(', '));
                 } else if (evento.type === 'errore') {
                     previewEl.classList.add('hidden');
                     mostraErroreVal('Errore AI: ' + evento.messaggio);
