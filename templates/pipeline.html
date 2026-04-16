@@ -1583,6 +1583,15 @@ async function salvaCandidatoDaCronologia() {
             })
         });
         var dati = await jsonSicuro(risposta);
+        if (risposta.status === 409) {
+            nascondi('modal-salva-candidato');
+            mostraAvviso(
+                'Profilo già presente',
+                'Questo candidato è già in pipeline.',
+                dati.candidato_id ? '/pipeline?candidato_id=' + dati.candidato_id : null
+            );
+            return;
+        }
         if (!risposta.ok) throw new Error(dati.errore || 'Errore');
         document.getElementById('sc-successo').innerHTML = 'Candidato salvato! <a href="/pipeline" style="color:var(--azzurro);font-weight:600;">Vai alla Pipeline →</a>';
         mostra('sc-successo');

@@ -639,16 +639,25 @@ function confermaImport() {
         body: JSON.stringify(persona)
     })
     .then(function(r) {
-        if (!r.ok) return r.text().then(function(t) { throw new Error('Errore server ' + r.status + ': ' + t.substring(0, 200)); });
-        return r.json();
-    })
-    .then(function(data) {
-        chiudiModal();
-        if (data.successo) {
-            alert('Candidato importato nella pipeline!');
-        } else {
-            alert('Errore: ' + (data.errore || 'sconosciuto'));
+        if (r.status === 409) {
+            return r.json().then(function(data) {
+                chiudiModal();
+                mostraAvviso(
+                    'Profilo già presente',
+                    'Questo candidato è già in pipeline.',
+                    data.candidato_id ? '/pipeline?candidato_id=' + data.candidato_id : null
+                );
+            });
         }
+        if (!r.ok) return r.text().then(function(t) { throw new Error('Errore server ' + r.status + ': ' + t.substring(0, 200)); });
+        return r.json().then(function(data) {
+            chiudiModal();
+            if (data.successo) {
+                mostraAvviso('Importato!', 'Candidato aggiunto alla pipeline.', '/pipeline');
+            } else {
+                alert('Errore: ' + (data.errore || 'sconosciuto'));
+            }
+        });
     })
     .catch(function(err) { alert('Errore: ' + err); });
 }
@@ -721,14 +730,24 @@ function avviaAnalisi() {
         })
     })
     .then(function(r) {
+        if (r.status === 409) {
+            return r.json().then(function(data) {
+                chiudiModalAnalisi();
+                mostraAvviso(
+                    'Profilo già presente',
+                    'Questo candidato è già in pipeline.',
+                    data.candidato_id ? '/pipeline?candidato_id=' + data.candidato_id : null
+                );
+            });
+        }
         if (!r.ok) return r.text().then(function(t) { throw new Error('Errore server ' + r.status + (t ? ': ' + t.substring(0, 200) : '')); });
         return r.json();
     })
     .then(function(data) {
-        if (data.errore) {
+        if (!data || data.errore) {
             btn.disabled = false;
             btn.innerHTML = '&#9889; Avvia Analisi AI';
-            alert('Errore analisi: ' + data.errore);
+            if (data) alert('Errore analisi: ' + data.errore);
             return;
         }
         mostraRisultatoAnalisi(data);

@@ -48,6 +48,55 @@ document.addEventListener('keydown', function(e) {
  * @param {Response} response - oggetto Response da fetch()
  * @returns {Promise<any>} - dati JSON parsati
  */
+/**
+ * Mostra un toast arancione (avviso non bloccante) per situazioni come
+ * "profilo già presente" (HTTP 409).
+ * @param {string} titolo     - Titolo breve
+ * @param {string} messaggio  - Descrizione dell'avviso
+ * @param {string|null} link  - URL opzionale "Vai alla scheda →"
+ */
+function mostraAvviso(titolo, messaggio, link) {
+    // Rimuovi toast precedente se esiste
+    const vecchio = document.getElementById('_toast-avviso');
+    if (vecchio) vecchio.remove();
+
+    const toast = document.createElement('div');
+    toast.id = '_toast-avviso';
+    toast.style.cssText = [
+        'position:fixed', 'top:1.25rem', 'right:1.25rem', 'z-index:9999',
+        'background:#fff7ed', 'border:1.5px solid #f59e0b', 'border-left:4px solid #f59e0b',
+        'border-radius:10px', 'padding:1rem 1.25rem', 'max-width:340px',
+        'box-shadow:0 4px 20px rgba(0,0,0,0.12)', 'font-family:inherit',
+        'animation:_slideIn 0.2s ease',
+    ].join(';');
+
+    const linkHtml = link
+        ? '<a href="' + link + '" style="display:inline-block;margin-top:0.5rem;color:#d97706;font-weight:600;text-decoration:none;font-size:0.88rem;">Vai alla scheda →</a>'
+        : '';
+
+    toast.innerHTML =
+        '<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:0.75rem;">' +
+            '<div>' +
+                '<div style="font-weight:700;color:#92400e;font-size:0.95rem;margin-bottom:0.2rem;">⚠️ ' + titolo + '</div>' +
+                '<div style="color:#78350f;font-size:0.87rem;">' + messaggio + '</div>' +
+                linkHtml +
+            '</div>' +
+            '<button onclick="this.closest(\'#_toast-avviso\').remove()" ' +
+                'style="background:none;border:none;cursor:pointer;color:#92400e;font-size:1.1rem;padding:0;flex-shrink:0;">✕</button>' +
+        '</div>';
+
+    // Aggiunge animazione CSS inline (una sola volta)
+    if (!document.getElementById('_toast-style')) {
+        const style = document.createElement('style');
+        style.id = '_toast-style';
+        style.textContent = '@keyframes _slideIn{from{opacity:0;transform:translateX(20px)}to{opacity:1;transform:translateX(0)}}';
+        document.head.appendChild(style);
+    }
+
+    document.body.appendChild(toast);
+    setTimeout(function() { if (toast.parentNode) toast.remove(); }, 6000);
+}
+
 async function jsonSicuro(response) {
     const testo = await response.text();
     try {
