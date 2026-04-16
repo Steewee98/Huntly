@@ -121,7 +121,7 @@ def cerca_apify(ruolo, citta="", paese="", azienda="", parole_chiave="", num_pag
     run_input = {
         "takePages": num_pagine,
         "startPage": max(1, start_page),   # offset: varia ad ogni ricerca
-        "maxResults": 10,
+        "maxItems": 10,                    # rinominato da maxResults nella nuova versione actor
     }
 
     # Titoli di lavoro correnti — usa lista se fornita, altrimenti singolo ruolo
