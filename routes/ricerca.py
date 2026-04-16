@@ -457,8 +457,11 @@ def cerca():
         dup, motivo_dup, cand_id = is_duplicate(db_check, p)
         p["gia_in_pipeline"] = dup
         p["candidato_id_esistente"] = cand_id
-        if dup:
-            log.info("Profilo già in pipeline: %s — %s", motivo_dup, p.get("linkedin", ""))
+        nome_log = f"{p.get('nome','')} {p.get('cognome','')}".strip() or "?"
+        log.info("Profilo %s: linkedin_url=%s — già in DB: %s%s",
+                 nome_log, p.get("linkedin", "—"),
+                 "SI" if dup else "NO",
+                 f" ({motivo_dup})" if dup else "")
         persone.append(p)
     db_check.close()
 

@@ -577,7 +577,11 @@ function renderRisultati(persone, totale) {
     const tbody = document.getElementById('risultati-tbody');
     tbody.innerHTML = '';
 
-    persone.forEach(function(p) {
+    // Separa nuovi da già in pipeline
+    const nuovi      = persone.filter(function(p) { return !p.gia_in_pipeline; });
+    const giPresenti = persone.filter(function(p) { return  p.gia_in_pipeline; });
+
+    nuovi.forEach(function(p) {
         const nomeCompleto = [p.nome, p.cognome].filter(Boolean).join(' ') || '—';
         const location = p.location || '—';
         const linkedinBtn = p.linkedin
@@ -600,7 +604,23 @@ function renderRisultati(persone, totale) {
             '</tr>';
     });
 
-    document.getElementById('risultati-titolo').textContent = totale + ' risultati trovati';
+    // Titolo e avviso profili già in pipeline
+    const titoloEl = document.getElementById('risultati-titolo');
+    if (nuovi.length === 0) {
+        titoloEl.textContent = 'Nessun profilo nuovo trovato';
+        if (giPresenti.length > 0) {
+            mostraAvviso(
+                'Tutti già in pipeline',
+                giPresenti.length + ' profil' + (giPresenti.length === 1 ? 'o già presente' : 'i già presenti') + ' in pipeline — esclusi dai risultati.',
+                '/pipeline'
+            );
+        }
+    } else {
+        titoloEl.textContent = nuovi.length + ' nuov' + (nuovi.length === 1 ? 'o profilo' : 'i profili') + ' trovati';
+        if (giPresenti.length > 0) {
+            titoloEl.textContent += ' (' + giPresenti.length + ' già in pipeline, esclus' + (giPresenti.length === 1 ? 'o' : 'i') + ')';
+        }
+    }
     document.getElementById('risultati-section').classList.remove('hidden');
 }
 
