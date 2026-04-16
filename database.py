@@ -311,8 +311,10 @@ def init_db():
         "ALTER TABLE valutazioni          ADD COLUMN IF NOT EXISTS fonte TEXT DEFAULT 'manuale'",
         "ALTER TABLE candidati            ADD COLUMN IF NOT EXISTS ricerca_id INTEGER",
         "ALTER TABLE ricerche_automatiche ADD COLUMN IF NOT EXISTS fonte TEXT DEFAULT 'apify'",
-        # Deduplicazione: indice su URL LinkedIn (partial — esclude NULL e stringa vuota)
+        # Deduplicazione: indice parziale su LinkedIn (esclude NULL e stringa vuota)
         "CREATE INDEX IF NOT EXISTS idx_candidati_linkedin ON candidati(profilo_linkedin) WHERE profilo_linkedin IS NOT NULL AND profilo_linkedin <> ''",
+        # Indice UNIQUE su LinkedIn — silenziosamente ignorato se esistono già duplicati
+        "CREATE UNIQUE INDEX IF NOT EXISTS idx_candidati_linkedin_unique ON candidati(profilo_linkedin) WHERE profilo_linkedin IS NOT NULL AND profilo_linkedin <> ''",
         # Percentuale avanzamento ricerca asincrona
         "ALTER TABLE job_ricerche ADD COLUMN IF NOT EXISTS percentuale INTEGER DEFAULT 0",
         # Gestore candidato

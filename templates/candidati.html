@@ -67,6 +67,13 @@
                 </div>
             </div>
 
+            <!-- LinkedIn URL -->
+            <div class="form-group">
+                <label class="form-label" for="profilo_linkedin">URL LinkedIn</label>
+                <input type="url" id="profilo_linkedin" name="profilo_linkedin" class="form-input"
+                       placeholder="https://linkedin.com/in/nome-cognome">
+            </div>
+
             <!-- Note -->
             <div class="form-group">
                 <label class="form-label" for="note">Note</label>
@@ -74,8 +81,26 @@
                           placeholder="Note aggiuntive sul candidato, fonti di provenienza, ecc."></textarea>
             </div>
 
+            <!-- Avviso duplicato (nascosto di default) -->
+            <div id="avviso-duplicato" class="alert-duplicato hidden">
+                <div class="dup-icon">&#9888;</div>
+                <div class="dup-body">
+                    <strong>Candidato già presente nel database</strong>
+                    <p id="dup-motivo" class="dup-motivo"></p>
+                    <div class="dup-azioni">
+                        <a id="dup-link" href="#" class="btn btn-outline btn-sm" target="_blank">
+                            Vai alla scheda esistente &rarr;
+                        </a>
+                        <button type="button" id="btn-importa-comunque" class="btn btn-sm"
+                                style="background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;">
+                            Importa comunque
+                        </button>
+                    </div>
+                </div>
+            </div>
+
             <div class="form-actions">
-                <button type="submit" class="btn btn-primary btn-lg">
+                <button type="submit" id="btn-salva" class="btn btn-primary btn-lg">
                     Salva e Vai alla Valutazione &#8594;
                 </button>
                 <a href="{{ url_for('pipeline.index') }}" class="btn btn-outline">
@@ -95,6 +120,49 @@ document.querySelectorAll('input[name="tipo_profilo"]').forEach(radio => {
     radio.addEventListener('change', function() {
         document.querySelectorAll('.toggle-option').forEach(el => el.classList.remove('selected'));
         this.closest('.toggle-option').classList.add('selected');
+    });
+});
+
+// Intercetta submit: verifica duplicato prima di inviare
+document.getElementById('form-candidato').addEventListener('submit', async function(e) {
+    if (this.dataset.forceSubmit) return; // "Importa comunque" già cliccato
+    e.preventDefault();
+    const params = new URLSearchParams({
+        nome:     document.getElementById('nome').value,
+        cognome:  document.getElementById('cognome').value,
+        azienda:  document.getElementById('azienda').value,
+        ruolo:    document.getElementById('ruolo_attuale').value,
+        linkedin: document.getElementById('profilo_linkedin').value,
+    });
+    try {
+        const r = await fetch('/candidati/verifica_duplicato?' + params);
+        const d = await r.json();
+        if (d.duplicato) {
+            document.getElementById('dup-motivo').textContent = d.motivo;
+            document.getElementById('dup-link').href = '/pipeline#cand-' + d.candidato_id;
+            document.getElementById('avviso-duplicato').classList.remove('hidden');
+            document.getElementById('btn-salva').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+        } else {
+            this.submit();
+        }
+    } catch (err) {
+        // In caso di errore rete, invia comunque
+        this.submit();
+    }
+});
+
+// "Importa comunque" — bypassa il controllo duplicato e invia
+document.getElementById('btn-importa-comunque').addEventListener('click', function() {
+    document.getElementById('form-candidato').dataset.forceSubmit = '1';
+    document.getElementById('form-candidato').submit();
+});
+
+// Nascondi avviso se l'utente modifica i campi chiave
+['nome','cognome','azienda','ruolo_attuale','profilo_linkedin'].forEach(function(id) {
+    const el = document.getElementById(id);
+    if (el) el.addEventListener('input', function() {
+        document.getElementById('avviso-duplicato').classList.add('hidden');
+        delete document.getElementById('form-candidato').dataset.forceSubmit;
     });
 });
 </script>

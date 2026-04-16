@@ -6,6 +6,7 @@ Form per aggiungere candidati al database.
 import json
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from database import get_db
+from dedup import is_duplicate
 from datetime import datetime
 
 # Blueprint per il modulo inserimento candidati
@@ -18,6 +19,25 @@ def index():
     return render_template("candidati.html")
 
 
+@candidati_bp.route("/candidati/verifica_duplicato")
+def verifica_duplicato():
+    """
+    Endpoint AJAX: controlla se un profilo è già presente nel database.
+    GET /candidati/verifica_duplicato?nome=X&cognome=Y&azienda=Z&linkedin=URL
+    """
+    profilo = {
+        "nome":     request.args.get("nome", "").strip(),
+        "cognome":  request.args.get("cognome", "").strip(),
+        "azienda":  request.args.get("azienda", "").strip(),
+        "ruolo":    request.args.get("ruolo", "").strip(),
+        "linkedin": request.args.get("linkedin", "").strip(),
+    }
+    db = get_db()
+    dup, motivo, cand_id = is_duplicate(db, profilo)
+    db.close()
+    return jsonify({"duplicato": dup, "motivo": motivo, "candidato_id": cand_id})
+
+
 @candidati_bp.route("/candidati/inserisci", methods=["POST"])
 def inserisci():
     """Salva il nuovo candidato nel database e reindirizza alla valutazione."""
@@ -28,6 +48,7 @@ def inserisci():
     anni_esperienza = request.form.get("anni_esperienza", 0)
     note = request.form.get("note", "").strip()
     tipo_profilo = request.form.get("tipo_profilo", "A")
+    profilo_linkedin = request.form.get("profilo_linkedin", "").strip()
 
     if not nome or not cognome:
         flash("Nome e cognome sono obbligatori.", "errore")
@@ -58,9 +79,9 @@ def inserisci():
 
     cur = db.execute(
         """INSERT INTO candidati
-           (nome, cognome, ruolo_attuale, azienda, anni_esperienza, note, tipo_profilo, ricerca_id, gestore)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (nome, cognome, ruolo_attuale, azienda, anni_esperienza, note, tipo_profilo, ricerca_id, gestore_default),
+           (nome, cognome, ruolo_attuale, azienda, anni_esperienza, note, tipo_profilo, ricerca_id, gestore, profilo_linkedin)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (nome, cognome, ruolo_attuale, azienda, anni_esperienza, note, tipo_profilo, ricerca_id, gestore_default, profilo_linkedin or None),
     )
     db.commit()
     nuovo_id = cur.lastrowid
@@ -93,6 +114,19 @@ def da_cronologia():
     gestore_default = "Salvatore Sabia" if tipo_profilo == "A" else ("Firdaous Filahi" if tipo_profilo == "B" else "Non assegnato")
 
     db = get_db()
+
+    # Deduplicazione prima di creare il candidato
+    dup, motivo_dup, cand_id_esistente = is_duplicate(db, {
+        "nome": nome, "cognome": cognome,
+        "azienda": azienda, "ruolo": ruolo_attuale,
+    })
+    if dup:
+        db.close()
+        return jsonify({
+            "duplicato": True,
+            "motivo": motivo_dup,
+            "candidato_id": cand_id_esistente,
+        }), 409
 
     # Recupera i dati della valutazione per copiarli sul candidato
     val = None

@@ -15,6 +15,7 @@ import requests
 from flask import Blueprint, render_template, request, jsonify, Response
 from database import get_db
 from ai_helpers import analizza_profilo_linkedin
+from dedup import is_duplicate
 
 # Blueprint per il modulo ricerca
 ricerca_bp = Blueprint("ricerca", __name__)
@@ -226,33 +227,7 @@ def _filtro_qualita(p: dict) -> tuple:
     return True, ""
 
 
-def _controlla_duplicato(db, p: dict) -> bool:
-    """
-    Controlla se il profilo esiste già in candidati.
-    Prima verifica l'URL LinkedIn; fallback su nome + cognome + azienda.
-    Ritorna True se duplicato.
-    """
-    linkedin = (p.get('linkedin') or '').strip()
-    if linkedin:
-        row = db.execute(
-            "SELECT id FROM candidati WHERE profilo_linkedin = ?", (linkedin,)
-        ).fetchone()
-        if row:
-            return True
-
-    # Fallback nome + cognome + azienda (case-insensitive)
-    nome    = (p.get('nome', '') or '').strip().lower()
-    cognome = (p.get('cognome', '') or '').strip().lower()
-    azienda = (p.get('azienda', '') or '').strip().lower()
-    if nome and cognome and azienda:
-        row = db.execute(
-            "SELECT id FROM candidati WHERE LOWER(nome)=? AND LOWER(cognome)=? AND LOWER(azienda)=?",
-            (nome, cognome, azienda)
-        ).fetchone()
-        if row:
-            return True
-
-    return False
+# _controlla_duplicato rimossa: usa dedup.is_duplicate(db, profilo)
 
 
 def _filtro_locale(p: dict, imp: dict) -> tuple:
@@ -371,7 +346,17 @@ def cerca():
     if errore:
         return jsonify({"errore": errore}), 500
 
-    persone = [normalizza_profilo(p) for p in items if isinstance(p, dict)]
+    db_check = get_db()
+    persone = []
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        p = normalizza_profilo(item)
+        dup, _, cand_id = is_duplicate(db_check, p)
+        p["gia_in_pipeline"] = dup
+        p["candidato_id_esistente"] = cand_id
+        persone.append(p)
+    db_check.close()
 
     # Salva la ricerca nella cronologia
     parametri_str = json.dumps({
@@ -430,14 +415,35 @@ def _esegui_ricerca_background(job_id, tipo_profilo, max_profili, imp):
     try:
         aggiorna(status='in_corso', step='Avvio ricerca Apify', pct=0)
 
-        ruoli_raw        = imp.get("ruoli_target", "") or ""
-        ruoli            = [r.strip() for r in ruoli_raw.split(",") if r.strip()]
-        kw_positive      = imp.get("keyword_positive", "") or ""
-        extra_settore    = (imp.get("settori", "") if tipo_profilo == "A" else imp.get("istituti", "")) or ""
-        kw_parts         = [k.strip() for k in kw_positive.split(",") if k.strip()]
-        kw_parts        += [s.strip() for s in extra_settore.split(",") if s.strip()]
-        keywords         = " ".join(kw_parts[:6])
-        ruolo_principale = ruoli[0] if ruoli else ""
+        ruoli_raw     = imp.get("ruoli_target", "") or ""
+        ruoli         = [r.strip() for r in ruoli_raw.split(",") if r.strip()]
+        kw_positive   = imp.get("keyword_positive", "") or ""
+        extra_settore = (imp.get("settori", "") if tipo_profilo == "A" else imp.get("istituti", "")) or ""
+        kw_parts      = [k.strip() for k in kw_positive.split(",") if k.strip()]
+        kw_parts     += [s.strip() for s in extra_settore.split(",") if s.strip()]
+
+        # ── Rotazione keyword: varia ad ogni ricerca per ottenere profili diversi ──
+        n_precedenti = db.execute(
+            "SELECT COUNT(*) AS n FROM ricerche_automatiche "
+            "WHERE tipo_profilo=? AND fonte='apify'",
+            (tipo_profilo,)
+        ).fetchone()["n"] or 0
+
+        if ruoli:
+            idx_rot      = n_precedenti % len(ruoli)
+            ruolo_principale = ruoli[idx_rot]
+            ruoli_ruotati    = ruoli[idx_rot:] + ruoli[:idx_rot]
+        else:
+            ruolo_principale = ""
+            ruoli_ruotati    = []
+
+        # Ruota anche le keyword: usa un sottoinsieme diverso ad ogni ricerca
+        if len(kw_parts) > 3:
+            kw_start  = (n_precedenti * 2) % len(kw_parts)
+            kw_window = kw_parts[kw_start:kw_start + 6] or kw_parts[:6]
+        else:
+            kw_window = kw_parts[:6]
+        keywords = " ".join(kw_window)
 
         # Richiedi il doppio dei profili necessari per compensare filtri e duplicati
         num_pagine = max(1, (max_profili * 2 + 9) // 10)
@@ -445,7 +451,7 @@ def _esegui_ricerca_background(job_id, tipo_profilo, max_profili, imp):
         parametri_str = json.dumps({
             'ruolo': ruolo_principale, 'ruoli_tutti': ruoli_raw,
             'keywords': keywords, 'max_profili': max_profili,
-            'location': 'Italy',
+            'location': 'Italy', 'rotazione': n_precedenti,
         }, ensure_ascii=False)
 
         def _progress(pct, step):
@@ -453,7 +459,7 @@ def _esegui_ricerca_background(job_id, tipo_profilo, max_profili, imp):
 
         items, errore = cerca_apify(
             ruolo_principale, "", "", "", keywords, num_pagine,
-            ruoli_lista=ruoli, forza_italia=True, progress_cb=_progress
+            ruoli_lista=ruoli_ruotati, forza_italia=True, progress_cb=_progress
         )
 
         if errore:
@@ -499,9 +505,11 @@ def _esegui_ricerca_background(job_id, tipo_profilo, max_profili, imp):
                 motivi_filtro[motivo_l] = motivi_filtro.get(motivo_l, 0) + 1
                 continue
 
-            # Deduplicazione
-            if _controlla_duplicato(db, p):
+            # Deduplicazione robusta (URL → nome+azienda → nome+ruolo)
+            dup, motivo_dup, _ = is_duplicate(db, p)
+            if dup:
                 gia_presenti += 1
+                log.info("Scartato duplicato: %s", motivo_dup)
                 continue
 
             items_da_importare.append(p)
@@ -570,14 +578,15 @@ def _esegui_ricerca_background(job_id, tipo_profilo, max_profili, imp):
         db.commit()
 
         risultati_json = json.dumps({
-            # Contatori separati per trasparenza
-            "trovati_apify":    trovati_apify,
+            # ── 4 numeri principali del riepilogo ─────────────────────────────
+            "trovati_apify":    trovati_apify,       # Trovati da Apify
+            "gia_presenti":     gia_presenti,         # Già presenti (scartati)
+            "non_in_target":    scartati_qualita + scartati_filtro,  # Non in target (filtrati)
+            "importati":        importati,            # Importati nuovi
+            # ── Dettaglio aggiuntivo ───────────────────────────────────────────
             "filtrati":         trovati_filtrati,
-            "gia_presenti":     gia_presenti,
-            "importati":        importati,
             "valutati":         valutati,
             "punteggio_medio":  punteggio_medio,
-            # Dettaglio motivi scarto
             "scartati_qualita": scartati_qualita,
             "scartati_filtro":  scartati_filtro,
             "motivi_qualita":   motivi_qualita,
@@ -804,6 +813,23 @@ def analizza_candidato():
     anteprima     = testo_profilo[:120].replace("\n", " ").strip()
 
     e_candidato_nuovo = not candidato_id  # True se stiamo creando un nuovo record
+
+    # Deduplicazione: blocca inserimento se il profilo è già in pipeline
+    if e_candidato_nuovo:
+        profilo_check = {
+            "nome": nome, "cognome": cognome,
+            "azienda": azienda_ai or azienda,
+            "ruolo": ruolo_ai or ruolo,
+            "linkedin": linkedin,
+        }
+        dup, motivo_dup, cand_id_esistente = is_duplicate(db, profilo_check)
+        if dup:
+            db.close()
+            return jsonify({
+                "duplicato": True,
+                "motivo": motivo_dup,
+                "candidato_id": cand_id_esistente,
+            }), 409
 
     if candidato_id:
         # Aggiorna candidato esistente con analisi e stato pipeline
