@@ -26,9 +26,9 @@ def arricchisci_profilo(linkedin_url: str) -> dict | None:
 
     try:
         resp = requests.get(
-            "https://nubela.co/proxycurl/api/v2/linkedin",
+            "https://enrichlayer.com/api/v2/profile",
             params={
-                "url": linkedin_url,
+                "profile_url": linkedin_url,
                 "use_cache": "if-present",
                 "fallback_to_cache": "on-error",
                 "activities": "include",
