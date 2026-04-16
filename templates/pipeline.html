@@ -3,18 +3,44 @@
 
 {% block content %}
 <div class="page-header">
-    <h1 class="page-title">Pipeline Candidati</h1>
-    <p class="page-subtitle">{{ candidati|length }} candidati nel database</p>
+    <div>
+        <h1 class="page-title">Pipeline Candidati</h1>
+        <p class="page-subtitle">{{ candidati|length }} candidati nel database</p>
+    </div>
 </div>
+
+<!-- Tab Navigation -->
+<div class="tab-nav" style="display:flex;gap:0;border-bottom:2px solid var(--grigio-bordo);margin-bottom:1.5rem;">
+    <button class="tab-btn" data-tab="pipeline" onclick="attivaTab('pipeline')"
+            style="padding:0.65rem 1.25rem;border:none;background:none;cursor:pointer;font-size:0.9rem;font-weight:500;color:var(--grigio-testo);border-bottom:3px solid transparent;margin-bottom:-2px;transition:all 0.15s;">
+        &#9776; Pipeline
+    </button>
+    <button class="tab-btn" data-tab="valutazione" onclick="attivaTab('valutazione')"
+            style="padding:0.65rem 1.25rem;border:none;background:none;cursor:pointer;font-size:0.9rem;font-weight:500;color:var(--grigio-testo);border-bottom:3px solid transparent;margin-bottom:-2px;transition:all 0.15s;">
+        &#9733; Valutazione
+    </button>
+    <button class="tab-btn" data-tab="calendario" onclick="attivaTab('calendario')"
+            style="padding:0.65rem 1.25rem;border:none;background:none;cursor:pointer;font-size:0.9rem;font-weight:500;color:var(--grigio-testo);border-bottom:3px solid transparent;margin-bottom:-2px;transition:all 0.15s;">
+        &#128197; Calendario
+    </button>
+    <button class="tab-btn" data-tab="cronologia" onclick="attivaTab('cronologia')"
+            style="padding:0.65rem 1.25rem;border:none;background:none;cursor:pointer;font-size:0.9rem;font-weight:500;color:var(--grigio-testo);border-bottom:3px solid transparent;margin-bottom:-2px;transition:all 0.15s;">
+        &#128203; Cronologia
+    </button>
+</div>
+
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- TAB 1 — Pipeline                                        -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div id="tab-pipeline" class="tab-content">
 
 {% if not candidati %}
 <div class="empty-state">
     <div class="empty-icon">&#128100;</div>
     <h3>Nessun candidato ancora inserito</h3>
     <p>Inizia aggiungendo il tuo primo candidato.</p>
-    <a href="{{ url_for('candidati.index') }}" class="btn btn-primary">
-        + Inserisci Candidato
-    </a>
+    <a href="{{ url_for('candidati.index') }}" class="btn btn-primary">+ Inserisci Candidato</a>
 </div>
 {% else %}
 
@@ -78,10 +104,7 @@
                                 data-stato="{{ c.stato or '' }}"
                                 onchange="aggiornaStato(this)">
                             {% for stato in stati %}
-                            <option value="{{ stato }}"
-                                    {% if c.stato == stato %}selected{% endif %}>
-                                {{ stato }}
-                            </option>
+                            <option value="{{ stato }}" {% if c.stato == stato %}selected{% endif %}>{{ stato }}</option>
                             {% endfor %}
                         </select>
                     </td>
@@ -122,20 +145,21 @@
                     <td>
                         <div class="azioni-group">
                             {% if c.analisi %}
-                            <button class="btn btn-outline btn-xs"
-                                    onclick="mostraReport({{ c.id }})">
-                                Report
-                            </button>
+                            <button class="btn btn-outline btn-xs" onclick="mostraReport({{ c.id }})">Report</button>
                             {% else %}
-                            <a href="{{ url_for('valutazione.index', candidato_id=c.id) }}"
-                               class="btn btn-outline btn-xs">Valuta</a>
+                            <button class="btn btn-outline btn-xs"
+                                    onclick="attivaTab('valutazione');setTimeout(function(){var cid=document.getElementById('candidato-id');if(cid)cid.value='{{ c.id }}';},50)">
+                                Valuta
+                            </button>
                             {% endif %}
                             <button class="btn btn-secondary btn-xs"
                                     onclick="generaFollowup({{ c.id }}, '{{ c.nome }} {{ c.cognome }}')">
                                 Follow-up
                             </button>
-                            <a href="/calendario?candidato_id={{ c.id }}&open=1"
-                               class="btn btn-outline btn-xs">&#128197;</a>
+                            <button class="btn btn-outline btn-xs"
+                                    onclick="attivaTab('calendario');setTimeout(function(){apriModalNuovoApp('{{ c.id }}');},100)">
+                                &#128197;
+                            </button>
                             <button class="btn btn-danger btn-xs"
                                     onclick="eliminaCandidato({{ c.id }}, '{{ c.nome }} {{ c.cognome }}')">
                                 &#215;
@@ -150,8 +174,415 @@
 </div>
 
 {% endif %}
+</div><!-- /tab-pipeline -->
 
-<!-- Modale Report -->
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- TAB 2 — Valutazione                                     -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div id="tab-valutazione" class="tab-content hidden">
+
+<div class="page-header" style="margin-bottom:1.25rem;">
+    <div>
+        <h2 style="font-size:1.1rem;font-weight:700;margin:0;">Valutazione Candidati</h2>
+        <p class="page-subtitle" style="margin:0;">Analizza un profilo LinkedIn con intelligenza artificiale</p>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        {% if candidato %}
+        <div class="alert alert-info">
+            <strong>Candidato:</strong> {{ candidato.nome }} {{ candidato.cognome }}
+            {% if candidato.ruolo_attuale %} — {{ candidato.ruolo_attuale }}{% endif %}
+            {% if candidato.azienda %} @ {{ candidato.azienda }}{% endif %}
+        </div>
+        <input type="hidden" id="candidato-id" value="{{ candidato.id }}">
+        {% else %}
+        <input type="hidden" id="candidato-id" value="">
+        {% endif %}
+
+        <!-- Selezione tipo profilo -->
+        <div class="form-group">
+            <label class="form-label">Tipo di Profilo Target</label>
+            <div class="profilo-toggle">
+                <label class="toggle-option {% if not candidato or candidato.tipo_profilo == 'A' %}selected{% endif %}" id="label-profilo-a">
+                    <input type="radio" name="tipo_profilo" value="A"
+                           {% if not candidato or candidato.tipo_profilo == 'A' %}checked{% endif %}>
+                    <div class="toggle-content">
+                        <span class="toggle-badge">Profilo A</span>
+                        <span class="toggle-desc">40–65 anni · Consulenza · P.IVA</span>
+                    </div>
+                </label>
+                <label class="toggle-option {% if candidato and candidato.tipo_profilo == 'B' %}selected{% endif %}" id="label-profilo-b">
+                    <input type="radio" name="tipo_profilo" value="B"
+                           {% if candidato and candidato.tipo_profilo == 'B' %}checked{% endif %}>
+                    <div class="toggle-content">
+                        <span class="toggle-badge">Profilo B</span>
+                        <span class="toggle-desc">Under 35 · Esperienza Bancaria</span>
+                    </div>
+                </label>
+            </div>
+        </div>
+
+        <!-- Testo profilo nascosto -->
+        <textarea id="testo-profilo" class="hidden"></textarea>
+
+        <!-- Ricerca per nome -->
+        <div class="form-group">
+            <div class="form-row" style="margin-bottom:0.75rem;">
+                <div class="form-group">
+                    <label class="form-label">Nome</label>
+                    <input type="text" id="cerca-nome" class="form-input" placeholder="es. Mario">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Cognome</label>
+                    <input type="text" id="cerca-cognome" class="form-input" placeholder="es. Rossi">
+                </div>
+            </div>
+            <button class="btn btn-outline" id="btn-cerca-nome" onclick="cercaPerNome()">
+                <span id="cerca-nome-testo">&#128269; Trova su LinkedIn</span>
+                <span id="cerca-nome-loading" class="hidden"><span class="spinner" style="border-top-color:var(--azzurro);border-color:rgba(46,124,246,0.3)"></span> Ricerca in corso...</span>
+            </button>
+
+            <div id="risultati-nome" class="hidden" style="margin-top:1.25rem;">
+                <p style="font-size:0.85rem;color:var(--grigio-testo);margin-bottom:0.75rem;">Seleziona il profilo corretto e clicca Analizza:</p>
+                <div id="lista-profili-nome" style="display:flex;flex-direction:column;gap:0.75rem;"></div>
+            </div>
+            <div id="nessun-profilo-nome" class="hidden alert alert-info" style="margin-top:1rem;">
+                Nessun profilo trovato. Prova con un nome diverso.
+            </div>
+        </div>
+
+        <!-- Bottone analisi nascosto -->
+        <button id="btn-analizza" class="hidden" onclick="avviaAnalisi()">
+            <span id="btn-testo"></span>
+            <span id="btn-loading" class="hidden"><span class="spinner"></span></span>
+        </button>
+    </div>
+</div>
+
+<!-- Anteprima streaming -->
+<div id="stream-preview" class="hidden" style="margin-top:1.5rem;">
+    <div class="card">
+        <div class="card-header">
+            <h3 style="font-size:0.88rem;color:var(--grigio-testo);font-weight:500;">
+                <span class="spinner" style="width:14px;height:14px;border-width:2px;margin-right:6px;vertical-align:middle;"></span>
+                Generazione analisi in corso...
+            </h3>
+        </div>
+        <div class="card-body" style="padding:1rem 1.25rem;">
+            <pre id="stream-testo"
+                 style="white-space:pre-wrap;word-break:break-word;font-family:inherit;
+                        font-size:0.82rem;color:var(--grigio-testo);margin:0;
+                        min-height:48px;max-height:240px;overflow-y:auto;"></pre>
+        </div>
+    </div>
+</div>
+
+<!-- Skeleton loading -->
+<div id="skeleton-results" class="hidden" style="margin-top:1.5rem;">
+    <div class="results-grid">
+        <div class="card result-card" style="min-height:120px;">
+            <div class="card-body">
+                <div class="skeleton-box" style="width:80px;height:80px;border-radius:50%;margin:0 auto 0.75rem;"></div>
+                <div class="skeleton-box" style="width:60%;height:14px;margin:0 auto;"></div>
+            </div>
+        </div>
+        <div class="card result-card">
+            <div class="card-header"><div class="skeleton-box" style="width:40%;height:16px;"></div></div>
+            <div class="card-body">
+                <div class="skeleton-box" style="height:12px;margin-bottom:8px;"></div>
+                <div class="skeleton-box" style="height:12px;margin-bottom:8px;width:90%;"></div>
+                <div class="skeleton-box" style="height:12px;width:75%;"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Risultati analisi -->
+<div id="risultati" class="hidden">
+    <div class="results-grid">
+        <div class="card result-card score-card">
+            <div class="card-body text-center">
+                <div class="score-circle" id="score-circle"><span id="score-value">—</span></div>
+                <p class="score-label">Compatibilità</p>
+            </div>
+        </div>
+        <div class="card result-card">
+            <div class="card-header"><h3>Analisi del Percorso</h3></div>
+            <div class="card-body"><p id="analisi-percorso" class="result-text"></p></div>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-header"><h3>Spunti per il Primo Contatto</h3></div>
+        <div class="card-body"><ul id="spunti-lista" class="spunti-list"></ul></div>
+    </div>
+    <div class="card">
+        <div class="card-header">
+            <h3>Bozza Messaggio di Outreach</h3>
+            <div style="display:flex;gap:0.5rem;">
+                <button class="btn btn-outline btn-sm" onclick="rigeneraMessaggio()">
+                    <span id="btn-rigenera-testo">&#8635; Nuova versione</span>
+                    <span id="btn-rigenera-loading" class="hidden"><span class="spinner" style="border-top-color:var(--azzurro);border-color:rgba(46,124,246,0.3)"></span></span>
+                </button>
+                <button class="btn btn-outline btn-sm" onclick="copiaMessaggio()">Copia</button>
+            </div>
+        </div>
+        <div class="card-body">
+            <div id="messaggio-outreach" class="outreach-box"></div>
+            <p class="char-count"><span id="char-count">0</span> / 300 caratteri</p>
+            <div class="riscrivi-section">
+                <label class="form-label" style="margin-bottom:0.5rem;">Riscrivi con istruzioni personalizzate</label>
+                <div class="riscrivi-row">
+                    <textarea id="prompt-riscrivi" class="form-textarea" rows="2"
+                              placeholder="Es: rendi il tono più diretto, aggiungi un riferimento al settore bancario..."></textarea>
+                    <button class="btn btn-primary" id="btn-riscrivi" onclick="riscriviMessaggio()">
+                        <span id="btn-riscrivi-testo">Riscrivi</span>
+                        <span id="btn-riscrivi-loading" class="hidden"><span class="spinner"></span></span>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Errore valutazione -->
+<div id="errore-box" class="hidden alert alert-errore"></div>
+
+</div><!-- /tab-valutazione -->
+
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- TAB 3 — Calendario                                      -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div id="tab-calendario" class="tab-content hidden">
+
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;">
+    <div>
+        <h2 style="font-size:1.1rem;font-weight:700;margin:0;">Calendario</h2>
+        <p class="page-subtitle" style="margin:0;">Appuntamenti con i candidati</p>
+    </div>
+    <button class="btn btn-primary" onclick="apriModalNuovoApp('')">+ Nuovo Appuntamento</button>
+</div>
+
+<!-- Calendario mensile -->
+<div class="card" style="margin-bottom:1.5rem;">
+    <div class="card-body" style="padding:1.25rem;">
+        <div class="cal-nav">
+            <button class="btn btn-outline btn-sm" onclick="cambaMese(-1)">&#8249; Prec</button>
+            <span class="cal-mese" id="cal-titolo-mese"></span>
+            <button class="btn btn-outline btn-sm" onclick="cambaMese(1)">Succ &#8250;</button>
+        </div>
+        <div class="cal-grid" id="cal-grid">
+            <div class="cal-dow">Lun</div>
+            <div class="cal-dow">Mar</div>
+            <div class="cal-dow">Mer</div>
+            <div class="cal-dow">Gio</div>
+            <div class="cal-dow">Ven</div>
+            <div class="cal-dow">Sab</div>
+            <div class="cal-dow">Dom</div>
+        </div>
+        <div id="cal-dettaglio" class="hidden" style="margin-top:1rem;">
+            <div class="cal-popup">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+                    <h4 id="cal-dettaglio-titolo" style="font-size:0.95rem;font-weight:700;"></h4>
+                    <button class="btn btn-outline btn-xs" onclick="nascondi('cal-dettaglio')">✕</button>
+                </div>
+                <div id="cal-dettaglio-body"></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Lista appuntamenti -->
+<div class="card">
+    <div class="card-header">
+        <h3>Tutti gli Appuntamenti</h3>
+        <div style="display:flex;gap:0.5rem;align-items:center;">
+            <select id="filtro-stato-cal" class="form-input form-select" style="padding:0.3rem 0.6rem;font-size:0.85rem;height:auto;" onchange="filtraListaCal()">
+                <option value="">Tutti gli stati</option>
+                {% for s in stati_app %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+            </select>
+            <select id="filtro-gestore-cal" class="form-input form-select" style="padding:0.3rem 0.6rem;font-size:0.85rem;height:auto;" onchange="filtraListaCal()">
+                <option value="">Tutti i gestori</option>
+                {% for g in gestori_cal %}<option value="{{ g }}">{{ g }}</option>{% endfor %}
+            </select>
+        </div>
+    </div>
+
+    {% if appuntamenti %}
+    <div class="table-responsive">
+        <table class="data-table" id="tabella-appuntamenti">
+            <thead>
+                <tr>
+                    <th>Data / Ora</th>
+                    <th>Tipo</th>
+                    <th>Candidato</th>
+                    <th>Gestore</th>
+                    <th>Note</th>
+                    <th>Stato</th>
+                    <th>Azioni</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for a in appuntamenti %}
+                <tr data-stato="{{ a.stato }}" data-gestore="{{ a.gestore }}">
+                    <td style="white-space:nowrap;">
+                        <div style="font-weight:600;">{{ a.data_ora[:10] if a.data_ora else '—' }}</div>
+                        <div class="candidato-meta">{{ a.data_ora[11:16] if a.data_ora else '' }}</div>
+                    </td>
+                    <td>
+                        <span class="badge-tipo-app badge-tipo-{{ a.tipo | lower | replace(' ', '-') }}">{{ a.tipo }}</span>
+                    </td>
+                    <td>{{ a.candidato_nome or '—' }}</td>
+                    <td>
+                        {% if a.gestore == 'Salvatore Sabia' %}
+                            <span class="badge-gestore badge-gestore-sabia">{{ a.gestore }}</span>
+                        {% else %}
+                            <span class="badge-gestore badge-gestore-filahi">{{ a.gestore }}</span>
+                        {% endif %}
+                    </td>
+                    <td style="font-size:0.82rem;color:var(--grigio-testo);max-width:200px;">{{ a.note or '—' }}</td>
+                    <td>
+                        <span class="badge-stato-app badge-stato-app-{{ a.stato | lower | replace(' ', '-') }}">{{ a.stato }}</span>
+                    </td>
+                    <td>
+                        <div class="azioni-group">
+                            <button class="btn btn-outline btn-xs" onclick="apriModalModificaApp({{ a.id }})">Modifica</button>
+                            <button class="btn btn-danger btn-xs" onclick="eliminaAppuntamento({{ a.id }})">✕</button>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="card-body">
+        <div class="empty-state" style="padding:2rem;">
+            <div class="empty-icon">&#128197;</div>
+            <p>Nessun appuntamento ancora. Crea il primo con il bottone "+ Nuovo Appuntamento".</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+</div><!-- /tab-calendario -->
+
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- TAB 4 — Cronologia Valutazioni                          -->
+<!-- ═══════════════════════════════════════════════════════ -->
+<div id="tab-cronologia" class="tab-content hidden">
+
+<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;">
+    <div>
+        <h2 style="font-size:1.1rem;font-weight:700;margin:0;">Cronologia Valutazioni</h2>
+        <p class="page-subtitle" style="margin:0;">Storico di tutte le analisi AI effettuate</p>
+    </div>
+    <div style="display:flex;gap:0.75rem;align-items:center;">
+        <span class="text-muted" style="font-size:0.82rem;" id="cronologia-count">{{ cronologia|length }} valutazioni totali</span>
+        <a href="/valutazione/export_csv" class="btn btn-outline btn-sm">&#8595; Esporta CSV</a>
+    </div>
+</div>
+
+<div class="card">
+    <!-- Filtri -->
+    <div style="padding:0.875rem 1.25rem;background:var(--grigio-sfondo);border-bottom:1px solid var(--grigio-bordo);display:flex;gap:1rem;flex-wrap:wrap;align-items:flex-end;">
+        <div>
+            <label style="font-size:0.8rem;color:var(--grigio-testo);display:block;margin-bottom:0.3rem;">Tipo Profilo</label>
+            <select id="filtro-tipo" class="form-input form-select" style="padding:0.3rem 0.6rem;font-size:0.85rem;height:auto;" onchange="filtraCronologia()">
+                <option value="">Tutti</option>
+                <option value="A">Profilo A</option>
+                <option value="B">Profilo B</option>
+            </select>
+        </div>
+        <div>
+            <label style="font-size:0.8rem;color:var(--grigio-testo);display:block;margin-bottom:0.3rem;">Punteggio minimo</label>
+            <input type="number" id="filtro-punteggio" class="form-input" min="1" max="10"
+                   style="padding:0.3rem 0.6rem;font-size:0.85rem;width:90px;height:auto;"
+                   placeholder="es. 7" oninput="filtraCronologia()">
+        </div>
+        <div>
+            <label style="font-size:0.8rem;color:var(--grigio-testo);display:block;margin-bottom:0.3rem;">Fonte</label>
+            <select id="filtro-fonte" class="form-input form-select" style="padding:0.3rem 0.6rem;font-size:0.85rem;height:auto;" onchange="filtraCronologia()">
+                <option value="">Tutte</option>
+                <option value="manuale">Manuale</option>
+                <option value="ricerca_automatica">Automatica</option>
+            </select>
+        </div>
+        <button class="btn btn-outline btn-sm" onclick="resetFiltriCron()" style="margin-top:auto;">&#10005; Reset</button>
+    </div>
+
+    {% if cronologia %}
+    <div class="table-responsive">
+        <table class="data-table" id="cronologia-tabella">
+            <thead>
+                <tr>
+                    <th>Data</th>
+                    <th>Contatto</th>
+                    <th>Profilo</th>
+                    <th>Punteggio</th>
+                    <th>Fonte</th>
+                    <th>Azione</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for v in cronologia %}
+                <tr data-tipo="{{ v.tipo_profilo }}"
+                    data-punteggio="{{ v.punteggio or 0 }}"
+                    data-fonte="{{ v.fonte or 'manuale' }}">
+                    <td style="white-space:nowrap;">
+                        <div>{{ v.data_valutazione[:10] }}</div>
+                        <div class="candidato-meta">{{ v.data_valutazione[11:16] }}</div>
+                    </td>
+                    <td>
+                        <strong>{{ v.nome_contatto or '—' }}</strong>
+                        {% if v.ruolo_attuale %}<div class="candidato-meta">{{ v.ruolo_attuale }}</div>{% endif %}
+                    </td>
+                    <td>
+                        <span class="badge badge-profilo-{{ v.tipo_profilo|lower }}">Profilo {{ v.tipo_profilo }}</span>
+                    </td>
+                    <td>
+                        <span class="score-badge score-badge-{{ 'alto' if v.punteggio >= 8 else ('medio' if v.punteggio >= 5 else 'basso') }}">
+                            {{ v.punteggio }}/10
+                        </span>
+                    </td>
+                    <td>
+                        <span style="font-size:0.82rem;color:var(--grigio-testo);">
+                            {{ 'Automatica' if v.fonte == 'ricerca_automatica' else 'Manuale' }}
+                        </span>
+                    </td>
+                    <td>
+                        <div style="display:flex;gap:0.4rem;flex-wrap:wrap;">
+                            <button class="btn btn-outline btn-xs" onclick="mostraDettaglioCronologia({{ v.id }})">Vedi Report</button>
+                            <button class="btn btn-secondary btn-xs" onclick="apriModalCandidato({{ v.id }})">+ Candidato</button>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="card-body">
+        <div class="empty-state" style="padding:2rem;">
+            <div class="empty-icon">&#128203;</div>
+            <p>Nessuna valutazione ancora. Analizza il primo profilo per iniziare la cronologia.</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+</div><!-- /tab-cronologia -->
+
+
+<!-- ═══════════════════════════════════════════════════════ -->
+<!-- MODALI (condivisi fra tutti i tab)                      -->
+<!-- ═══════════════════════════════════════════════════════ -->
+
+<!-- Modal Report candidato (Pipeline) -->
 <div id="modal-report" class="modal-overlay hidden" onclick="chiudiModal(event)">
     <div class="modal">
         <div class="modal-header">
@@ -162,7 +593,7 @@
     </div>
 </div>
 
-<!-- Modale Follow-up -->
+<!-- Modal Follow-up (Pipeline) -->
 <div id="modal-followup" class="modal-overlay hidden" onclick="chiudiModalFollowup(event)">
     <div class="modal">
         <div class="modal-header">
@@ -175,15 +606,31 @@
             </div>
             <div id="followup-content" class="hidden">
                 <div id="followup-testo" class="outreach-box"></div>
-                <button class="btn btn-primary" onclick="copiaFollowup()" style="margin-top:1rem">
-                    Copia Messaggio
-                </button>
+                <p class="char-count"><span id="followup-char-count">0</span> / 300 caratteri</p>
+                <div style="display:flex;gap:0.5rem;margin-top:0.75rem;flex-wrap:wrap;">
+                    <button class="btn btn-primary" onclick="copiaFollowup()">Copia Messaggio</button>
+                    <button class="btn btn-outline btn-sm" onclick="rigeneraFollowup()">
+                        <span id="btn-rigenera-fu-testo">&#8635; Nuova versione</span>
+                        <span id="btn-rigenera-fu-loading" class="hidden"><span class="spinner"></span></span>
+                    </button>
+                </div>
+                <div class="riscrivi-section" style="margin-top:1rem;">
+                    <label class="form-label" style="margin-bottom:0.5rem;">Riscrivi con istruzioni</label>
+                    <div class="riscrivi-row">
+                        <textarea id="prompt-followup" class="form-textarea" rows="2"
+                                  placeholder="Es: più diretto, aggiungi settore bancario..."></textarea>
+                        <button class="btn btn-primary" id="btn-riscrivi-fu" onclick="riscriviFollowup()">
+                            <span id="btn-riscrivi-fu-testo">Riscrivi</span>
+                            <span id="btn-riscrivi-fu-loading" class="hidden"><span class="spinner"></span></span>
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 </div>
 
-<!-- Modale Note -->
+<!-- Modal Note (Pipeline) -->
 <div id="modal-note" class="modal-overlay hidden" onclick="chiudiModalNote(event)">
     <div class="modal">
         <div class="modal-header">
@@ -202,21 +649,202 @@
     </div>
 </div>
 
-<!-- Dati candidati per JS (report) -->
-<script id="candidati-data" type="application/json">
-{{ candidati | tojson }}
-</script>
+<!-- Modal Dettaglio Cronologia (Cronologia) -->
+<div id="modal-cronologia" class="modal-overlay hidden" onclick="if(event.target===this)nascondi('modal-cronologia')">
+    <div class="modal">
+        <div class="modal-header">
+            <h3>Report Valutazione</h3>
+            <button class="modal-close" onclick="nascondi('modal-cronologia')">&times;</button>
+        </div>
+        <div class="modal-body" id="modal-cronologia-body"></div>
+    </div>
+</div>
+
+<!-- Modal Salva Candidato da Cronologia -->
+<div id="modal-salva-candidato" class="modal-overlay hidden"
+     onclick="if(event.target===this)nascondi('modal-salva-candidato')">
+    <div class="modal">
+        <div class="modal-header">
+            <h3>Salva come Candidato</h3>
+            <button class="modal-close" onclick="nascondi('modal-salva-candidato')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <input type="hidden" id="sc-valutazione-id">
+            <input type="hidden" id="sc-tipo-profilo">
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Nome <span class="required">*</span></label>
+                    <input type="text" id="sc-nome" class="form-input" placeholder="Nome">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Cognome <span class="required">*</span></label>
+                    <input type="text" id="sc-cognome" class="form-input" placeholder="Cognome">
+                </div>
+            </div>
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Ruolo Attuale</label>
+                    <input type="text" id="sc-ruolo" class="form-input" placeholder="Es. Private Banker">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Azienda</label>
+                    <input type="text" id="sc-azienda" class="form-input" placeholder="Es. Banca XYZ">
+                </div>
+            </div>
+            <div class="form-group" style="max-width:180px;">
+                <label class="form-label">Anni di Esperienza</label>
+                <input type="number" id="sc-anni" class="form-input" min="0" max="50" placeholder="0">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Note</label>
+                <textarea id="sc-note" class="form-textarea" rows="2" placeholder="Note aggiuntive..."></textarea>
+            </div>
+            <div id="sc-errore" class="hidden alert alert-errore"></div>
+            <div id="sc-successo" class="hidden alert alert-successo"></div>
+            <div class="form-actions">
+                <button class="btn btn-primary" onclick="salvaCandidatoDaCronologia()">
+                    <span id="sc-btn-testo">Salva Candidato</span>
+                    <span id="sc-btn-loading" class="hidden"><span class="spinner"></span></span>
+                </button>
+                <button class="btn btn-outline" onclick="nascondi('modal-salva-candidato')">Annulla</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Nuovo/Modifica Appuntamento (Calendario) -->
+<div id="modal-appuntamento" class="modal-overlay hidden" onclick="if(event.target===this)chiudiModalApp()">
+    <div class="modal">
+        <div class="modal-header">
+            <h3 id="modal-app-titolo">Nuovo Appuntamento</h3>
+            <button class="modal-close" onclick="chiudiModalApp()">&times;</button>
+        </div>
+        <div class="modal-body" style="overflow-y:auto;">
+            <input type="hidden" id="app-edit-id">
+            <div class="form-row">
+                <div class="form-group">
+                    <label class="form-label">Data e Ora <span class="required">*</span></label>
+                    <input type="datetime-local" id="app-data-ora" class="form-input">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Tipo <span class="required">*</span></label>
+                    <select id="app-tipo" class="form-input form-select">
+                        {% for t in tipi_app %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Candidato</label>
+                <select id="app-candidato" class="form-input form-select">
+                    <option value="">— Nessun candidato —</option>
+                    {% for c in candidati %}
+                    <option value="{{ c.id }}">{{ c.cognome }} {{ c.nome }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Gestore <span class="required">*</span></label>
+                <select id="app-gestore" class="form-input form-select">
+                    {% for g in gestori_cal %}<option value="{{ g }}">{{ g }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Stato</label>
+                <select id="app-stato" class="form-input form-select">
+                    {% for s in stati_app %}<option value="{{ s }}">{{ s }}</option>{% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Note</label>
+                <textarea id="app-note" class="form-textarea" rows="3" placeholder="Argomenti da trattare, link, ecc."></textarea>
+            </div>
+            <div id="app-errore" class="hidden alert alert-errore"></div>
+            <div class="form-actions">
+                <button class="btn btn-primary" onclick="salvaAppuntamento()">
+                    <span id="app-btn-testo">Salva</span>
+                    <span id="app-btn-loading" class="hidden"><span class="spinner"></span></span>
+                </button>
+                <button class="btn btn-outline" onclick="chiudiModalApp()">Annulla</button>
+                <button id="app-btn-elimina" class="btn btn-danger hidden" onclick="eliminaAppuntamentoDaModal()">Elimina</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Dati JSON per JS -->
+<script id="candidati-data" type="application/json">{{ candidati | tojson }}</script>
+<script id="cronologia-data" type="application/json">{{ cronologia | tojson }}</script>
+<script id="appuntamenti-data" type="application/json">{{ appuntamenti | tojson }}</script>
 {% endblock %}
 
-{% block scripts %}
-<script>
-// Carica i dati dei candidati
-let candidatiData = [];
-try {
-    candidatiData = JSON.parse(document.getElementById('candidati-data').textContent);
-} catch(e) { console.error('[pipeline] JSON.parse candidati-data:', e); }
 
-// Mappa gestore → classe badge CSS
+{% block scripts %}
+<style>
+/* Tab nav */
+.tab-btn.active {
+    color: var(--azzurro) !important;
+    border-bottom-color: var(--azzurro) !important;
+    font-weight: 600 !important;
+}
+.tab-btn:hover { color: var(--blu-scuro) !important; }
+
+/* Note pipeline */
+.nota-cella { cursor:pointer; max-width:180px; min-width:80px; }
+.nota-cella:hover { background:var(--grigio-sfondo); }
+.nota-anteprima { font-size:0.78rem; color:var(--testo); display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; }
+.nota-vuota { font-size:1rem; color:#bbb; display:block; text-align:center; }
+.nota-vuota:hover { color:var(--azzurro); }
+
+/* Skeleton valutazione */
+.skeleton-box {
+    background:linear-gradient(90deg,#e8ecf0 25%,#f4f6f8 50%,#e8ecf0 75%);
+    background-size:200% 100%;
+    animation:skeleton-shimmer 1.4s infinite;
+    border-radius:6px; width:100%; height:14px;
+}
+@keyframes skeleton-shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+</style>
+
+<script>
+/* ────────────────────────────────────────────────────────── */
+/* TAB SWITCHING                                              */
+/* ────────────────────────────────────────────────────────── */
+const TAB_ATTIVO_INIZIALE = "{{ tab_attivo }}";
+
+function attivaTab(tabId) {
+    document.querySelectorAll('.tab-content').forEach(function(el) { el.classList.add('hidden'); });
+    document.querySelectorAll('.tab-btn').forEach(function(el) { el.classList.remove('active'); });
+    var tabEl = document.getElementById('tab-' + tabId);
+    if (tabEl) tabEl.classList.remove('hidden');
+    var btnEl = document.querySelector('.tab-btn[data-tab="' + tabId + '"]');
+    if (btnEl) btnEl.classList.add('active');
+    history.replaceState(null, '', '/pipeline?tab=' + tabId);
+}
+
+attivaTab(TAB_ATTIVO_INIZIALE);
+
+// Auto-apri modal appuntamento se ?tab=calendario&open=1
+(function() {
+    var params = new URLSearchParams(window.location.search);
+    if (params.get('tab') === 'calendario' && params.get('open') === '1') {
+        var cid = params.get('candidato_id') || '';
+        setTimeout(function() { apriModalNuovoApp(cid); }, 150);
+    }
+})();
+
+/* ────────────────────────────────────────────────────────── */
+/* DATI JSON                                                  */
+/* ────────────────────────────────────────────────────────── */
+var candidatiData = [];
+var cronologiaData = [];
+var appuntamentiData = [];
+try { candidatiData   = JSON.parse(document.getElementById('candidati-data').textContent);   } catch(e) {}
+try { cronologiaData  = JSON.parse(document.getElementById('cronologia-data').textContent);  } catch(e) {}
+try { appuntamentiData = JSON.parse(document.getElementById('appuntamenti-data').textContent); } catch(e) {}
+
+/* ────────────────────────────────────────────────────────── */
+/* PIPELINE — Gestori, stati, report, follow-up, note        */
+/* ────────────────────────────────────────────────────────── */
 const GESTORE_BADGE = {
     'Salvatore Sabia': 'badge-gestore-sabia',
     'Firdaous Filahi': 'badge-gestore-filahi',
@@ -224,124 +852,79 @@ const GESTORE_BADGE = {
 };
 
 async function aggiornaGestore(select) {
-    const id = select.dataset.id;
-    const gestore = select.value;
-
+    var id = select.dataset.id;
+    var gestore = select.value;
     try {
-        const risposta = await fetch('/pipeline/aggiorna_gestore', {
+        var risposta = await fetch('/pipeline/aggiorna_gestore', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id, gestore })
+            body: JSON.stringify({ id: id, gestore: gestore })
         });
         if (risposta.ok) {
-            // Aggiorna badge
-            const badge = document.getElementById(`gestore-badge-${id}`);
-            if (badge) {
-                badge.textContent = gestore;
-                badge.className = 'badge-gestore ' + (GESTORE_BADGE[gestore] || 'badge-gestore-nessuno');
-            }
-            // Aggiorna data-gestore sulla riga per il filtro
-            const row = document.getElementById(`row-${id}`);
+            var badge = document.getElementById('gestore-badge-' + id);
+            if (badge) { badge.textContent = gestore; badge.className = 'badge-gestore ' + (GESTORE_BADGE[gestore] || 'badge-gestore-nessuno'); }
+            var row = document.getElementById('row-' + id);
             if (row) row.dataset.gestore = gestore;
-
             select.classList.add('select-saved');
-            setTimeout(() => select.classList.remove('select-saved'), 1500);
+            setTimeout(function() { select.classList.remove('select-saved'); }, 1500);
         }
-    } catch(e) { console.error('[pipeline] aggiornaGestore fetch error:', e); }
+    } catch(e) { console.error('[pipeline] aggiornaGestore:', e); }
 }
 
-let filtroGestoreAttivo = 'tutti';
-
+var filtroGestoreAttivo = 'tutti';
 function filtraGestore(gestore, btn) {
     filtroGestoreAttivo = gestore;
-
-    // Aggiorna pulsanti
-    document.querySelectorAll('.btn-filtro').forEach(b => b.classList.remove('attivo'));
+    document.querySelectorAll('.btn-filtro').forEach(function(b) { b.classList.remove('attivo'); });
     btn.classList.add('attivo');
-
-    // Mostra/nascondi righe
-    document.querySelectorAll('tbody tr').forEach(row => {
-        if (gestore === 'tutti' || row.dataset.gestore === gestore) {
-            row.style.display = '';
-        } else {
-            row.style.display = 'none';
-        }
+    document.querySelectorAll('#tab-pipeline tbody tr').forEach(function(row) {
+        row.style.display = (gestore === 'tutti' || row.dataset.gestore === gestore) ? '' : 'none';
     });
 }
 
 async function aggiornaStato(select) {
-    const id = select.dataset.id;
-    const stato = select.value;
-
+    var id = select.dataset.id;
+    var stato = select.value;
     try {
-        const risposta = await fetch('/pipeline/aggiorna_stato', {
+        var risposta = await fetch('/pipeline/aggiorna_stato', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id, stato })
+            body: JSON.stringify({ id: id, stato: stato })
         });
         if (risposta.ok) {
             select.dataset.stato = stato;
             select.classList.add('select-saved');
-            setTimeout(() => select.classList.remove('select-saved'), 1500);
-        } else {
-            console.error('[pipeline] aggiornaStato HTTP', risposta.status);
+            setTimeout(function() { select.classList.remove('select-saved'); }, 1500);
         }
-    } catch(e) { console.error('[pipeline] aggiornaStato fetch error:', e); }
+    } catch(e) { console.error('[pipeline] aggiornaStato:', e); }
 }
 
 function mostraReport(id) {
-    const c = candidatiData.find(x => x.id === id);
+    var c = candidatiData.find(function(x) { return x.id === id; });
     if (!c) return;
-
-    document.getElementById('modal-titolo').textContent =
-        `Report: ${c.nome} ${c.cognome}`;
-
-    let spunti = c.spunti || [];
-    if (typeof spunti === 'string') {
-        try { spunti = JSON.parse(spunti); } catch { spunti = []; }
-    }
-
-    const spuntiHtml = spunti.map(s => `<li class="spunto-item">${s}</li>`).join('');
-
-    document.getElementById('modal-body').innerHTML = `
-        <div class="report-sezione">
-            <div class="report-score ${getScoreClass(c.punteggio)}">
-                ${c.punteggio}/10
-            </div>
-        </div>
-        <div class="report-sezione">
-            <h4>Analisi del Percorso</h4>
-            <p>${c.analisi || '—'}</p>
-        </div>
-        <div class="report-sezione">
-            <h4>Spunti per il Contatto</h4>
-            <ul>${spuntiHtml}</ul>
-        </div>
-        <div class="report-sezione">
-            <h4>Messaggio di Outreach</h4>
-            <div class="outreach-box">${c.messaggio_outreach || '—'}</div>
-        </div>
-    `;
-
+    document.getElementById('modal-titolo').textContent = 'Report: ' + c.nome + ' ' + c.cognome;
+    var spunti = c.spunti || [];
+    if (typeof spunti === 'string') { try { spunti = JSON.parse(spunti); } catch(e) { spunti = []; } }
+    var spuntiHtml = spunti.map(function(s) { return '<li class="spunto-item">' + s + '</li>'; }).join('');
+    document.getElementById('modal-body').innerHTML =
+        '<div class="report-sezione"><div class="report-score ' + getScoreClass(c.punteggio) + '">' + c.punteggio + '/10</div></div>' +
+        '<div class="report-sezione"><h4>Analisi del Percorso</h4><p>' + (c.analisi || '—') + '</p></div>' +
+        '<div class="report-sezione"><h4>Spunti per il Contatto</h4><ul>' + spuntiHtml + '</ul></div>' +
+        '<div class="report-sezione"><h4>Messaggio di Outreach</h4><div class="outreach-box">' + (c.messaggio_outreach || '—') + '</div></div>';
     mostra('modal-report');
 }
 
-// ID candidato corrente nel modal follow-up
-let followupCandidatoId = null;
+var followupCandidatoId = null;
 
 async function generaFollowup(id, nome) {
     followupCandidatoId = id;
-    document.getElementById('followup-titolo').textContent = `Follow-up: ${nome}`;
+    document.getElementById('followup-titolo').textContent = 'Follow-up: ' + nome;
     document.getElementById('prompt-followup').value = '';
     nascondi('followup-content');
     mostra('followup-loading');
     mostra('modal-followup');
-
     try {
-        const risposta = await fetch(`/pipeline/followup/${id}`, { method: 'POST' });
-        console.log('[pipeline] followup response:', risposta.status, risposta.headers.get('content-type'));
-        const dati = await jsonSicuro(risposta);
-
+        var risposta = await fetch('/pipeline/followup/' + id, { method: 'POST' });
+        var dati = await jsonSicuro(risposta);
         if (risposta.ok) {
             impostaTestoFollowup(dati.messaggio);
             nascondi('followup-loading');
@@ -349,7 +932,7 @@ async function generaFollowup(id, nome) {
         } else {
             document.getElementById('followup-testo').textContent = 'Errore: ' + dati.errore;
         }
-    } catch (err) {
+    } catch(err) {
         nascondi('followup-loading');
         mostra('followup-content');
         document.getElementById('followup-testo').textContent = 'Errore di rete.';
@@ -357,67 +940,50 @@ async function generaFollowup(id, nome) {
 }
 
 function impostaTestoFollowup(testo) {
-    const box = document.getElementById('followup-testo');
-    box.textContent = testo;
+    document.getElementById('followup-testo').textContent = testo;
     document.getElementById('followup-char-count').textContent = testo.length;
 }
+
 function copiaFollowup() {
-    const testo = document.getElementById('followup-testo').textContent;
-    navigator.clipboard.writeText(testo).then(() => {
-        const btn = event.target;
-        const orig = btn.textContent;
+    var testo = document.getElementById('followup-testo').textContent;
+    navigator.clipboard.writeText(testo).then(function() {
+        var btn = event.target;
+        var orig = btn.textContent;
         btn.textContent = 'Copiato!';
-        setTimeout(() => btn.textContent = orig, 2000);
+        setTimeout(function() { btn.textContent = orig; }, 2000);
     });
 }
 
-
-async function rigeneraFollowup() {
-    await chiamaRigeneraFollowup('');
-}
-
+async function rigeneraFollowup() { await chiamaRigeneraFollowup(''); }
 async function riscriviFollowup() {
-    const istruzioni = document.getElementById('prompt-followup').value.trim();
-    if (!istruzioni) {
-        document.getElementById('prompt-followup').focus();
-        return;
-    }
+    var istruzioni = document.getElementById('prompt-followup').value.trim();
+    if (!istruzioni) { document.getElementById('prompt-followup').focus(); return; }
     await chiamaRigeneraFollowup(istruzioni);
 }
 
 async function chiamaRigeneraFollowup(istruzioni) {
-    const messaggioAttuale = document.getElementById('followup-testo').textContent.trim();
+    var messaggioAttuale = document.getElementById('followup-testo').textContent.trim();
     if (!messaggioAttuale || !followupCandidatoId) return;
-
-    const isRiscrivi = istruzioni.length > 0;
-    const btnLoadingId = isRiscrivi ? 'btn-riscrivi-fu-loading' : 'btn-rigenera-fu-loading';
-    const btnTestoId   = isRiscrivi ? 'btn-riscrivi-fu-testo'   : 'btn-rigenera-fu-testo';
-    const btnId        = isRiscrivi ? 'btn-riscrivi-fu'          : null;
-
+    var isRiscrivi = istruzioni.length > 0;
+    var btnLoadingId = isRiscrivi ? 'btn-riscrivi-fu-loading' : 'btn-rigenera-fu-loading';
+    var btnTestoId   = isRiscrivi ? 'btn-riscrivi-fu-testo'   : 'btn-rigenera-fu-testo';
+    var btnId        = isRiscrivi ? 'btn-riscrivi-fu' : null;
     document.getElementById(btnLoadingId).classList.remove('hidden');
     document.getElementById(btnTestoId).classList.add('hidden');
     if (btnId) document.getElementById(btnId).disabled = true;
-
     try {
-        const risposta = await fetch(`/pipeline/rigenera_followup/${followupCandidatoId}`, {
+        var risposta = await fetch('/pipeline/rigenera_followup/' + followupCandidatoId, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ messaggio_attuale: messaggioAttuale, istruzioni })
+            body: JSON.stringify({ messaggio_attuale: messaggioAttuale, istruzioni: istruzioni })
         });
-        console.log('[pipeline] rigenera_followup response:', risposta.status, risposta.headers.get('content-type'));
-        const dati = await jsonSicuro(risposta);
+        var dati = await jsonSicuro(risposta);
         if (!risposta.ok) throw new Error(dati.errore || 'Errore');
-
-        const box = document.getElementById('followup-testo');
+        var box = document.getElementById('followup-testo');
         box.style.opacity = '0.4';
-        setTimeout(() => {
-            impostaTestoFollowup(dati.messaggio);
-            box.style.opacity = '1';
-        }, 200);
-
+        setTimeout(function() { impostaTestoFollowup(dati.messaggio); box.style.opacity = '1'; }, 200);
         if (isRiscrivi) document.getElementById('prompt-followup').value = '';
-
-    } catch (err) {
+    } catch(err) {
         alert('Errore: ' + err.message);
     } finally {
         document.getElementById(btnLoadingId).classList.add('hidden');
@@ -427,84 +993,68 @@ async function chiamaRigeneraFollowup(istruzioni) {
 }
 
 async function eliminaCandidato(id, nome) {
-    if (!confirm(`Eliminare ${nome} dalla pipeline?`)) return;
+    if (!confirm('Eliminare ' + nome + ' dalla pipeline?')) return;
     try {
-        const risposta = await fetch(`/pipeline/elimina/${id}`, { method: 'DELETE' });
+        var risposta = await fetch('/pipeline/elimina/' + id, { method: 'DELETE' });
         if (risposta.ok) {
-            const row = document.getElementById(`row-${id}`);
+            var row = document.getElementById('row-' + id);
             row.style.opacity = '0';
-            setTimeout(() => row.remove(), 300);
+            setTimeout(function() { row.remove(); }, 300);
         } else {
-            console.error('[pipeline] eliminaCandidato HTTP', risposta.status);
-            alert('Errore durante l\'eliminazione.');
+            alert("Errore durante l'eliminazione.");
         }
-    } catch(e) { console.error('[pipeline] eliminaCandidato fetch error:', e); alert('Errore di rete.'); }
+    } catch(e) { alert('Errore di rete.'); }
 }
-
-
 
 function chiudiModal(event) {
-    if (!event || event.target === document.getElementById('modal-report')) {
-        nascondi('modal-report');
-    }
+    if (!event || event.target === document.getElementById('modal-report')) nascondi('modal-report');
 }
-
 function chiudiModalFollowup(event) {
-    if (!event || event.target === document.getElementById('modal-followup')) {
-        nascondi('modal-followup');
-    }
+    if (!event || event.target === document.getElementById('modal-followup')) nascondi('modal-followup');
 }
-
 function getScoreClass(score) {
     if (score >= 8) return 'score-alto';
     if (score >= 5) return 'score-medio';
     return 'score-basso';
 }
 
-// ── Note candidato ────────────────────────────────────────────────────
-let noteCandidatoId   = null;
-let noteCandidatoCella = null;
+/* ── Note candidato ────────────────────────────────────── */
+var noteCandidatoId = null;
 
 function apriNote(id, nome) {
     noteCandidatoId = id;
-    const c = candidatiData.find(x => x.id === id);
-    document.getElementById('note-titolo').textContent = `Note — ${nome}`;
+    var c = candidatiData.find(function(x) { return x.id === id; });
+    document.getElementById('note-titolo').textContent = 'Note — ' + nome;
     document.getElementById('note-textarea').value = (c && c.note) ? c.note : '';
     mostra('modal-note');
-    setTimeout(() => document.getElementById('note-textarea').focus(), 50);
+    setTimeout(function() { document.getElementById('note-textarea').focus(); }, 50);
 }
 
 async function salvaNota() {
     if (!noteCandidatoId) return;
-    const nota = document.getElementById('note-textarea').value;
+    var nota = document.getElementById('note-textarea').value;
     try {
-        const r = await fetch(`/pipeline/${noteCandidatoId}/note`, {
+        var r = await fetch('/pipeline/' + noteCandidatoId + '/note', {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ note: nota })
         });
         if (!r.ok) throw new Error('HTTP ' + r.status);
-
-        // Aggiorna dati in memoria
-        const c = candidatiData.find(x => x.id === noteCandidatoId);
+        var c = candidatiData.find(function(x) { return x.id === noteCandidatoId; });
         if (c) c.note = nota;
-
-        // Aggiorna cella nella tabella
-        const cella = document.querySelector(`#row-${noteCandidatoId} .nota-cella`);
+        var cella = document.querySelector('#row-' + noteCandidatoId + ' .nota-cella');
         if (cella) {
             if (nota.trim()) {
-                const anteprima = nota.length > 50 ? nota.slice(0, 50) + '…' : nota;
-                cella.innerHTML = `<span class="nota-anteprima">${anteprima}</span>`;
+                var anteprima = nota.length > 50 ? nota.slice(0, 50) + '…' : nota;
+                cella.innerHTML = '<span class="nota-anteprima">' + anteprima + '</span>';
                 cella.title = nota;
             } else {
-                cella.innerHTML = `<span class="nota-vuota">&#9998;</span>`;
+                cella.innerHTML = '<span class="nota-vuota">&#9998;</span>';
                 cella.title = '';
             }
         }
         chiudiModalNote();
-    } catch(e) {
-        alert('Errore salvataggio nota: ' + e.message);
-    }
+    } catch(e) { alert('Errore salvataggio nota: ' + e.message); }
 }
 
 function chiudiModalNote(event) {
@@ -513,29 +1063,599 @@ function chiudiModalNote(event) {
         noteCandidatoId = null;
     }
 }
-</script>
 
-<style>
-.nota-cella {
-    cursor: pointer;
-    max-width: 180px;
-    min-width: 80px;
+
+/* ────────────────────────────────────────────────────────── */
+/* VALUTAZIONE — Analisi LinkedIn AI                          */
+/* ────────────────────────────────────────────────────────── */
+var testoProfiloCorrente = '';
+
+// Auto-avvio da sessionStorage (es. da ricerca candidati)
+(function() {
+    var testo = sessionStorage.getItem('profilo_da_analizzare');
+    if (testo) {
+        sessionStorage.removeItem('profilo_da_analizzare');
+        document.getElementById('testo-profilo').value = testo;
+        attivaTab('valutazione');
+        setTimeout(avviaAnalisi, 300);
+    }
+})();
+
+document.querySelectorAll('input[name="tipo_profilo"]').forEach(function(radio) {
+    radio.addEventListener('change', function() {
+        document.querySelectorAll('.toggle-option').forEach(function(el) { el.classList.remove('selected'); });
+        this.closest('.toggle-option').classList.add('selected');
+    });
+});
+
+async function cercaPerNome() {
+    var nome    = document.getElementById('cerca-nome').value.trim();
+    var cognome = document.getElementById('cerca-cognome').value.trim();
+    if (!nome && !cognome) { alert('Inserisci almeno nome o cognome.'); return; }
+
+    document.getElementById('cerca-nome-testo').classList.add('hidden');
+    document.getElementById('cerca-nome-loading').classList.remove('hidden');
+    document.getElementById('btn-cerca-nome').disabled = true;
+    document.getElementById('risultati-nome').classList.add('hidden');
+    document.getElementById('nessun-profilo-nome').classList.add('hidden');
+
+    try {
+        var resp = await fetch('/valutazione/cerca_per_nome', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nome: nome, cognome: cognome })
+        });
+        var dati = await jsonSicuro(resp);
+        if (dati.errore) { alert('Errore: ' + dati.errore); return; }
+        var profili = await pollFinoAlCompletamento(dati.run_id);
+        if (!profili) return;
+        if (profili.length === 0) {
+            document.getElementById('nessun-profilo-nome').classList.remove('hidden');
+        } else {
+            renderProfiliNome(profili);
+        }
+    } catch(e) {
+        alert('Errore: ' + e);
+    } finally {
+        document.getElementById('cerca-nome-testo').classList.remove('hidden');
+        document.getElementById('cerca-nome-loading').classList.add('hidden');
+        document.getElementById('btn-cerca-nome').disabled = false;
+    }
 }
-.nota-cella:hover { background: var(--sfondo, #f5f5f5); }
-.nota-anteprima {
-    font-size: 0.78rem;
-    color: var(--testo, #333);
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
+
+async function pollFinoAlCompletamento(runId) {
+    for (var i = 0; i < 40; i++) {
+        await new Promise(function(r) { setTimeout(r, 5000); });
+        var r = await fetch('/valutazione/poll_run/' + runId);
+        var d = await jsonSicuro(r);
+        if (d.errore) { alert('Errore: ' + d.errore); return null; }
+        if (d.status === 'done') return d.profili;
+    }
+    alert('Timeout: ricerca troppo lenta. Riprova.');
+    return null;
 }
-.nota-vuota {
-    font-size: 1rem;
-    color: #bbb;
-    display: block;
-    text-align: center;
+
+function renderProfiliNome(profili) {
+    var lista = document.getElementById('lista-profili-nome');
+    lista.innerHTML = '';
+    profili.forEach(function(p) {
+        var nomeCompleto = [p.nome, p.cognome].filter(Boolean).join(' ') || '—';
+        var linkedinLink = p.linkedin ? '<a href="' + p.linkedin + '" target="_blank" style="font-size:0.78rem;color:var(--azzurro);">LinkedIn ↗</a>' : '';
+        var div = document.createElement('div');
+        div.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:0.875rem 1rem;border:1.5px solid var(--grigio-bordo);border-radius:8px;background:white;gap:1rem;';
+        div.innerHTML =
+            '<div style="flex:1;min-width:0;">' +
+            '<div style="font-weight:600;font-size:0.9rem;">' + nomeCompleto + '</div>' +
+            (p.headline ? '<div style="font-size:0.82rem;color:var(--grigio-testo);margin-top:2px;">' + p.headline + '</div>' : '') +
+            (p.azienda  ? '<div style="font-size:0.8rem;color:var(--grigio-testo);">' + p.azienda + (p.location ? ' · ' + p.location : '') + '</div>' : '') +
+            linkedinLink +
+            '</div>' +
+            '<button class="btn btn-primary btn-sm" onclick=\'selezionaProfilo(' + JSON.stringify(p).replace(/'/g,"&#39;") + ')\'>&#9733; Analizza</button>';
+        lista.appendChild(div);
+    });
+    document.getElementById('risultati-nome').classList.remove('hidden');
 }
-.nota-vuota:hover { color: var(--primario, #2E7CF6); }
-</style>
+
+function selezionaProfilo(p) {
+    document.getElementById('testo-profilo').value = p.testo_profilo || '';
+    avviaAnalisi();
+}
+
+async function avviaAnalisi() {
+    var testo       = document.getElementById('testo-profilo').value.trim();
+    var tipoProfilo = document.querySelector('input[name="tipo_profilo"]:checked').value;
+    var candidatoId = document.getElementById('candidato-id').value || null;
+
+    if (!testo) {
+        mostraErroreVal('Inserire il testo del profilo LinkedIn prima di procedere.');
+        return;
+    }
+
+    testoProfiloCorrente = testo;
+    impostaCaricamento(true);
+    nascondi('risultati');
+    nascondi('errore-box');
+    nascondi('skeleton-results');
+
+    var previewEl = document.getElementById('stream-preview');
+    var streamTxt = document.getElementById('stream-testo');
+    streamTxt.textContent = '';
+    previewEl.classList.remove('hidden');
+
+    try {
+        var risposta = await fetch('/valutazione/analizza_stream', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ testo_profilo: testo, tipo_profilo: tipoProfilo, candidato_id: candidatoId })
+        });
+        if (!risposta.ok) throw new Error('Errore HTTP ' + risposta.status);
+
+        var reader  = risposta.body.getReader();
+        var decoder = new TextDecoder('utf-8');
+        var buffer  = '';
+        var risultatoFinale = null;
+
+        while (true) {
+            var readResult = await reader.read();
+            if (readResult.done) break;
+            buffer += decoder.decode(readResult.value, { stream: true });
+            var parti = buffer.split('\n\n');
+            buffer = parti.pop();
+            for (var i = 0; i < parti.length; i++) {
+                var linea = parti[i].trim();
+                if (!linea.startsWith('data:')) continue;
+                var evento;
+                try { evento = JSON.parse(linea.slice(5).trim()); } catch(e) { continue; }
+                if (evento.type === 'chunk') {
+                    streamTxt.textContent += evento.text;
+                    streamTxt.scrollTop = streamTxt.scrollHeight;
+                } else if (evento.type === 'done') {
+                    risultatoFinale = evento.risultato;
+                } else if (evento.type === 'errore') {
+                    previewEl.classList.add('hidden');
+                    mostraErroreVal('Errore AI: ' + evento.messaggio);
+                    return;
+                }
+            }
+        }
+
+        if (!risultatoFinale) throw new Error('Analisi non completata: risposta incompleta.');
+
+        previewEl.classList.add('hidden');
+        mostra('skeleton-results');
+        await new Promise(function(r) { setTimeout(r, 200); });
+        nascondi('skeleton-results');
+
+        mostraRisultatiVal(risultatoFinale);
+        aggiornaCronologiaUI(risultatoFinale, tipoProfilo, testo, risultatoFinale.nome_contatto || '');
+        document.getElementById('testo-profilo').value = '';
+
+        fetch('/valutazione/salva_analisi', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ testo_profilo: testo, tipo_profilo: tipoProfilo, candidato_id: candidatoId, risultato: risultatoFinale })
+        }).catch(function(e) { console.warn('[valutazione] salvataggio fallito:', e); });
+
+    } catch(err) {
+        previewEl.classList.add('hidden');
+        mostraErroreVal('Errore: ' + err.message);
+    } finally {
+        impostaCaricamento(false);
+    }
+}
+
+function mostraRisultatiVal(dati) {
+    var score = dati.punteggio;
+    document.getElementById('score-value').textContent = score;
+    document.getElementById('score-circle').className = 'score-circle ' + getScoreClass(score);
+    document.getElementById('analisi-percorso').textContent = dati.analisi_percorso;
+
+    var lista = document.getElementById('spunti-lista');
+    lista.innerHTML = '';
+    (dati.spunti_contatto || []).forEach(function(spunto) {
+        var li = document.createElement('li');
+        li.className = 'spunto-item';
+        li.textContent = spunto;
+        lista.appendChild(li);
+    });
+
+    var msg = dati.messaggio_outreach || '';
+    document.getElementById('messaggio-outreach').textContent = msg;
+    document.getElementById('char-count').textContent = msg.length;
+
+    mostra('risultati');
+    document.getElementById('risultati').scrollIntoView({ behavior: 'smooth' });
+}
+
+async function rigeneraMessaggio() { await chiamaRigenera(''); }
+async function riscriviMessaggio() {
+    var istruzioni = document.getElementById('prompt-riscrivi').value.trim();
+    if (!istruzioni) { document.getElementById('prompt-riscrivi').focus(); return; }
+    await chiamaRigenera(istruzioni);
+}
+
+async function chiamaRigenera(istruzioni) {
+    var messaggioAttuale = document.getElementById('messaggio-outreach').textContent.trim();
+    if (!messaggioAttuale) return;
+    var isRiscrivi = istruzioni.length > 0;
+    var btnLoadingId = isRiscrivi ? 'btn-riscrivi-loading' : 'btn-rigenera-loading';
+    var btnTestoId   = isRiscrivi ? 'btn-riscrivi-testo'   : 'btn-rigenera-testo';
+    var btnId        = isRiscrivi ? 'btn-riscrivi' : null;
+    document.getElementById(btnLoadingId).classList.remove('hidden');
+    document.getElementById(btnTestoId).classList.add('hidden');
+    if (btnId) document.getElementById(btnId).disabled = true;
+    try {
+        var risposta = await fetch('/valutazione/rigenera_messaggio', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ testo_profilo: testoProfiloCorrente, messaggio_attuale: messaggioAttuale, istruzioni: istruzioni })
+        });
+        var dati = await jsonSicuro(risposta);
+        if (!risposta.ok) throw new Error(dati.errore || 'Errore');
+        var box = document.getElementById('messaggio-outreach');
+        box.style.opacity = '0.4';
+        setTimeout(function() {
+            box.textContent = dati.messaggio;
+            document.getElementById('char-count').textContent = dati.messaggio.length;
+            box.style.opacity = '1';
+        }, 200);
+        if (isRiscrivi) document.getElementById('prompt-riscrivi').value = '';
+    } catch(err) {
+        mostraErroreVal('Errore rigenerazione: ' + err.message);
+    } finally {
+        document.getElementById(btnLoadingId).classList.add('hidden');
+        document.getElementById(btnTestoId).classList.remove('hidden');
+        if (btnId) document.getElementById(btnId).disabled = false;
+    }
+}
+
+function copiaMessaggio() {
+    var testo = document.getElementById('messaggio-outreach').textContent;
+    navigator.clipboard.writeText(testo).then(function() {
+        var btn = event.target;
+        btn.textContent = 'Copiato!';
+        setTimeout(function() { btn.textContent = 'Copia'; }, 2000);
+    });
+}
+
+function impostaCaricamento(attivo) {
+    var btn = document.getElementById('btn-analizza');
+    btn.disabled = attivo;
+    document.getElementById('btn-testo').classList.toggle('hidden', attivo);
+    document.getElementById('btn-loading').classList.toggle('hidden', !attivo);
+}
+
+function mostraErroreVal(msg) {
+    var el = document.getElementById('errore-box');
+    el.textContent = msg;
+    mostra('errore-box');
+}
+
+
+/* ────────────────────────────────────────────────────────── */
+/* CRONOLOGIA — Filtri e modali                              */
+/* ────────────────────────────────────────────────────────── */
+function filtraCronologia() {
+    var tipo = document.getElementById('filtro-tipo').value;
+    var punteggioMin = parseInt(document.getElementById('filtro-punteggio').value) || 0;
+    var fonte = document.getElementById('filtro-fonte').value;
+    var tbody = document.querySelector('#cronologia-tabella tbody');
+    if (!tbody) return;
+    var visibili = 0;
+    tbody.querySelectorAll('tr').forEach(function(tr) {
+        var okTipo = !tipo || tr.dataset.tipo === tipo;
+        var okPunt = !punteggioMin || parseInt(tr.dataset.punteggio) >= punteggioMin;
+        var okFonte = !fonte || tr.dataset.fonte === fonte;
+        if (okTipo && okPunt && okFonte) { tr.style.display = ''; visibili++; }
+        else { tr.style.display = 'none'; }
+    });
+    var counter = document.getElementById('cronologia-count');
+    if (counter) {
+        var totale = tbody.querySelectorAll('tr').length;
+        counter.textContent = visibili === totale ? totale + ' valutazioni totali' : visibili + ' di ' + totale + ' valutazioni';
+    }
+}
+
+function resetFiltriCron() {
+    document.getElementById('filtro-tipo').value = '';
+    document.getElementById('filtro-punteggio').value = '';
+    document.getElementById('filtro-fonte').value = '';
+    filtraCronologia();
+}
+
+function mostraDettaglioCronologia(id) {
+    var v = cronologiaData.find(function(x) { return x.id === id; });
+    if (!v) return;
+    var spunti = v.spunti || [];
+    if (typeof spunti === 'string') { try { spunti = JSON.parse(spunti); } catch(e) { spunti = []; } }
+    mostraReportNelModal({ punteggio: v.punteggio, analisi_percorso: v.analisi, spunti_contatto: spunti, messaggio_outreach: v.messaggio_outreach });
+}
+
+function mostraReportNelModal(dati) {
+    var spuntiHtml = (dati.spunti_contatto || []).map(function(s) { return '<li class="spunto-item">' + s + '</li>'; }).join('');
+    var scoreClass = dati.punteggio >= 8 ? 'score-alto' : (dati.punteggio >= 5 ? 'score-medio' : 'score-basso');
+    document.getElementById('modal-cronologia-body').innerHTML =
+        '<div class="report-sezione"><div class="report-score ' + scoreClass + '">' + dati.punteggio + '/10</div></div>' +
+        '<div class="report-sezione"><h4>Analisi del Percorso</h4><p>' + (dati.analisi_percorso || '—') + '</p></div>' +
+        '<div class="report-sezione"><h4>Spunti per il Contatto</h4><ul>' + spuntiHtml + '</ul></div>' +
+        '<div class="report-sezione"><h4>Messaggio di Outreach</h4><div class="outreach-box">' + (dati.messaggio_outreach || '—') + '</div></div>';
+    mostra('modal-cronologia');
+}
+
+function apriModalCandidato(valutazioneId) {
+    var v = cronologiaData.find(function(x) { return x.id === valutazioneId; });
+    var nomeCompleto = (v && v.nome_contatto) ? v.nome_contatto : '';
+    var parti = nomeCompleto.trim().split(' ');
+    document.getElementById('sc-nome').value = parti[0] || '';
+    document.getElementById('sc-cognome').value = parti.slice(1).join(' ') || '';
+    document.getElementById('sc-ruolo').value = (v && v.ruolo_attuale) ? v.ruolo_attuale : '';
+    document.getElementById('sc-azienda').value = (v && v.azienda) ? v.azienda : '';
+    document.getElementById('sc-anni').value = (v && v.anni_esperienza) ? v.anni_esperienza : '';
+    document.getElementById('sc-note').value = '';
+    document.getElementById('sc-valutazione-id').value = valutazioneId;
+    document.getElementById('sc-tipo-profilo').value = v ? v.tipo_profilo : 'A';
+    nascondi('sc-errore');
+    nascondi('sc-successo');
+    document.querySelector('#modal-salva-candidato .btn-primary').disabled = false;
+    mostra('modal-salva-candidato');
+    document.getElementById('sc-nome').focus();
+}
+
+async function salvaCandidatoDaCronologia() {
+    var nome    = document.getElementById('sc-nome').value.trim();
+    var cognome = document.getElementById('sc-cognome').value.trim();
+    if (!nome || !cognome) {
+        document.getElementById('sc-errore').textContent = 'Nome e cognome sono obbligatori.';
+        mostra('sc-errore');
+        return;
+    }
+    nascondi('sc-errore');
+    document.getElementById('sc-btn-testo').classList.add('hidden');
+    document.getElementById('sc-btn-loading').classList.remove('hidden');
+    try {
+        var risposta = await fetch('/candidati/da_cronologia', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                nome: nome,
+                cognome: cognome,
+                ruolo_attuale: document.getElementById('sc-ruolo').value.trim(),
+                azienda: document.getElementById('sc-azienda').value.trim(),
+                anni_esperienza: parseInt(document.getElementById('sc-anni').value) || 0,
+                note: document.getElementById('sc-note').value.trim(),
+                tipo_profilo: document.getElementById('sc-tipo-profilo').value,
+                valutazione_id: parseInt(document.getElementById('sc-valutazione-id').value)
+            })
+        });
+        var dati = await jsonSicuro(risposta);
+        if (!risposta.ok) throw new Error(dati.errore || 'Errore');
+        document.getElementById('sc-successo').innerHTML = 'Candidato salvato! <a href="/pipeline" style="color:var(--azzurro);font-weight:600;">Vai alla Pipeline →</a>';
+        mostra('sc-successo');
+        document.querySelector('#modal-salva-candidato .btn-primary').disabled = true;
+    } catch(err) {
+        document.getElementById('sc-errore').textContent = 'Errore: ' + err.message;
+        mostra('sc-errore');
+    } finally {
+        document.getElementById('sc-btn-testo').classList.remove('hidden');
+        document.getElementById('sc-btn-loading').classList.add('hidden');
+    }
+}
+
+function aggiornaCronologiaUI(dati, tipoProfilo, testoOriginale, nomeContatto) {
+    var tbody = document.querySelector('#cronologia-tabella tbody');
+    if (!tbody) return;
+    var ora = new Date();
+    var data = ora.toISOString().slice(0, 10);
+    var orario = ora.toTimeString().slice(0, 5);
+    var score = dati.punteggio;
+    var scoreClass = score >= 8 ? 'alto' : (score >= 5 ? 'medio' : 'basso');
+    var badgeClass = tipoProfilo === 'A' ? 'badge-profilo-a' : 'badge-profilo-b';
+    var tr = document.createElement('tr');
+    tr.dataset.tipo = tipoProfilo;
+    tr.dataset.punteggio = score;
+    tr.dataset.fonte = 'manuale';
+    tr.innerHTML =
+        '<td style="white-space:nowrap;"><div>' + data + '</div><div class="candidato-meta">' + orario + '</div></td>' +
+        '<td><strong>' + (nomeContatto || '—') + '</strong></td>' +
+        '<td><span class="badge ' + badgeClass + '">Profilo ' + tipoProfilo + '</span></td>' +
+        '<td><span class="score-badge score-badge-' + scoreClass + '">' + score + '/10</span></td>' +
+        '<td><span style="font-size:0.82rem;color:var(--grigio-testo);">Manuale</span></td>' +
+        '<td><button class="btn btn-outline btn-xs" onclick=\'mostraReportNelModal(' + JSON.stringify(dati).replace(/"/g, '&quot;') + ')\'>Vedi Report</button></td>';
+    tbody.insertBefore(tr, tbody.firstChild);
+    var counter = document.getElementById('cronologia-count');
+    if (counter) { counter.textContent = tbody.querySelectorAll('tr').length + ' valutazioni totali'; }
+}
+
+
+/* ────────────────────────────────────────────────────────── */
+/* CALENDARIO — Logica calendario e appuntamenti             */
+/* ────────────────────────────────────────────────────────── */
+var MESI = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+var calAnno = new Date().getFullYear();
+var calMese = new Date().getMonth();
+
+renderCalendar();
+
+function cambaMese(delta) {
+    calMese += delta;
+    if (calMese > 11) { calMese = 0; calAnno++; }
+    if (calMese < 0)  { calMese = 11; calAnno--; }
+    nascondi('cal-dettaglio');
+    renderCalendar();
+}
+
+function renderCalendar() {
+    document.getElementById('cal-titolo-mese').textContent = MESI[calMese] + ' ' + calAnno;
+    var grid = document.getElementById('cal-grid');
+    grid.querySelectorAll('.cal-day').forEach(function(c) { c.remove(); });
+    var oggi = new Date();
+    var giorniNelMese = new Date(calAnno, calMese + 1, 0).getDate();
+    var primoGiorno = new Date(calAnno, calMese, 1).getDay();
+    var offset = (primoGiorno === 0) ? 6 : primoGiorno - 1;
+    for (var i = 0; i < offset; i++) {
+        var d = new Date(calAnno, calMese, -offset + i + 1);
+        grid.appendChild(creaCella(d.getDate(), false, null));
+    }
+    for (var g = 1; g <= giorniNelMese; g++) {
+        var dataStr = calAnno + '-' + padCal(calMese+1) + '-' + padCal(g);
+        var isOggi = (g === oggi.getDate() && calMese === oggi.getMonth() && calAnno === oggi.getFullYear());
+        var eventi = appuntamentiData.filter(function(a) { return a.data_ora && a.data_ora.startsWith(dataStr); });
+        grid.appendChild(creaCella(g, true, dataStr, eventi, isOggi));
+    }
+    var totalCells = offset + giorniNelMese;
+    var remaining = (7 - (totalCells % 7)) % 7;
+    for (var j = 1; j <= remaining; j++) grid.appendChild(creaCella(j, false, null));
+}
+
+function creaCella(num, corrente, dataStr, eventi, isOggi) {
+    var div = document.createElement('div');
+    div.className = 'cal-day' + (corrente ? '' : ' altro-mese') + (isOggi ? ' oggi' : '');
+    if (corrente && dataStr) {
+        div.dataset.data = dataStr;
+        div.onclick = function() { mostraGiorno(dataStr); };
+    }
+    var numEl = document.createElement('div');
+    numEl.className = 'cal-day-num';
+    numEl.textContent = num;
+    div.appendChild(numEl);
+    if (eventi && eventi.length > 0) {
+        eventi.slice(0, 2).forEach(function(ev) {
+            var chip = document.createElement('span');
+            chip.className = 'cal-event ' + getEventClass(ev);
+            chip.textContent = (ev.data_ora ? ev.data_ora.substr(11,5) + ' ' : '') + ev.tipo.split(' ')[0];
+            chip.title = ev.tipo + ' — ' + (ev.candidato_nome || '') + '\n' + (ev.note || '');
+            chip.onclick = function(e) { e.stopPropagation(); apriModalModificaApp(ev.id); };
+            div.appendChild(chip);
+        });
+        if (eventi.length > 2) {
+            var more = document.createElement('span');
+            more.className = 'cal-event cal-event-altro';
+            more.textContent = '+' + (eventi.length - 2);
+            div.appendChild(more);
+        }
+    }
+    return div;
+}
+
+function getEventClass(ev) {
+    if (ev.stato === 'Annullato') return 'cal-event-annullato';
+    if (ev.stato === 'Completato') return 'cal-event-completato';
+    if (ev.tipo === 'Chiamata') return 'cal-event-chiamata';
+    if (ev.tipo === 'Video call') return 'cal-event-video';
+    return 'cal-event-incontro';
+}
+
+function mostraGiorno(dataStr) {
+    document.querySelectorAll('.cal-day.selezionato').forEach(function(d) { d.classList.remove('selezionato'); });
+    var cella = document.querySelector('.cal-day[data-data="' + dataStr + '"]');
+    if (cella) cella.classList.add('selezionato');
+    var eventi = appuntamentiData.filter(function(a) { return a.data_ora && a.data_ora.startsWith(dataStr); });
+    var parti = dataStr.split('-');
+    document.getElementById('cal-dettaglio-titolo').textContent = parseInt(parti[2]) + ' ' + MESI[parseInt(parti[1])-1] + ' ' + parti[0];
+    var body = document.getElementById('cal-dettaglio-body');
+    if (eventi.length === 0) {
+        body.innerHTML = '<p style="color:var(--grigio-testo);font-size:0.85rem;">Nessun appuntamento in questo giorno.</p>';
+    } else {
+        body.innerHTML = eventi.map(function(ev) {
+            return '<div style="display:flex;justify-content:space-between;align-items:flex-start;padding:0.6rem 0;border-bottom:1px solid var(--grigio-bordo);">' +
+                '<div>' +
+                '<span style="font-weight:600;font-size:0.9rem;">' + (ev.data_ora ? ev.data_ora.substr(11,5) : '') + '</span>' +
+                '<span class="badge-tipo-app badge-tipo-' + ev.tipo.toLowerCase().replace(/ /g,'-') + '" style="margin-left:0.4rem;">' + ev.tipo + '</span>' +
+                '<div style="font-size:0.82rem;color:var(--grigio-testo);margin-top:2px;">' + (ev.candidato_nome || '') + ' — ' + ev.gestore + '</div>' +
+                (ev.note ? '<div style="font-size:0.8rem;color:var(--grigio-testo);margin-top:2px;">' + ev.note + '</div>' : '') +
+                '</div>' +
+                '<button class="btn btn-outline btn-xs" onclick="apriModalModificaApp(' + ev.id + ')">Modifica</button>' +
+                '</div>';
+        }).join('');
+    }
+    mostra('cal-dettaglio');
+    document.getElementById('cal-dettaglio').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function apriModalNuovoApp(candidatoIdPre) {
+    document.getElementById('modal-app-titolo').textContent = 'Nuovo Appuntamento';
+    document.getElementById('app-edit-id').value = '';
+    document.getElementById('app-data-ora').value = '';
+    document.getElementById('app-tipo').value = 'Chiamata';
+    document.getElementById('app-candidato').value = candidatoIdPre || '';
+    document.getElementById('app-gestore').value = 'Salvatore Sabia';
+    document.getElementById('app-stato').value = 'Da fare';
+    document.getElementById('app-note').value = '';
+    nascondi('app-errore');
+    nascondi('app-btn-elimina');
+    mostra('modal-appuntamento');
+}
+
+function apriModalModificaApp(id) {
+    var ev = appuntamentiData.find(function(a) { return a.id === id; });
+    if (!ev) return;
+    document.getElementById('modal-app-titolo').textContent = 'Modifica Appuntamento';
+    document.getElementById('app-edit-id').value = id;
+    document.getElementById('app-data-ora').value = ev.data_ora ? ev.data_ora.substr(0,16).replace(' ','T') : '';
+    document.getElementById('app-tipo').value = ev.tipo || 'Chiamata';
+    document.getElementById('app-candidato').value = ev.candidato_id || '';
+    document.getElementById('app-gestore').value = ev.gestore || 'Salvatore Sabia';
+    document.getElementById('app-stato').value = ev.stato || 'Da fare';
+    document.getElementById('app-note').value = ev.note || '';
+    nascondi('app-errore');
+    mostra('app-btn-elimina');
+    mostra('modal-appuntamento');
+}
+
+function chiudiModalApp() { nascondi('modal-appuntamento'); }
+
+async function salvaAppuntamento() {
+    var editId = document.getElementById('app-edit-id').value;
+    var payload = {
+        candidato_id: document.getElementById('app-candidato').value || null,
+        gestore:  document.getElementById('app-gestore').value,
+        tipo:     document.getElementById('app-tipo').value,
+        data_ora: document.getElementById('app-data-ora').value,
+        note:     document.getElementById('app-note').value,
+        stato:    document.getElementById('app-stato').value
+    };
+    if (!payload.data_ora || !payload.gestore || !payload.tipo) {
+        document.getElementById('app-errore').textContent = 'Compila data/ora, tipo e gestore.';
+        mostra('app-errore'); return;
+    }
+    document.getElementById('app-btn-testo').classList.add('hidden');
+    document.getElementById('app-btn-loading').classList.remove('hidden');
+    var url = editId ? '/calendario/aggiorna/' + editId : '/calendario/nuovo';
+    try {
+        var resp = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        var dati = await jsonSicuro(resp);
+        if (!resp.ok) throw new Error(dati.errore || 'Errore');
+        window.location.reload();
+    } catch(e) {
+        document.getElementById('app-errore').textContent = 'Errore: ' + e.message;
+        mostra('app-errore');
+    } finally {
+        document.getElementById('app-btn-testo').classList.remove('hidden');
+        document.getElementById('app-btn-loading').classList.add('hidden');
+    }
+}
+
+async function eliminaAppuntamento(id) {
+    if (!confirm('Eliminare questo appuntamento?')) return;
+    var resp = await fetch('/calendario/elimina/' + id, { method: 'DELETE' });
+    if (resp.ok) window.location.reload();
+}
+
+async function eliminaAppuntamentoDaModal() {
+    var id = document.getElementById('app-edit-id').value;
+    if (id) await eliminaAppuntamento(parseInt(id));
+}
+
+function filtraListaCal() {
+    var statoFiltro   = document.getElementById('filtro-stato-cal').value;
+    var gestoreFiltro = document.getElementById('filtro-gestore-cal').value;
+    document.querySelectorAll('#tabella-appuntamenti tbody tr').forEach(function(tr) {
+        var okStato   = !statoFiltro   || tr.dataset.stato   === statoFiltro;
+        var okGestore = !gestoreFiltro || tr.dataset.gestore === gestoreFiltro;
+        tr.style.display = (okStato && okGestore) ? '' : 'none';
+    });
+}
+
+function padCal(n) { return String(n).padStart(2, '0'); }
+</script>
 {% endblock %}

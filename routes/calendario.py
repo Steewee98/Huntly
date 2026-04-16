@@ -2,7 +2,7 @@
 Modulo Calendario — Gestione appuntamenti con i candidati.
 """
 from datetime import datetime, timedelta
-from flask import Blueprint, render_template, request, jsonify
+from flask import Blueprint, render_template, request, jsonify, redirect, url_for
 from database import get_db
 
 calendario_bp = Blueprint('calendario', __name__)
@@ -14,33 +14,10 @@ STATI_APPUNTAMENTO = ['Da fare', 'Completato', 'Annullato']
 
 @calendario_bp.route('/calendario')
 def index():
-    candidato_id_pre = request.args.get('candidato_id', '')
-    apri_modal = request.args.get('open', '')
-
-    db = get_db()
-    appuntamenti = db.execute("""
-        SELECT a.*,
-               COALESCE(c.nome || ' ' || c.cognome, 'Candidato rimosso') AS candidato_nome
-        FROM appuntamenti a
-        LEFT JOIN candidati c ON a.candidato_id = c.id
-        ORDER BY a.data_ora ASC
-    """).fetchall()
-
-    candidati = db.execute(
-        "SELECT id, nome, cognome FROM candidati ORDER BY cognome, nome"
-    ).fetchall()
-    db.close()
-
-    return render_template(
-        'calendario.html',
-        appuntamenti=[dict(a) for a in appuntamenti],
-        candidati=[dict(c) for c in candidati],
-        tipi=TIPI_APPUNTAMENTO,
-        gestori=GESTORI,
-        stati=STATI_APPUNTAMENTO,
-        candidato_id_pre=candidato_id_pre,
-        apri_modal=apri_modal
-    )
+    """Redirect alla pipeline con tab calendario."""
+    params = {k: v for k, v in request.args.items()}
+    params['tab'] = 'calendario'
+    return redirect(url_for('pipeline.index', **params))
 
 
 @calendario_bp.route('/calendario/nuovo', methods=['POST'])

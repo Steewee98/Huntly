@@ -21,27 +21,10 @@ valutazione_bp = Blueprint("valutazione", __name__)
 
 @valutazione_bp.route("/valutazione")
 def index():
-    """Pagina principale del modulo valutazione."""
-    # Recupera l'ID candidato se si arriva dal modulo inserimento manuale
-    candidato_id = request.args.get("candidato_id")
-    candidato = None
-
-    if candidato_id:
-        db = get_db()
-        candidato = db.execute(
-            "SELECT * FROM candidati WHERE id = ?", (candidato_id,)
-        ).fetchone()
-        db.close()
-
-    # Carica tutta la cronologia delle valutazioni (senza limite)
-    db = get_db()
-    cronologia = db.execute(
-        "SELECT * FROM valutazioni ORDER BY data_valutazione DESC"
-    ).fetchall()
-    db.close()
-    cronologia = [dict(r) for r in cronologia]
-
-    return render_template("valutazione.html", candidato=candidato, cronologia=cronologia)
+    """Redirect alla pipeline con tab valutazione."""
+    params = {k: v for k, v in request.args.items()}
+    params['tab'] = 'valutazione'
+    return redirect(url_for('pipeline.index', **params))
 
 
 @valutazione_bp.route("/valutazione/analizza", methods=["POST"])

@@ -1,6 +1,7 @@
 """
 Modulo 3 — Pipeline Candidati.
 Tabella con tutti i candidati, stato avanzamento e azioni disponibili.
+Include i tab: Pipeline, Valutazione, Calendario, Cronologia.
 """
 
 import json
@@ -17,10 +18,17 @@ STATI_VALIDI = ["Da valutare", "Da contattare", "Richiesta Inviata", "Messaggio 
 # Gestori disponibili
 GESTORI_VALIDI = ["Salvatore Sabia", "Firdaous Filahi", "Non assegnato"]
 
+# Costanti tab Calendario
+TIPI_APPUNTAMENTO = ['Chiamata', 'Video call', 'Incontro di persona']
+GESTORI_CAL = ['Salvatore Sabia', 'Firdaous Filahi']
+STATI_APPUNTAMENTO = ['Da fare', 'Completato', 'Annullato']
+
 
 @pipeline_bp.route("/pipeline")
 def index():
-    """Pagina principale della pipeline con tutti i candidati."""
+    """Pagina principale della pipeline con tab: Pipeline, Valutazione, Calendario, Cronologia."""
+    tab = request.args.get("tab", "pipeline")
+
     db = get_db()
     candidati = db.execute(
         "SELECT * FROM candidati ORDER BY data_aggiornamento DESC"
@@ -51,6 +59,32 @@ def index():
     except Exception:
         pass
 
+    # Cronologia valutazioni (tab Valutazione + tab Cronologia)
+    cronologia = db.execute(
+        "SELECT * FROM valutazioni ORDER BY data_valutazione DESC"
+    ).fetchall()
+    cronologia = [dict(r) for r in cronologia]
+
+    # Appuntamenti (tab Calendario)
+    appuntamenti = db.execute("""
+        SELECT a.*,
+               COALESCE(c.nome || ' ' || c.cognome, 'Candidato rimosso') AS candidato_nome
+        FROM appuntamenti a
+        LEFT JOIN candidati c ON a.candidato_id = c.id
+        ORDER BY a.data_ora ASC
+    """).fetchall()
+    appuntamenti = [dict(a) for a in appuntamenti]
+
+    # Candidato pre-selezionato per tab Valutazione (param candidato_id)
+    candidato_val = None
+    candidato_id_param = request.args.get("candidato_id")
+    if candidato_id_param:
+        row = db.execute(
+            "SELECT * FROM candidati WHERE id = ?", (candidato_id_param,)
+        ).fetchone()
+        if row:
+            candidato_val = dict(row)
+
     db.close()
 
     return render_template(
@@ -58,7 +92,14 @@ def index():
         candidati=candidati_lista,
         stati=STATI_VALIDI,
         gestori=GESTORI_VALIDI,
-        prossimi_app=prossimi_app
+        prossimi_app=prossimi_app,
+        cronologia=cronologia,
+        appuntamenti=appuntamenti,
+        tipi_app=TIPI_APPUNTAMENTO,
+        gestori_cal=GESTORI_CAL,
+        stati_app=STATI_APPUNTAMENTO,
+        candidato=candidato_val,
+        tab_attivo=tab,
     )
 
 

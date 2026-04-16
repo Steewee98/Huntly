@@ -48,39 +48,18 @@
             <span>Dashboard</span>
         </a>
 
-        <!-- Gruppo Candidati (espandibile) -->
-        {% set candidati_attivo = request.blueprint in ['valutazione', 'ricerca'] %}
-        <div class="nav-group">
-            <button class="nav-group-header {% if candidati_attivo %}open{% endif %}"
-                    onclick="toggleGroup(this)">
-                <span class="nav-icon">&#128100;</span>
-                <span>Candidati</span>
-                <span class="nav-arrow">&#9660;</span>
-            </button>
-            <div class="nav-group-items {% if candidati_attivo %}open{% endif %}">
-                <a href="{{ url_for('valutazione.index') }}"
-                   class="nav-subitem {% if request.blueprint == 'valutazione' %}active{% endif %}">
-                    <span class="nav-icon">&#9733;</span>
-                    <span>Valutazione</span>
-                </a>
-                <a href="{{ url_for('ricerca.index') }}"
-                   class="nav-subitem {% if request.blueprint == 'ricerca' %}active{% endif %}">
-                    <span class="nav-icon">&#128269;</span>
-                    <span>Ricerca LinkedIn</span>
-                </a>
-            </div>
-        </div>
+        <a href="{{ url_for('ricerca.index') }}"
+           class="nav-item {% if request.blueprint == 'ricerca' %}active{% endif %}">
+            <span class="nav-icon">&#128269;</span>
+            <span>Ricerca LinkedIn</span>
+        </a>
 
         <a href="{{ url_for('pipeline.index') }}"
-           class="nav-item {% if request.blueprint == 'pipeline' %}active{% endif %}">
+           class="nav-item {% if request.blueprint in ['pipeline', 'valutazione', 'calendario'] %}active{% endif %}">
             <span class="nav-icon">&#9776;</span>
             <span>Pipeline Candidati</span>
         </a>
-        <a href="{{ url_for('calendario.index') }}"
-           class="nav-item {% if request.blueprint == 'calendario' %}active{% endif %}">
-            <span class="nav-icon">&#128197;</span>
-            <span>Calendario</span>
-        </a>
+
         <a href="{{ url_for('contenuti.index') }}"
            class="nav-item {% if request.blueprint == 'contenuti' %}active{% endif %}">
             <span class="nav-icon">&#9998;</span>
