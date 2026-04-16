@@ -9,8 +9,8 @@ import json
 import re
 import logging
 
-# Model ID corretto per Claude Sonnet 4.6
-CLAUDE_MODEL = "claude-sonnet-4-6"
+# Model ID Claude Opus 4.7
+CLAUDE_MODEL = "claude-opus-4-7"
 
 logger = logging.getLogger(__name__)
 
