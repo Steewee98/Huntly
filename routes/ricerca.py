@@ -508,90 +508,150 @@ def _esegui_ricerca_background(job_id, tipo_profilo, max_profili, imp):
         kw_parts      = [k.strip() for k in kw_positive.split(",") if k.strip()]
         kw_parts     += [s.strip() for s in extra_settore.split(",") if s.strip()]
 
-        # ── Offset + rotazione ruolo + rotazione geografica ────────────────
-        # Ogni ricerca usa una pagina diversa, un ruolo diverso e una città diversa.
-        # I cursori sono persistiti in search_offset e incrementati automaticamente.
-        start_page, ruolo_principale, citta_corrente = _leggi_aggiorna_offset(db, tipo_profilo, ruoli)
+        # ── Leggi cursori offset dal DB e pre-calcola params per 3 tentativi ──
+        citta_lista = _CITTA_ROTAZIONE.get(tipo_profilo, ['Italy'])
+        off_row = db.execute(
+            "SELECT * FROM search_offset WHERE tipo_profilo=?", (tipo_profilo,)
+        ).fetchone()
+        if not off_row:
+            db.execute(
+                "INSERT INTO search_offset (tipo_profilo, offset_corrente, indice_ruolo, indice_citta) VALUES (?, 0, 0, 0)",
+                (tipo_profilo,)
+            )
+            db.commit()
+            _off, _ir, _ic = 0, 0, 0
+        else:
+            _off = off_row['offset_corrente']
+            _ir  = off_row['indice_ruolo']
+            _ic  = off_row['indice_citta']
 
-        # Keyword: usa tutte le keyword positive (nessuna rotazione ulteriore —
-        # la variazione principale viene da ruolo singolo + offset + città)
-        keywords = " ".join(kw_parts[:8]) if kw_parts else ""
+        _nr = max(len(ruoli), 1)
+        _nc = len(citta_lista)
 
-        # Richiedi il doppio dei profili necessari per compensare filtri e duplicati
+        # 3 combinazioni diverse: ruolo/città/pagina variano ad ogni tentativo
+        tentativi_params = [
+            (
+                ruoli[(_ir + i) % _nr] if ruoli else "",
+                citta_lista[(_ic + i) % _nc],
+                ((_off // 10) + i) % 10 + 1,
+            )
+            for i in range(3)
+        ]
+
+        # Aggiorna i cursori per la PROSSIMA ricerca (una sola volta)
+        db.execute(
+            """UPDATE search_offset SET
+               offset_corrente=?, indice_ruolo=?, indice_citta=?,
+               ultimo_aggiornamento=CURRENT_TIMESTAMP
+               WHERE tipo_profilo=?""",
+            ((_off + 10) % 100, (_ir + 1) % _nr, (_ic + 1) % _nc, tipo_profilo)
+        )
+        db.commit()
+
+        keywords   = " ".join(kw_parts[:8]) if kw_parts else ""
         num_pagine = max(1, (max_profili * 2 + 9) // 10)
 
+        ruolo_principale, citta_corrente, start_page = tentativi_params[0]
         parametri_str = json.dumps({
-            'ruolo':      ruolo_principale,
-            'citta':      citta_corrente,
-            'keywords':   keywords,
-            'max_profili': max_profili,
+            'ruolo': ruolo_principale, 'citta': citta_corrente,
+            'keywords': keywords, 'max_profili': max_profili,
             'start_page': start_page,
         }, ensure_ascii=False)
 
-        def _progress(pct, step):
-            aggiorna(step=step, pct=pct)
+        trovati_apify    = 0
+        scartati_qualita = 0
+        scartati_filtro  = 0
+        gia_presenti     = 0
+        importati        = 0
+        valutati         = 0
+        punteggi: list        = []
+        motivi_qualita: dict  = {}
+        motivi_filtro:  dict  = {}
 
-        # Passa un solo ruolo per volta + città specifica + offset di pagina
-        items, errore = cerca_apify(
-            ruolo_principale, citta_corrente, "", "", keywords, num_pagine,
-            ruoli_lista=[ruolo_principale] if ruolo_principale else [],
-            forza_italia=False,   # usa città specifica, non "Italy" generico
-            progress_cb=_progress,
-            start_page=start_page,
-        )
-
-        if errore:
-            db.execute(
-                "INSERT INTO ricerche_automatiche (tipo_profilo, parametri, profili_trovati, profili_importati, stato) VALUES (?, ?, 0, 0, 'errore')",
-                (tipo_profilo, parametri_str)
-            )
-            db.commit()
-            aggiorna(status='errore', step=errore)
-            return
-
-        trovati_apify     = len(items)
-        scartati_qualita  = 0    # profili vuoti/non italiani/incompleti
-        scartati_filtro   = 0    # non superano il filtro keyword locale
-        gia_presenti      = 0    # già in database
-        importati         = 0
-        valutati          = 0
-        punteggi: list    = []
-        motivi_qualita: dict = {}
-        motivi_filtro:  dict = {}
-
-        aggiorna(step=f'{trovati_apify} profili trovati. Filtraggio candidati...', pct=70)
-
-        # ── Pipeline di filtraggio ─────────────────────────────────────────────
-        # 1. Qualità (profili vuoti / non italiani)
-        # 2. Filtro locale (keyword matching con impostazioni)
-        # 3. Deduplicazione contro candidati già presenti
         items_da_importare = []
-        for item in items:
-            p = normalizza_profilo(item)
+        seen_batch         = set()   # dedup intra-batch tra tentativi diversi
+        SOGLIA_MIN_NUOVI   = 5
 
-            # Filtro qualità
-            ok_q, motivo_q = _filtro_qualita(p)
-            if not ok_q:
-                scartati_qualita += 1
-                motivi_qualita[motivo_q] = motivi_qualita.get(motivo_q, 0) + 1
-                continue
-
-            # Filtro locale (ruoli, settori, keyword)
-            ok_l, motivo_l = _filtro_locale(p, imp)
-            if not ok_l:
-                scartati_filtro += 1
-                motivi_filtro[motivo_l] = motivi_filtro.get(motivo_l, 0) + 1
-                continue
-
-            # Deduplicazione robusta (URL → nome+azienda → nome+ruolo)
-            dup, motivo_dup, _ = is_duplicate(db, p)
-            if dup:
-                gia_presenti += 1
-                log.info("Scartato duplicato: %s", motivo_dup)
-                continue
-
-            items_da_importare.append(p)
+        # ── Fino a 3 tentativi: se i profili nuovi sono < SOGLIA_MIN_NUOVI
+        #    riproviamo con ruolo/città/pagina diversi ─────────────────────────
+        for tentativo, (ruolo_t, citta_t, start_page_t) in enumerate(tentativi_params, 1):
             if len(items_da_importare) >= max_profili:
+                break
+
+            aggiorna(
+                step=f'Tentativo {tentativo}/3: "{ruolo_t}" in {citta_t} (pag. {start_page_t})...',
+                pct=5 + tentativo * 15,
+            )
+            log.info("Tentativo %d/3: ruolo=%r citta=%r start_page=%d",
+                     tentativo, ruolo_t, citta_t, start_page_t)
+
+            items, errore = cerca_apify(
+                ruolo_t, citta_t, "", "", keywords, num_pagine,
+                ruoli_lista=[ruolo_t] if ruolo_t else [],
+                forza_italia=False,
+                progress_cb=None,
+                start_page=start_page_t,
+            )
+
+            if errore:
+                log.warning("Tentativo %d fallito: %s", tentativo, errore)
+                if tentativo == 1:
+                    # Primo tentativo fallito: registra errore e termina
+                    db.execute(
+                        "INSERT INTO ricerche_automatiche (tipo_profilo, parametri, profili_trovati, profili_importati, stato) VALUES (?, ?, 0, 0, 'errore')",
+                        (tipo_profilo, parametri_str)
+                    )
+                    db.commit()
+                    aggiorna(status='errore', step=errore)
+                    return
+                continue
+
+            trovati_t    = len(items or [])
+            trovati_apify += trovati_t
+            importati_t  = 0
+
+            for item in (items or []):
+                if len(items_da_importare) >= max_profili:
+                    break
+                if not isinstance(item, dict):
+                    continue
+                p = normalizza_profilo(item)
+
+                ok_q, motivo_q = _filtro_qualita(p)
+                if not ok_q:
+                    scartati_qualita += 1
+                    motivi_qualita[motivo_q] = motivi_qualita.get(motivo_q, 0) + 1
+                    continue
+
+                ok_l, motivo_l = _filtro_locale(p, imp)
+                if not ok_l:
+                    scartati_filtro += 1
+                    motivi_filtro[motivo_l] = motivi_filtro.get(motivo_l, 0) + 1
+                    continue
+
+                dup, motivo_dup, _ = is_duplicate(db, p)
+                if dup:
+                    gia_presenti += 1
+                    log.info("Scartato duplicato: %s", motivo_dup)
+                    continue
+
+                # Dedup intra-batch: evita doppioni tra tentativi diversi
+                chiave = (p.get('nome', '').lower().strip(), p.get('cognome', '').lower().strip())
+                if chiave in seen_batch:
+                    continue
+                seen_batch.add(chiave)
+
+                items_da_importare.append(p)
+                importati_t += 1
+
+            log.info("Tentativo %d: trovati=%d importati_nuovi=%d (totale_nuovi=%d)",
+                     tentativo, trovati_t, importati_t, len(items_da_importare))
+            aggiorna(
+                step=f'Tentativo {tentativo}: trovati {trovati_t}, nuovi {importati_t}. Totale nuovi: {len(items_da_importare)}',
+                pct=20 + tentativo * 20,
+            )
+
+            if len(items_da_importare) >= SOGLIA_MIN_NUOVI:
                 break
 
         trovati_filtrati = len(items_da_importare)
