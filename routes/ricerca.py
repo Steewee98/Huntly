@@ -27,10 +27,29 @@ ricerca_bp = Blueprint("ricerca", __name__)
 APIFY_ACTOR = "harvestapi~linkedin-profile-search"
 APIFY_BASE  = "https://api.apify.com/v2"
 
-# Città per rotazione geografica (una per ricerca, in ciclo)
+# Città per rotazione geografica — nomi esatti come li indicizza LinkedIn/Apify
+# IMPORTANTE: usare "Rome, Latium, Italy" non "Roma" (che Apify confonde con Romania)
 _CITTA_ROTAZIONE = {
-    'A': ['Roma', 'Milano', 'Torino', 'Napoli', 'Bologna', 'Firenze', 'Genova', 'Palermo'],
-    'B': ['Milano', 'Roma', 'Torino', 'Bologna', 'Firenze', 'Napoli', 'Genova', 'Verona'],
+    'A': [
+        'Milan, Lombardy, Italy',
+        'Rome, Latium, Italy',
+        'Turin, Piedmont, Italy',
+        'Bologna, Emilia-Romagna, Italy',
+        'Florence, Tuscany, Italy',
+        'Naples, Campania, Italy',
+        'Genoa, Liguria, Italy',
+        'Verona, Veneto, Italy',
+    ],
+    'B': [
+        'Milan, Lombardy, Italy',
+        'Rome, Latium, Italy',
+        'Turin, Piedmont, Italy',
+        'Bologna, Emilia-Romagna, Italy',
+        'Florence, Tuscany, Italy',
+        'Naples, Campania, Italy',
+        'Padua, Veneto, Italy',
+        'Venice, Veneto, Italy',
+    ],
 }
 
 
@@ -130,6 +149,10 @@ def cerca_apify(ruolo, citta="", paese="", azienda="", parole_chiave="", num_pag
 
     # Log diagnostico dell'input inviato ad Apify (visibile nei log Railway)
     log.info("APIFY INPUT: %s", json.dumps(run_input, ensure_ascii=False))
+    import datetime
+    print(f"=== APIFY REQUEST {datetime.datetime.now()} ===")
+    print(json.dumps(run_input, indent=2, ensure_ascii=False))
+    print("==========================================")
 
     # ── STEP 1: Avvia run (non blocca) ────────────────────────────────────────
     if progress_cb:
@@ -199,11 +222,15 @@ def cerca_apify(ruolo, citta="", paese="", azienda="", parole_chiave="", num_pag
         items_resp.raise_for_status()
         items = items_resp.json()
 
-        if isinstance(items, list):
-            return items, None
         if isinstance(items, dict):
-            return items.get("items", []), None
-        return [], None
+            items = items.get("items", [])
+        if not isinstance(items, list):
+            items = []
+        print(f"=== APIFY RESPONSE: {len(items)} profili ===")
+        for r in items[:3]:
+            print(f"  - {r.get('fullName') or r.get('firstName','?')+' '+r.get('lastName','')} | {r.get('headline','?')} | {r.get('linkedinUrl','?')}")
+        print("==========================================")
+        return items, None
 
     except requests.exceptions.HTTPError:
         return None, f"Errore recupero risultati: {items_resp.status_code} — {items_resp.text[:200]}"
