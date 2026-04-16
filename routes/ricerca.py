@@ -7,6 +7,7 @@ e le importa nella pipeline.
 import io
 import csv
 import json
+import logging
 import os
 import time
 import threading
@@ -16,6 +17,8 @@ from flask import Blueprint, render_template, request, jsonify, Response
 from database import get_db
 from ai_helpers import analizza_profilo_linkedin
 from dedup import is_duplicate
+
+log = logging.getLogger(__name__)
 
 # Blueprint per il modulo ricerca
 ricerca_bp = Blueprint("ricerca", __name__)
@@ -124,6 +127,9 @@ def cerca_apify(ruolo, citta="", paese="", azienda="", parole_chiave="", num_pag
 
     if azienda:
         run_input["currentCompanies"] = [azienda]
+
+    # Log diagnostico dell'input inviato ad Apify (visibile nei log Railway)
+    log.info("APIFY INPUT: %s", json.dumps(run_input, ensure_ascii=False))
 
     # ── STEP 1: Avvia run (non blocca) ────────────────────────────────────────
     if progress_cb:
@@ -399,7 +405,19 @@ def cerca():
     if not ruolo and not parole_chiave:
         return jsonify({"errore": "Inserisci almeno il ruolo o delle parole chiave"}), 400
 
-    items, errore = cerca_apify(ruolo, citta, paese, azienda, parole_chiave, num_pagine)
+    # Varia startPage ad ogni ricerca manuale: conta quante ricerche manuali
+    # precedenti hanno usato lo stesso ruolo e scala di pagina ad ogni run.
+    db_cnt = get_db()
+    n_precedenti_stessa_query = db_cnt.execute(
+        "SELECT COUNT(*) AS n FROM ricerche_automatiche WHERE fonte='manuale'",
+    ).fetchone()["n"] or 0
+    db_cnt.close()
+    start_page_manuale = (n_precedenti_stessa_query % 10) + 1
+
+    log.info("Ricerca manuale: ruolo=%r citta=%r start_page=%d", ruolo, citta, start_page_manuale)
+
+    items, errore = cerca_apify(ruolo, citta, paese, azienda, parole_chiave, num_pagine,
+                                start_page=start_page_manuale)
     if errore:
         return jsonify({"errore": errore}), 500
 
@@ -409,16 +427,24 @@ def cerca():
         if not isinstance(item, dict):
             continue
         p = normalizza_profilo(item)
-        dup, _, cand_id = is_duplicate(db_check, p)
+        dup, motivo_dup, cand_id = is_duplicate(db_check, p)
         p["gia_in_pipeline"] = dup
         p["candidato_id_esistente"] = cand_id
+        if dup:
+            log.info("Profilo già in pipeline: %s — %s", motivo_dup, p.get("linkedin", ""))
         persone.append(p)
     db_check.close()
+
+    # Riepilogo deduplicazione
+    gia_presenti = sum(1 for p in persone if p["gia_in_pipeline"])
+    nuovi        = len(persone) - gia_presenti
+    log.info("Ricerca manuale completata: trovati=%d gia_presenti=%d nuovi=%d start_page=%d",
+             len(persone), gia_presenti, nuovi, start_page_manuale)
 
     # Salva la ricerca nella cronologia
     parametri_str = json.dumps({
         'ruolo': ruolo, 'citta': citta, 'azienda': azienda,
-        'parole_chiave': parole_chiave,
+        'parole_chiave': parole_chiave, 'start_page': start_page_manuale,
     }, ensure_ascii=False)
     db = get_db()
     cur = db.execute(
@@ -445,9 +471,12 @@ def cerca():
     db.close()
 
     return jsonify({
-        "persone":    persone,
-        "totale":     len(persone),
-        "ricerca_id": ricerca_id,
+        "persone":      persone,
+        "totale":       len(persone),
+        "gia_presenti": gia_presenti,
+        "nuovi":        nuovi,
+        "start_page":   start_page_manuale,
+        "ricerca_id":   ricerca_id,
     })
 
 
