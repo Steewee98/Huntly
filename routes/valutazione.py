@@ -7,6 +7,7 @@ import io
 import csv
 import json
 import os
+import re
 import requests
 from flask import Blueprint, render_template, request, jsonify, redirect, url_for, Response
 from ai_helpers import analizza_profilo_linkedin, rigenera_messaggio_outreach, analizza_profilo_linkedin_stream
@@ -134,6 +135,8 @@ def analizza_stream():
     linkedin_url           = None
     dati_proxycurl_cached  = None
 
+    _url_re = re.compile(r"https?://(?:www\.)?linkedin\.com/in/[\w\-]+/?")
+
     if candidato_id:
         try:
             db = get_db()
@@ -143,9 +146,11 @@ def analizza_stream():
             ).fetchone()
             db.close()
             if row:
+                # profilo_linkedin può contenere il testo completo: estrai solo l'URL
                 lurl = row.get("profilo_linkedin") or ""
-                if "linkedin.com/in/" in lurl:
-                    linkedin_url = lurl
+                m = _url_re.search(lurl)
+                if m:
+                    linkedin_url = m.group(0)
                 raw_prx = row.get("dati_proxycurl")
                 if raw_prx:
                     try:
@@ -157,8 +162,7 @@ def analizza_stream():
 
     # Fallback: estrai URL LinkedIn dal testo profilo
     if not linkedin_url:
-        import re
-        m = re.search(r"https?://(?:www\.)?linkedin\.com/in/[\w\-]+/?", testo_profilo)
+        m = _url_re.search(testo_profilo)
         if m:
             linkedin_url = m.group(0)
 
