@@ -555,15 +555,10 @@ def _esegui_ricerca_background(job_id, tipo_profilo, max_profili, imp):
         _nr = max(len(ruoli), 1)
         _nc = len(citta_lista)
 
-        # 3 combinazioni diverse: ruolo/città/pagina variano ad ogni tentativo
-        tentativi_params = [
-            (
-                ruoli[(_ir + i) % _nr] if ruoli else "",
-                citta_lista[(_ic + i) % _nc],
-                ((_off // 10) + i) % 10 + 1,
-            )
-            for i in range(3)
-        ]
+        # Città fissa per tutta la sessione di ricerca (ruota tra ricerche diverse)
+        citta_corrente  = citta_lista[_ic % _nc]
+        ruolo_principale = ruoli[_ir % _nr] if ruoli else ""
+        start_page_base  = (_off // 10) + 1   # 1..10
 
         # Aggiorna i cursori per la PROSSIMA ricerca (una sola volta)
         db.execute(
@@ -578,11 +573,10 @@ def _esegui_ricerca_background(job_id, tipo_profilo, max_profili, imp):
         keywords   = " ".join(kw_parts[:8]) if kw_parts else ""
         num_pagine = max(1, (max_profili * 2 + 9) // 10)
 
-        ruolo_principale, citta_corrente, start_page = tentativi_params[0]
         parametri_str = json.dumps({
             'ruolo': ruolo_principale, 'citta': citta_corrente,
             'keywords': keywords, 'max_profili': max_profili,
-            'start_page': start_page,
+            'start_page': start_page_base,
         }, ensure_ascii=False)
 
         trovati_apify    = 0
@@ -597,23 +591,30 @@ def _esegui_ricerca_background(job_id, tipo_profilo, max_profili, imp):
 
         items_da_importare = []
         seen_batch         = set()   # dedup intra-batch tra tentativi diversi
-        SOGLIA_MIN_NUOVI   = 5
+        MAX_TENTATIVI      = 5
+        SOGLIA_NUOVI       = 10
 
-        # ── Fino a 3 tentativi: se i profili nuovi sono < SOGLIA_MIN_NUOVI
-        #    riproviamo con ruolo/città/pagina diversi ─────────────────────────
-        for tentativo, (ruolo_t, citta_t, start_page_t) in enumerate(tentativi_params, 1):
-            if len(items_da_importare) >= max_profili:
+        # ── Fino a MAX_TENTATIVI: città fissa, ruolo e startPage crescono ─────
+        # Tentativo 1: ruolo[0], pag. base
+        # Tentativo 2: ruolo[1], pag. base+1   (più risultati, stesso contesto)
+        # Tentativo 3: ruolo[2], pag. base+2
+        # ...
+        for tentativo in range(1, MAX_TENTATIVI + 1):
+            if len(items_da_importare) >= SOGLIA_NUOVI:
                 break
 
+            ruolo_t      = ruoli[(_ir + tentativo - 1) % _nr] if ruoli else ""
+            start_page_t = (start_page_base + tentativo - 1 - 1) % 10 + 1  # 1-indexed, mod 10
+
             aggiorna(
-                step=f'Tentativo {tentativo}/3: "{ruolo_t}" in {citta_t} (pag. {start_page_t})...',
-                pct=5 + tentativo * 15,
+                step=f'Tentativo {tentativo}/{MAX_TENTATIVI}: "{ruolo_t}" in {citta_corrente} (pag. {start_page_t})...',
+                pct=5 + tentativo * 10,
             )
-            log.info("Tentativo %d/3: ruolo=%r citta=%r start_page=%d",
-                     tentativo, ruolo_t, citta_t, start_page_t)
+            log.info("Tentativo %d/%d: ruolo=%r citta=%r start_page=%d",
+                     tentativo, MAX_TENTATIVI, ruolo_t, citta_corrente, start_page_t)
 
             items, errore = cerca_apify(
-                ruolo_t, citta_t, "", "", keywords, num_pagine,
+                ruolo_t, citta_corrente, "", "", keywords, num_pagine,
                 ruoli_lista=[ruolo_t] if ruolo_t else [],
                 forza_italia=False,
                 progress_cb=None,
@@ -671,15 +672,12 @@ def _esegui_ricerca_background(job_id, tipo_profilo, max_profili, imp):
                 items_da_importare.append(p)
                 importati_t += 1
 
-            log.info("Tentativo %d: trovati=%d importati_nuovi=%d (totale_nuovi=%d)",
-                     tentativo, trovati_t, importati_t, len(items_da_importare))
+            log.info("Tentativo %d/%d: trovati=%d importati_nuovi=%d (totale_nuovi=%d)",
+                     tentativo, MAX_TENTATIVI, trovati_t, importati_t, len(items_da_importare))
             aggiorna(
-                step=f'Tentativo {tentativo}: trovati {trovati_t}, nuovi {importati_t}. Totale nuovi: {len(items_da_importare)}',
-                pct=20 + tentativo * 20,
+                step=f'Tentativo {tentativo}/{MAX_TENTATIVI}: trovati {trovati_t}, nuovi {importati_t}. Totale: {len(items_da_importare)}',
+                pct=min(85, 10 + tentativo * 15),
             )
-
-            if len(items_da_importare) >= SOGLIA_MIN_NUOVI:
-                break
 
         trovati_filtrati = len(items_da_importare)
         aggiorna(step=f'Filtraggio completato. Salvataggio {trovati_filtrati} candidati...', pct=90)
