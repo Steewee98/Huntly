@@ -4,7 +4,7 @@ Entry point dell'app, registra tutti i blueprint e inizializza il database.
 """
 
 import os
-from flask import Flask, redirect, url_for, jsonify
+from flask import Flask, redirect, url_for, request, jsonify
 from ai_helpers import test_connessione_api, CLAUDE_MODEL
 from dotenv import load_dotenv
 from database import init_db, get_db
