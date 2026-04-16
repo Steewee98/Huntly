@@ -24,15 +24,72 @@ ricerca_bp = Blueprint("ricerca", __name__)
 APIFY_ACTOR = "harvestapi~linkedin-profile-search"
 APIFY_BASE  = "https://api.apify.com/v2"
 
+# Città per rotazione geografica (una per ricerca, in ciclo)
+_CITTA_ROTAZIONE = {
+    'A': ['Roma', 'Milano', 'Torino', 'Napoli', 'Bologna', 'Firenze', 'Genova', 'Palermo'],
+    'B': ['Milano', 'Roma', 'Torino', 'Bologna', 'Firenze', 'Napoli', 'Genova', 'Verona'],
+}
+
+
+def _leggi_aggiorna_offset(db, tipo_profilo: str, ruoli: list) -> tuple:
+    """
+    Legge l'offset corrente per questo tipo_profilo e lo incrementa.
+    Restituisce (start_page, ruolo_corrente, citta_corrente).
+    - offset_corrente: 0, 10, 20, ... 90, poi reset a 0
+    - indice_ruolo: ruota tra i ruoli target uno alla volta
+    - indice_citta: ruota tra le città di _CITTA_ROTAZIONE
+    """
+    citta_lista = _CITTA_ROTAZIONE.get(tipo_profilo, ['Italy'])
+
+    row = db.execute(
+        "SELECT * FROM search_offset WHERE tipo_profilo = ?", (tipo_profilo,)
+    ).fetchone()
+
+    if not row:
+        db.execute(
+            "INSERT INTO search_offset (tipo_profilo, offset_corrente, indice_ruolo, indice_citta) VALUES (?, 0, 0, 0)",
+            (tipo_profilo,)
+        )
+        db.commit()
+        offset_corrente = 0
+        indice_ruolo    = 0
+        indice_citta    = 0
+    else:
+        offset_corrente = row['offset_corrente']
+        indice_ruolo    = row['indice_ruolo']
+        indice_citta    = row['indice_citta']
+
+    # Valori correnti da usare in questa ricerca
+    start_page      = (offset_corrente // 10) + 1
+    ruolo_corrente  = ruoli[indice_ruolo % len(ruoli)] if ruoli else ""
+    citta_corrente  = citta_lista[indice_citta % len(citta_lista)]
+
+    # Aggiorna per la prossima ricerca
+    nuovo_offset       = (offset_corrente + 10) % 100
+    nuovo_indice_ruolo = (indice_ruolo + 1) % max(len(ruoli), 1)
+    nuovo_indice_citta = (indice_citta + 1) % len(citta_lista)
+
+    db.execute(
+        """UPDATE search_offset SET
+           offset_corrente=?, indice_ruolo=?, indice_citta=?,
+           ultimo_aggiornamento=CURRENT_TIMESTAMP
+           WHERE tipo_profilo=?""",
+        (nuovo_offset, nuovo_indice_ruolo, nuovo_indice_citta, tipo_profilo)
+    )
+    db.commit()
+
+    return start_page, ruolo_corrente, citta_corrente
+
 
 def cerca_apify(ruolo, citta="", paese="", azienda="", parole_chiave="", num_pagine=1,
-                ruoli_lista=None, forza_italia=True, progress_cb=None):
+                ruoli_lista=None, forza_italia=True, progress_cb=None, start_page=1):
     """
     Flusso asincrono Apify in due step:
       STEP 1 — POST /acts/{actor}/runs  → avvia run, ottieni run_id
       STEP 2 — GET  /actor-runs/{id}    → poll ogni 5s finché SUCCEEDED
       STEP 3 — GET  /datasets/{id}/items → recupera risultati (max 10)
     progress_cb(pct, messaggio) viene chiamata ad ogni step se fornita.
+    start_page: pagina di partenza (1=prima, 2=seconda, …) per variare i risultati.
     Restituisce (lista_profili, errore).
     """
     api_key = os.environ.get("APIFY_API_KEY", "")
@@ -41,8 +98,8 @@ def cerca_apify(ruolo, citta="", paese="", azienda="", parole_chiave="", num_pag
 
     run_input = {
         "takePages": num_pagine,
-        "startPage": 1,
-        "maxResults": 10,   # max 10 risultati per ricerca
+        "startPage": max(1, start_page),   # offset: varia ad ogni ricerca
+        "maxResults": 10,
     }
 
     # Titoli di lavoro correnti — usa lista se fornita, altrimenti singolo ruolo
@@ -422,44 +479,36 @@ def _esegui_ricerca_background(job_id, tipo_profilo, max_profili, imp):
         kw_parts      = [k.strip() for k in kw_positive.split(",") if k.strip()]
         kw_parts     += [s.strip() for s in extra_settore.split(",") if s.strip()]
 
-        # ── Rotazione keyword: varia ad ogni ricerca per ottenere profili diversi ──
-        n_precedenti = db.execute(
-            "SELECT COUNT(*) AS n FROM ricerche_automatiche "
-            "WHERE tipo_profilo=? AND fonte='apify'",
-            (tipo_profilo,)
-        ).fetchone()["n"] or 0
+        # ── Offset + rotazione ruolo + rotazione geografica ────────────────
+        # Ogni ricerca usa una pagina diversa, un ruolo diverso e una città diversa.
+        # I cursori sono persistiti in search_offset e incrementati automaticamente.
+        start_page, ruolo_principale, citta_corrente = _leggi_aggiorna_offset(db, tipo_profilo, ruoli)
 
-        if ruoli:
-            idx_rot      = n_precedenti % len(ruoli)
-            ruolo_principale = ruoli[idx_rot]
-            ruoli_ruotati    = ruoli[idx_rot:] + ruoli[:idx_rot]
-        else:
-            ruolo_principale = ""
-            ruoli_ruotati    = []
-
-        # Ruota anche le keyword: usa un sottoinsieme diverso ad ogni ricerca
-        if len(kw_parts) > 3:
-            kw_start  = (n_precedenti * 2) % len(kw_parts)
-            kw_window = kw_parts[kw_start:kw_start + 6] or kw_parts[:6]
-        else:
-            kw_window = kw_parts[:6]
-        keywords = " ".join(kw_window)
+        # Keyword: usa tutte le keyword positive (nessuna rotazione ulteriore —
+        # la variazione principale viene da ruolo singolo + offset + città)
+        keywords = " ".join(kw_parts[:8]) if kw_parts else ""
 
         # Richiedi il doppio dei profili necessari per compensare filtri e duplicati
         num_pagine = max(1, (max_profili * 2 + 9) // 10)
 
         parametri_str = json.dumps({
-            'ruolo': ruolo_principale, 'ruoli_tutti': ruoli_raw,
-            'keywords': keywords, 'max_profili': max_profili,
-            'location': 'Italy', 'rotazione': n_precedenti,
+            'ruolo':      ruolo_principale,
+            'citta':      citta_corrente,
+            'keywords':   keywords,
+            'max_profili': max_profili,
+            'start_page': start_page,
         }, ensure_ascii=False)
 
         def _progress(pct, step):
             aggiorna(step=step, pct=pct)
 
+        # Passa un solo ruolo per volta + città specifica + offset di pagina
         items, errore = cerca_apify(
-            ruolo_principale, "", "", "", keywords, num_pagine,
-            ruoli_lista=ruoli_ruotati, forza_italia=True, progress_cb=_progress
+            ruolo_principale, citta_corrente, "", "", keywords, num_pagine,
+            ruoli_lista=[ruolo_principale] if ruolo_principale else [],
+            forza_italia=False,   # usa città specifica, non "Italy" generico
+            progress_cb=_progress,
+            start_page=start_page,
         )
 
         if errore:

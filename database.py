@@ -332,6 +332,15 @@ def init_db():
     data_creazione  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )""",
 
+        # ── Tabella offset ricerche (variazione query ad ogni ricerca) ────────
+        """CREATE TABLE IF NOT EXISTS search_offset (
+    tipo_profilo         TEXT PRIMARY KEY,
+    offset_corrente      INTEGER DEFAULT 0,
+    indice_ruolo         INTEGER DEFAULT 0,
+    indice_citta         INTEGER DEFAULT 0,
+    ultimo_aggiornamento TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)""",
+
         # ── Indici per performance query ───────────────────────────────────
         "CREATE INDEX IF NOT EXISTS idx_candidati_tipo_profilo  ON candidati(tipo_profilo)",
         "CREATE INDEX IF NOT EXISTS idx_candidati_stato          ON candidati(stato)",
