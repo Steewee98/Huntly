@@ -139,6 +139,21 @@ def rigenera_followup(candidato_id):
     return jsonify({"messaggio": messaggio})
 
 
+@pipeline_bp.route("/pipeline/<int:candidato_id>/note", methods=["PATCH"])
+def aggiorna_note(candidato_id):
+    """Endpoint AJAX per aggiornare le note di un candidato."""
+    dati = request.get_json()
+    note = dati.get("note", "")
+    db = get_db()
+    db.execute(
+        "UPDATE candidati SET note = ?, data_aggiornamento = CURRENT_TIMESTAMP WHERE id = ?",
+        (note, candidato_id),
+    )
+    db.commit()
+    db.close()
+    return jsonify({"successo": True})
+
+
 @pipeline_bp.route("/pipeline/elimina/<int:candidato_id>", methods=["DELETE"])
 def elimina_candidato(candidato_id):
     """Elimina un candidato dalla pipeline."""

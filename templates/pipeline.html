@@ -43,6 +43,7 @@
                     <th>Punteggio</th>
                     <th>Stato</th>
                     <th>Gestore</th>
+                    <th>Note</th>
                     <th>Prossimo App.</th>
                     <th>Azioni</th>
                 </tr>
@@ -101,6 +102,13 @@
                             <option value="{{ gestore }}" {% if g == gestore %}selected{% endif %}>{{ gestore }}</option>
                             {% endfor %}
                         </select>
+                    </td>
+                    <td class="nota-cella" onclick="apriNote({{ c.id }}, '{{ c.nome }} {{ c.cognome }}')" title="{{ c.note or '' }}">
+                        {% if c.note %}
+                            <span class="nota-anteprima">{{ c.note[:50] }}{% if c.note|length > 50 %}…{% endif %}</span>
+                        {% else %}
+                            <span class="nota-vuota">&#9998;</span>
+                        {% endif %}
                     </td>
                     <td>
                         {% set papp = prossimi_app.get(c.id) %}
@@ -170,6 +178,25 @@
                 <button class="btn btn-primary" onclick="copiaFollowup()" style="margin-top:1rem">
                     Copia Messaggio
                 </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modale Note -->
+<div id="modal-note" class="modal-overlay hidden" onclick="chiudiModalNote(event)">
+    <div class="modal">
+        <div class="modal-header">
+            <h3 id="note-titolo">Note</h3>
+            <button class="modal-close" onclick="chiudiModalNote()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <textarea id="note-textarea" class="form-textarea"
+                      rows="8" placeholder="Aggiungi note sul candidato…"
+                      style="width:100%;resize:vertical;"></textarea>
+            <div style="display:flex;gap:0.75rem;margin-top:1rem;">
+                <button class="btn btn-primary" onclick="salvaNota()">Salva</button>
+                <button class="btn btn-outline" onclick="chiudiModalNote()">Annulla</button>
             </div>
         </div>
     </div>
@@ -433,5 +460,82 @@ function getScoreClass(score) {
     if (score >= 5) return 'score-medio';
     return 'score-basso';
 }
+
+// ── Note candidato ────────────────────────────────────────────────────
+let noteCandidatoId   = null;
+let noteCandidatoCella = null;
+
+function apriNote(id, nome) {
+    noteCandidatoId = id;
+    const c = candidatiData.find(x => x.id === id);
+    document.getElementById('note-titolo').textContent = `Note — ${nome}`;
+    document.getElementById('note-textarea').value = (c && c.note) ? c.note : '';
+    mostra('modal-note');
+    setTimeout(() => document.getElementById('note-textarea').focus(), 50);
+}
+
+async function salvaNota() {
+    if (!noteCandidatoId) return;
+    const nota = document.getElementById('note-textarea').value;
+    try {
+        const r = await fetch(`/pipeline/${noteCandidatoId}/note`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ note: nota })
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+
+        // Aggiorna dati in memoria
+        const c = candidatiData.find(x => x.id === noteCandidatoId);
+        if (c) c.note = nota;
+
+        // Aggiorna cella nella tabella
+        const cella = document.querySelector(`#row-${noteCandidatoId} .nota-cella`);
+        if (cella) {
+            if (nota.trim()) {
+                const anteprima = nota.length > 50 ? nota.slice(0, 50) + '…' : nota;
+                cella.innerHTML = `<span class="nota-anteprima">${anteprima}</span>`;
+                cella.title = nota;
+            } else {
+                cella.innerHTML = `<span class="nota-vuota">&#9998;</span>`;
+                cella.title = '';
+            }
+        }
+        chiudiModalNote();
+    } catch(e) {
+        alert('Errore salvataggio nota: ' + e.message);
+    }
+}
+
+function chiudiModalNote(event) {
+    if (!event || event.target === document.getElementById('modal-note')) {
+        nascondi('modal-note');
+        noteCandidatoId = null;
+    }
+}
 </script>
+
+<style>
+.nota-cella {
+    cursor: pointer;
+    max-width: 180px;
+    min-width: 80px;
+}
+.nota-cella:hover { background: var(--sfondo, #f5f5f5); }
+.nota-anteprima {
+    font-size: 0.78rem;
+    color: var(--testo, #333);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+}
+.nota-vuota {
+    font-size: 1rem;
+    color: #bbb;
+    display: block;
+    text-align: center;
+}
+.nota-vuota:hover { color: var(--primario, #2E7CF6); }
+</style>
 {% endblock %}
