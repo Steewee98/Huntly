@@ -126,6 +126,21 @@ def handle_exception(e):
     raise e
 
 
+@app.route("/test/proxycurl")
+def test_proxycurl():
+    """Mostra il JSON grezzo restituito da Proxycurl per un URL LinkedIn.
+    Uso: GET /test/proxycurl?url=https://www.linkedin.com/in/username
+    """
+    from proxycurl_helpers import arricchisci_profilo
+    url = request.args.get("url", "").strip()
+    if not url:
+        return jsonify({"errore": "Parametro 'url' mancante. Es: /test/proxycurl?url=https://www.linkedin.com/in/username"}), 400
+    dati = arricchisci_profilo(url)
+    if dati is None:
+        return jsonify({"errore": "Proxycurl non ha restituito dati. Controlla PROXYCURL_API_KEY e che l'URL sia valido."}), 500
+    return jsonify(dati)
+
+
 @app.route("/admin/test-api")
 def admin_test_api():
     """Verifica la connessione all'API Anthropic con una chiamata minimale."""
