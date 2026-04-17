@@ -380,7 +380,7 @@ def analizza_profilo_linkedin_stream(
         risultato["arricchito"] = False
         punteggio_base = risultato.get("punteggio", 0) or 0
         print(f"=== PUNTEGGIO BASE: {punteggio_base} ===")
-        if punteggio_base >= 6 and (linkedin_url or dati_proxycurl_cached):
+        if punteggio_base >= 5 and (linkedin_url or dati_proxycurl_cached):
             yield f"data: {json.dumps({'type': 'arricchimento_start'}, ensure_ascii=False)}\n\n"
             try:
                 from proxycurl_helpers import arricchisci_profilo, is_cache_valida
@@ -393,6 +393,8 @@ def analizza_profilo_linkedin_stream(
                     print(f"=== ENRICHLAYER START: url={linkedin_url} ===")
                     dati_prx = arricchisci_profilo(linkedin_url)
                     print(f"=== ENRICHLAYER DONE: campi={len(dati_prx) if dati_prx else 0} ===")
+                else:
+                    print(f"=== ENRICHLAYER SKIP: nessun linkedin_url disponibile ===")
 
                 if dati_prx:
                     enriched = analizza_profilo_arricchito(testo_profilo, tipo_profilo, dati_prx, risultato)
@@ -404,6 +406,9 @@ def analizza_profilo_linkedin_stream(
                         yield f"data: {json.dumps({'type': '_proxycurl_data', 'dati': dati_prx}, ensure_ascii=False)}\n\n"
             except Exception as e_prx:
                 logger.error("[AI] Errore arricchimento Proxycurl: %s", e_prx)
+                print(f"=== ENRICHLAYER ERROR: {e_prx} ===")
+        else:
+            print(f"=== ENRICHLAYER SKIP: punteggio={punteggio_base} linkedin_url={linkedin_url} ===")
 
         # done event senza dati_proxycurl (evita payload > 20 KB che rompe JSON.parse nel browser)
         risultato.pop("dati_proxycurl", None)

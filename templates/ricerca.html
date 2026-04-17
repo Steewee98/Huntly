@@ -361,42 +361,6 @@
     </div>
 </div>
 
-<!-- Modal: analisi AI candidato dalla ricerca -->
-<div id="modal-analisi" class="modal-overlay hidden"
-     onclick="if(event.target===this)chiudiModalAnalisi()">
-    <div class="modal" style="max-width:680px;">
-        <div class="modal-header">
-            <h3>&#9733; Analisi AI Candidato</h3>
-            <button class="modal-close" onclick="chiudiModalAnalisi()">&#215;</button>
-        </div>
-        <div class="modal-body">
-            <!-- Step 1: selezione profilo -->
-            <div id="analisi-step1">
-                <p style="margin-bottom:1rem;color:var(--grigio-testo);font-size:0.9rem;">
-                    Avvia valutazione AI per <strong id="analisi-nome-candidato"></strong>
-                </p>
-                <div class="profilo-toggle" style="margin-bottom:1.5rem;">
-                    <label class="toggle-option selected" id="toggle-analisi-a" onclick="selezionaTipoAnalisi('A')">
-                        <input type="radio" name="tipo_profilo_analisi" value="A" checked>
-                        <span class="toggle-badge">Profilo A</span>
-                        <span class="toggle-desc">Figure commerciali, vendite, business</span>
-                    </label>
-                    <label class="toggle-option" id="toggle-analisi-b" onclick="selezionaTipoAnalisi('B')">
-                        <input type="radio" name="tipo_profilo_analisi" value="B">
-                        <span class="toggle-badge">Profilo B</span>
-                        <span class="toggle-desc">Figure tecniche, IT, engineering</span>
-                    </label>
-                </div>
-                <div class="form-actions">
-                    <button class="btn btn-primary" id="btn-avvia-analisi" onclick="avviaAnalisi()">
-                        &#9889; Avvia Analisi AI
-                    </button>
-                    <button class="btn btn-secondary" onclick="chiudiModalAnalisi()">Annulla</button>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
 {% endblock %}
 
 {% block scripts %}
@@ -636,7 +600,7 @@ function renderRisultati(persone, totale, tentativi) {
             '<td>' + linkedinBtn + '</td>' +
             '<td style="display:flex;gap:0.4rem;">' +
             '<button class="btn btn-outline btn-xs" onclick=\'apriModal(' + JSON.stringify(p) + ')\'>&#43; Importa</button>' +
-            '<button class="btn btn-primary btn-xs" onclick=\'apriModalAnalisi(' + JSON.stringify(p) + ')\'>&#9733; Analizza</button>' +
+            '<button class="btn btn-primary btn-xs" onclick=\'avviaAnalisiDiretta(' + JSON.stringify(p) + ')\'>&#9733; Analizza</button>' +
             '</td>' +
             '</tr>';
     });
@@ -727,44 +691,13 @@ document.getElementById('modal-import').addEventListener('click', function(e) {
 /* ------------------------------------------------------------------ */
 /* Modal Analisi AI                                                     */
 /* ------------------------------------------------------------------ */
-function apriModalAnalisi(persona) {
+/* Analisi AI diretta (senza modal intermedio)                         */
+/* ------------------------------------------------------------------ */
+function avviaAnalisiDiretta(persona) {
     personaInAnalisi       = persona;
-    tipoAnalisiSelezionato = tipoCercaSelezionato; // suggerisce il tipo della ricerca corrente
+    tipoAnalisiSelezionato = tipoCercaSelezionato; // usa il tipo già scelto nel form ricerca
 
-    const nomeCompleto = [persona.nome, persona.cognome].filter(Boolean).join(' ') || 'questo candidato';
-    document.getElementById('analisi-nome-candidato').textContent = nomeCompleto;
-    document.getElementById('toggle-analisi-a').classList.toggle('selected', tipoAnalisiSelezionato === 'A');
-    document.getElementById('toggle-analisi-b').classList.toggle('selected', tipoAnalisiSelezionato === 'B');
-
-    // Reset step 1
-    document.getElementById('analisi-step1').classList.remove('hidden');
-    document.getElementById('btn-avvia-analisi').disabled = false;
-    document.getElementById('btn-avvia-analisi').innerHTML = '&#9889; Avvia Analisi AI';
-
-    document.getElementById('modal-analisi').classList.remove('hidden');
-}
-
-function chiudiModalAnalisi() {
-    document.getElementById('modal-analisi').classList.add('hidden');
-}
-
-function selezionaTipoAnalisi(tipo) {
-    tipoAnalisiSelezionato = tipo;
-    document.getElementById('toggle-analisi-a').classList.toggle('selected', tipo === 'A');
-    document.getElementById('toggle-analisi-b').classList.toggle('selected', tipo === 'B');
-}
-
-function avviaAnalisi() {
-    var p = personaInAnalisi;
-    if (!p) return;
-
-    var btn = document.getElementById('btn-avvia-analisi');
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner"></span> Avvio...';
-
-    // Chiudi modal e prepara il panel inline
-    document.getElementById('modal-analisi').classList.add('hidden');
-
+    var p = persona;
     var nomeCompleto = [p.nome, p.cognome].filter(Boolean).join(' ') || 'candidato';
     document.getElementById('analisi-inline-nome').textContent = nomeCompleto;
     document.getElementById('analisi-arricchimento-badge').classList.add('hidden');
