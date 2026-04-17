@@ -141,6 +141,95 @@ def test_proxycurl():
     return jsonify(dati)
 
 
+@app.route("/debug/enrich/<int:candidato_id>")
+def debug_enrich(candidato_id):
+    """
+    Diagnostica completa dell'arricchimento per un candidato.
+    Mostra ogni step: URL estratto, EnrichLayer, Claude arricchito.
+    Uso: GET /debug/enrich/123
+    """
+    import re as _re
+    from proxycurl_helpers import arricchisci_profilo, is_cache_valida, estrai_testo_proxycurl
+    from ai_helpers import analizza_profilo_arricchito
+
+    db = get_db()
+    row = db.execute("SELECT * FROM candidati WHERE id = %s" if False else
+                     "SELECT id, nome, cognome, profilo_linkedin, dati_proxycurl, dati_arricchiti, punteggio FROM candidati WHERE id = ?",
+                     (candidato_id,)).fetchone()
+    db.close()
+
+    if not row:
+        return jsonify({"errore": f"Candidato {candidato_id} non trovato"}), 404
+
+    out = {
+        "candidato_id": candidato_id,
+        "nome": f"{row.get('nome')} {row.get('cognome')}",
+        "punteggio_db": row.get("punteggio"),
+        "dati_arricchiti_in_db": row.get("dati_arricchiti") is not None,
+    }
+
+    # Step 1: estrai URL LinkedIn
+    url_re = _re.compile(r"https?://(?:www\.)?linkedin\.com/in/[\w\-]+/?")
+    lurl = row.get("profilo_linkedin") or ""
+    m = url_re.search(lurl)
+    linkedin_url = m.group(0) if m else None
+    out["linkedin_url_trovato"] = linkedin_url
+
+    if not linkedin_url:
+        out["stop"] = "Nessun URL LinkedIn nel campo profilo_linkedin del candidato"
+        return jsonify(out)
+
+    punteggio = row.get("punteggio") or 0
+    if punteggio < 6:
+        out["stop"] = f"Punteggio {punteggio} < 6: soglia arricchimento non raggiunta"
+        return jsonify(out)
+
+    # Step 2: controlla cache
+    raw_prx = row.get("dati_proxycurl")
+    dati_prx = None
+    if raw_prx:
+        try:
+            cached = __import__("json").loads(raw_prx)
+            if is_cache_valida(cached):
+                dati_prx = cached
+                out["enrichlayer"] = "cache valida usata"
+        except Exception:
+            pass
+
+    # Step 3: chiama EnrichLayer se non c'è cache
+    if not dati_prx:
+        dati_prx = arricchisci_profilo(linkedin_url)
+        if dati_prx is None:
+            out["enrichlayer"] = "FAIL: EnrichLayer ha restituito None (chiave errata o URL non trovato)"
+            out["stop"] = "EnrichLayer fallito"
+            return jsonify(out)
+        out["enrichlayer"] = f"OK: {len(dati_prx)} campi restituiti"
+
+    # Step 4: testo estratto da Proxycurl
+    testo_prx = estrai_testo_proxycurl(dati_prx)
+    out["proxycurl_testo_estratto"] = testo_prx[:300] if testo_prx else "(vuoto)"
+
+    # Step 5: chiama Claude arricchito
+    dati_base = {
+        "punteggio": punteggio,
+        "analisi_percorso": None,
+        "ruolo_attuale": row.get("ruolo_attuale") if hasattr(row, "get") else None,
+        "azienda": row.get("azienda") if hasattr(row, "get") else None,
+        "anni_esperienza": None,
+    }
+    try:
+        enriched = analizza_profilo_arricchito(lurl[:500], "A", dati_prx, dati_base)
+        if enriched:
+            out["claude_arricchito"] = f"OK: {list(enriched.keys())}"
+            out["risultato"] = enriched
+        else:
+            out["claude_arricchito"] = "FAIL: restituito dict vuoto (JSON parse error o eccezione silenziosa)"
+    except Exception as e:
+        out["claude_arricchito"] = f"ECCEZIONE: {e}"
+
+    return jsonify(out)
+
+
 @app.route("/admin/test-api")
 def admin_test_api():
     """Verifica la connessione all'API Anthropic con una chiamata minimale."""
