@@ -981,6 +981,7 @@ def analizza_candidato():
     3. dati testuali diretti → candidato completamente nuovo
     Salva automaticamente in candidati (pipeline) e valutazioni (cronologia).
     """
+    print(f"=== ROUTE HIT: {request.path} ===")
     dati = request.get_json()
     candidato_id          = dati.get("candidato_id")
     profilo_ricerca_id    = dati.get("profilo_ricerca_id")
