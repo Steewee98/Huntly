@@ -307,6 +307,7 @@
             <div class="card-body text-center">
                 <div class="score-circle" id="score-circle"><span id="score-value">—</span></div>
                 <p class="score-label">Compatibilità</p>
+                <div id="arricchimento-badge" class="hidden" style="margin-top:0.5rem;font-size:0.75rem;padding:3px 10px;border-radius:20px;display:inline-block;"></div>
             </div>
         </div>
         <div class="card result-card">
@@ -419,9 +420,6 @@
         </div>
     </div>
 </div>
-
-<!-- Errore valutazione -->
-<div id="errore-box" class="hidden alert alert-errore"></div>
 
 </div><!-- /tab-valutazione -->
 
@@ -1272,6 +1270,7 @@ async function avviaAnalisi() {
     nascondi('risultati-arricchiti');
     nascondi('errore-box');
     nascondi('skeleton-results');
+    nascondi('arricchimento-badge');
 
     var previewEl = document.getElementById('stream-preview');
     var streamTxt = document.getElementById('stream-testo');
@@ -1370,27 +1369,44 @@ function mostraRisultatiVal(dati) {
 
     mostra('risultati');
 
+    // Badge arricchimento (visibile nell'UI senza DevTools)
+    var badge = document.getElementById('arricchimento-badge');
+    if (badge) {
+        if (dati.arricchito) {
+            badge.textContent = '★ Analisi Arricchita';
+            badge.style.cssText = 'margin-top:0.5rem;font-size:0.75rem;padding:3px 10px;border-radius:20px;display:inline-block;background:#dbeafe;color:#1e40af;';
+        } else {
+            badge.textContent = 'Analisi base (score ' + (dati.punteggio || '?') + ')';
+            badge.style.cssText = 'margin-top:0.5rem;font-size:0.75rem;padding:3px 10px;border-radius:20px;display:inline-block;background:#f3f4f6;color:#6b7280;';
+        }
+        badge.classList.remove('hidden');
+    }
+
     // Sezione arricchita (Proxycurl)
     if (dati.arricchito) {
-        var score10 = function(v) { return v ? Math.min(100, Math.round(v * 10)) : 0; };
-        var c = dati.punteggio_compatibilita || 0;
-        var m = dati.indice_mobilita || 0;
-        var q = dati.punteggio_qualita_profilo || 0;
-        document.getElementById('bar-compatibilita').style.width = score10(c) + '%';
-        document.getElementById('val-compatibilita').textContent = c + '/10';
-        document.getElementById('bar-mobilita').style.width = score10(m) + '%';
-        document.getElementById('val-mobilita').textContent = m + '/10';
-        document.getElementById('bar-qualita').style.width = score10(q) + '%';
-        document.getElementById('val-qualita').textContent = q + '/10';
-        document.getElementById('arric-pattern').textContent = dati.pattern_carriera || '—';
-        document.getElementById('arric-momento').textContent = dati.momento_contatto || '—';
-        var liHtml = function(arr) {
-            return (arr || []).map(function(s) { return '<li>' + s + '</li>'; }).join('');
-        };
-        document.getElementById('arric-positivi').innerHTML = liHtml(dati.segnali_positivi);
-        document.getElementById('arric-negativi').innerHTML = liHtml(dati.segnali_negativi);
-        document.getElementById('arric-sintesi').textContent = dati.sintesi || '—';
-        document.getElementById('arric-messaggio').textContent = dati.messaggio_personalizzato || '—';
+        try {
+            var score10 = function(v) { return v ? Math.min(100, Math.round(v * 10)) : 0; };
+            var c = dati.punteggio_compatibilita || 0;
+            var m = dati.indice_mobilita || 0;
+            var q = dati.punteggio_qualita_profilo || 0;
+            document.getElementById('bar-compatibilita').style.width = score10(c) + '%';
+            document.getElementById('val-compatibilita').textContent = c + '/10';
+            document.getElementById('bar-mobilita').style.width = score10(m) + '%';
+            document.getElementById('val-mobilita').textContent = m + '/10';
+            document.getElementById('bar-qualita').style.width = score10(q) + '%';
+            document.getElementById('val-qualita').textContent = q + '/10';
+            document.getElementById('arric-pattern').textContent = dati.pattern_carriera || '—';
+            document.getElementById('arric-momento').textContent = dati.momento_contatto || '—';
+            var liHtml = function(arr) {
+                return (arr || []).map(function(s) { return '<li>' + s + '</li>'; }).join('');
+            };
+            document.getElementById('arric-positivi').innerHTML = liHtml(dati.segnali_positivi);
+            document.getElementById('arric-negativi').innerHTML = liHtml(dati.segnali_negativi);
+            document.getElementById('arric-sintesi').textContent = dati.sintesi || '—';
+            document.getElementById('arric-messaggio').textContent = dati.messaggio_personalizzato || '—';
+        } catch(e) {
+            console.error('[arricchimento] errore popolamento campi:', e);
+        }
         mostra('risultati-arricchiti');
     } else {
         nascondi('risultati-arricchiti');
