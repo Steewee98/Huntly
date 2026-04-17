@@ -663,16 +663,6 @@
 <!-- MODALI (condivisi fra tutti i tab)                      -->
 <!-- ═══════════════════════════════════════════════════════ -->
 
-<!-- Modal Report candidato (Pipeline) -->
-<div id="modal-report" class="modal-overlay hidden" onclick="chiudiModal(event)">
-    <div class="modal">
-        <div class="modal-header">
-            <h3 id="modal-titolo">Report Candidato</h3>
-            <button class="modal-close" onclick="chiudiModal()">&times;</button>
-        </div>
-        <div class="modal-body" id="modal-body"></div>
-    </div>
-</div>
 
 <!-- Modal Follow-up (Pipeline) -->
 <div id="modal-followup" class="modal-overlay hidden" onclick="chiudiModalFollowup(event)">
@@ -982,38 +972,76 @@ async function aggiornaStato(select) {
 function mostraReport(id) {
     var c = candidatiData.find(function(x) { return x.id === id; });
     if (!c) return;
-    document.getElementById('modal-titolo').textContent = 'Report: ' + c.nome + ' ' + c.cognome;
-    var spunti = c.spunti || [];
-    if (typeof spunti === 'string') { try { spunti = JSON.parse(spunti); } catch(e) { spunti = []; } }
-    var spuntiHtml = spunti.map(function(s) { return '<li class="spunto-item">' + s + '</li>'; }).join('');
+
+    document.getElementById('modal-report-titolo').textContent = 'Report: ' + c.nome + ' ' + c.cognome;
+    var streamEl = document.getElementById('modal-report-streaming');
+    var savedEl  = document.getElementById('modal-report-saved');
+    if (streamEl) streamEl.classList.add('hidden');
+    if (savedEl)  savedEl.classList.add('hidden');
+
     var arricchiti = c.dati_arricchiti || null;
     if (typeof arricchiti === 'string') { try { arricchiti = JSON.parse(arricchiti); } catch(e) { arricchiti = null; } }
-    var htmlArricchito = '';
-    if (arricchiti) {
-        var liH = function(arr) { return (arr || []).map(function(s) { return '<li>' + s + '</li>'; }).join(''); };
-        htmlArricchito =
-            '<div class="report-sezione" style="border-left:3px solid #2E7CF6;padding-left:0.75rem;">' +
-            '<h4 style="color:#2E7CF6;">&#127919; Analisi Arricchita <span style="font-size:0.7rem;background:#2E7CF6;color:#fff;padding:2px 8px;border-radius:20px;vertical-align:middle;">Proxycurl</span></h4>' +
-            '<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:0.75rem;margin:0.75rem 0;">' +
-            '<div style="text-align:center;"><div style="font-size:0.75rem;color:#6b7280;">Compatibilità</div><strong>' + (arricchiti.punteggio_compatibilita || '—') + '/10</strong></div>' +
-            '<div style="text-align:center;"><div style="font-size:0.75rem;color:#6b7280;">Mobilità</div><strong>' + (arricchiti.indice_mobilita || '—') + '/10</strong></div>' +
-            '<div style="text-align:center;"><div style="font-size:0.75rem;color:#6b7280;">Qualità</div><strong>' + (arricchiti.punteggio_qualita_profilo || '—') + '/10</strong></div>' +
-            '</div>' +
-            '<p><strong>Pattern:</strong> ' + (arricchiti.pattern_carriera || '—') + ' &nbsp;|&nbsp; <strong>Momento:</strong> ' + (arricchiti.momento_contatto || '—') + '</p>' +
-            '<div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;font-size:0.85rem;">' +
-            '<div><div style="color:#10b981;font-weight:600;">&#10003; Positivi</div><ul style="margin:0;padding-left:1rem;">' + liH(arricchiti.segnali_positivi) + '</ul></div>' +
-            '<div><div style="color:#ef4444;font-weight:600;">&#9888; Negativi</div><ul style="margin:0;padding-left:1rem;">' + liH(arricchiti.segnali_negativi) + '</ul></div>' +
-            '</div>' +
-            (arricchiti.sintesi ? '<p style="margin-top:0.5rem;"><em>' + arricchiti.sintesi + '</em></p>' : '') +
-            '</div>';
-    }
-    document.getElementById('modal-body').innerHTML =
-        '<div class="report-sezione"><div class="report-score ' + getScoreClass(c.punteggio) + '">' + c.punteggio + '/10</div></div>' +
-        '<div class="report-sezione"><h4>Analisi del Percorso</h4><p>' + (c.analisi || '—') + '</p></div>' +
-        '<div class="report-sezione"><h4>Spunti per il Contatto</h4><ul>' + spuntiHtml + '</ul></div>' +
-        '<div class="report-sezione"><h4>Messaggio di Outreach</h4><div class="outreach-box">' + (c.messaggio_outreach || '—') + '</div></div>' +
-        htmlArricchito;
-    mostra('modal-report');
+
+    var spunti = c.spunti || [];
+    if (typeof spunti === 'string') { try { spunti = JSON.parse(spunti); } catch(e) { spunti = []; } }
+
+    var dati = {
+        punteggio:         c.punteggio        || 0,
+        analisi_percorso:  c.analisi           || '',
+        spunti_contatto:   spunti,
+        messaggio_outreach: c.messaggio_outreach || '',
+    };
+    if (arricchiti) { Object.assign(dati, arricchiti); dati.arricchito = true; }
+
+    // Costruisci testo profilo per eventuale analisi approfondita
+    var testo = [
+        'Nome: '    + (c.nome || '') + ' ' + (c.cognome || ''),
+        'Ruolo: '   + (c.ruolo_attuale || ''),
+        'Azienda: ' + (c.azienda       || ''),
+        c.testo_profilo ? 'Profilo:\n' + c.testo_profilo : '',
+        c.note ? 'Note: ' + c.note : '',
+    ].filter(Boolean).join('\n');
+
+    var candidatoInfo = { testo: testo, linkedin: c.profilo_linkedin || null, tipo: c.tipo_profilo || 'A', candidato_id: c.id };
+    var salvaCallback = function(nuoviDati) { _salvaPipelineArricchito(c.id, nuoviDati); };
+
+    _mostraReportNelModal(dati, candidatoInfo, salvaCallback);
+}
+
+function _salvaPipelineArricchito(candidatoId, dati) {
+    if (!dati.arricchito) return;
+    var datiArricchiti = JSON.stringify({
+        punteggio_compatibilita:   dati.punteggio_compatibilita,
+        indice_mobilita:           dati.indice_mobilita,
+        punteggio_qualita_profilo: dati.punteggio_qualita_profilo,
+        pattern_carriera:          dati.pattern_carriera,
+        momento_contatto:          dati.momento_contatto,
+        motivazione_probabile:     dati.motivazione_probabile,
+        segnali_positivi:          dati.segnali_positivi,
+        segnali_negativi:          dati.segnali_negativi,
+        rischi:                    dati.rischi,
+        analisi_attivita:          dati.analisi_attivita,
+        messaggio_personalizzato:  dati.messaggio_personalizzato,
+        sintesi:                   dati.sintesi,
+    });
+    fetch('/ricerca/analizza_candidato', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            candidato_id:          candidatoId,
+            risultato_precomputed: dati,
+            dati_arricchiti:       datiArricchiti,
+        })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function() {
+        // Aggiorna dati_arricchiti in-memory
+        var idx = candidatiData.findIndex(function(x) { return x.id === candidatoId; });
+        if (idx >= 0) candidatiData[idx].dati_arricchiti = datiArricchiti;
+        var savedEl = document.getElementById('modal-report-saved');
+        if (savedEl) savedEl.classList.remove('hidden');
+    })
+    .catch(function(err) { console.error('[salva pipeline arricchito]', err); });
 }
 
 var followupCandidatoId = null;
@@ -1110,7 +1138,7 @@ async function eliminaCandidato(id, nome) {
 }
 
 function chiudiModal(event) {
-    if (!event || event.target === document.getElementById('modal-report')) nascondi('modal-report');
+    if (!event || event.target === document.getElementById('modal-report')) chiudiModalReport();
 }
 function chiudiModalFollowup(event) {
     if (!event || event.target === document.getElementById('modal-followup')) nascondi('modal-followup');

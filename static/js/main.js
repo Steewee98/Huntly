@@ -119,8 +119,12 @@ function escHtml(str) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Modal Report AI — condiviso tra ricerca.html e ricerca_dettaglio    */
+/* Modal Report AI — condiviso tra tutte le pagine                     */
 /* ------------------------------------------------------------------ */
+
+// Stato globale per l'analisi approfondita
+var _reportGlobale = null;
+
 function chiudiModalReport() {
     var el = document.getElementById('modal-report');
     if (el) el.classList.add('hidden');
@@ -128,9 +132,13 @@ function chiudiModalReport() {
 
 /**
  * Popola e apre il modal-report con i dati di analisi (base o arricchiti).
- * @param {Object} dati - risultato SSE o da DB (stesso schema)
+ * @param {Object} dati          - risultato SSE o da DB
+ * @param {Object} candidatoInfo - { testo, linkedin_url, candidato_id, tipo_profilo }
+ * @param {Function} salvaCallback - function(dati) chiamata dopo analisi approfondita
  */
-function _mostraReportNelModal(dati) {
+function _mostraReportNelModal(dati, candidatoInfo, salvaCallback) {
+    // Salva contesto per eventuale analisi approfondita
+    _reportGlobale = candidatoInfo ? { candidatoInfo: candidatoInfo, salvaCallback: salvaCallback || null } : _reportGlobale;
     var spinnerEl = document.getElementById('modal-report-spinner');
     var streamEl  = document.getElementById('modal-report-streaming');
     var bodyEl    = document.getElementById('modal-report-body');
@@ -249,6 +257,98 @@ function _mostraReportNelModal(dati) {
             '<div class="outreach-box">' + escHtml(dati.messaggio_outreach) + '</div></div>';
     }
 
+    // Bottone analisi approfondita (solo se non ancora arricchito e abbiamo il contesto)
+    if (!arricchito && _reportGlobale && _reportGlobale.candidatoInfo) {
+        html += '<div id="btn-approfondita-container" style="margin-top:1.25rem;padding-top:1rem;border-top:1px solid var(--grigio-bordo);">' +
+            '<button onclick="_lanciaAnalisiApprofondita()" ' +
+            'style="background:var(--azzurro);color:#fff;border:none;border-radius:var(--radius);' +
+            'padding:0.6rem 1.25rem;font-size:0.9rem;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:0.5rem;">' +
+            '&#9733; Lancia Analisi Approfondita</button>' +
+            '<p style="margin:0.5rem 0 0;font-size:0.8rem;color:var(--grigio-testo);">Arricchisce il profilo con dati LinkedIn tramite EnrichLayer</p>' +
+            '</div>';
+    }
+
     if (bodyEl) bodyEl.innerHTML = html;
     mostra('modal-report');
+}
+
+/**
+ * Lancia l'analisi approfondita SSE sul candidato corrente nel modal.
+ * Usa _reportGlobale.candidatoInfo per i dati del profilo.
+ */
+function _lanciaAnalisiApprofondita() {
+    if (!_reportGlobale || !_reportGlobale.candidatoInfo) return;
+    var ci = _reportGlobale.candidatoInfo;
+
+    // Mostra spinner nel modal
+    var streamEl = document.getElementById('modal-report-streaming');
+    var bodyEl   = document.getElementById('modal-report-body');
+    var savedEl  = document.getElementById('modal-report-saved');
+    var spinnerEl = document.getElementById('modal-report-spinner');
+    var statusEl  = document.getElementById('modal-report-status');
+    var streamTextEl = document.getElementById('modal-report-stream-text');
+
+    if (streamEl)    { streamEl.classList.remove('hidden'); }
+    if (bodyEl)      { bodyEl.classList.add('hidden'); bodyEl.innerHTML = ''; }
+    if (savedEl)     { savedEl.classList.add('hidden'); }
+    if (spinnerEl)   { spinnerEl.style.display = ''; }
+    if (statusEl)    { statusEl.innerHTML = '&#11088; Arricchimento con EnrichLayer in corso...'; }
+    if (streamTextEl){ streamTextEl.textContent = ''; }
+
+    fetch('/valutazione/analizza_stream', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            testo_profilo: ci.testo    || '',
+            tipo_profilo:  ci.tipo     || 'A',
+            linkedin_url:  ci.linkedin || null,
+        })
+    })
+    .then(function(response) {
+        var reader  = response.body.getReader();
+        var decoder = new TextDecoder();
+        var buffer  = '';
+
+        function read() {
+            return reader.read().then(function(result) {
+                if (result.done) return;
+                buffer += decoder.decode(result.value, {stream: true});
+                var lines = buffer.split('\n');
+                buffer = lines.pop();
+
+                lines.forEach(function(line) {
+                    if (!line.startsWith('data: ')) return;
+                    var dataStr = line.slice(6).trim();
+                    if (!dataStr) return;
+                    try {
+                        var ev = JSON.parse(dataStr);
+                        if (ev.type === 'chunk') {
+                            if (streamTextEl) {
+                                streamTextEl.textContent += ev.text || '';
+                                streamTextEl.scrollTop = streamTextEl.scrollHeight;
+                            }
+                        } else if (ev.type === 'arricchimento_start') {
+                            if (statusEl) statusEl.innerHTML = '&#11088; Arricchimento con dati LinkedIn in corso...';
+                        } else if (ev.type === 'done') {
+                            _mostraReportNelModal(ev.risultato, ci, _reportGlobale.salvaCallback);
+                            if (_reportGlobale && _reportGlobale.salvaCallback) {
+                                _reportGlobale.salvaCallback(ev.risultato);
+                            }
+                        } else if (ev.type === 'errore') {
+                            if (spinnerEl) spinnerEl.style.display = 'none';
+                            if (statusEl)  statusEl.textContent = 'Errore: ' + (ev.messaggio || 'sconosciuto');
+                        }
+                    } catch(e) {
+                        console.error('[SSE approfondita]', e.message, '| line:', line.slice(0, 80));
+                    }
+                });
+                return read();
+            });
+        }
+        return read();
+    })
+    .catch(function(err) {
+        if (spinnerEl) spinnerEl.style.display = 'none';
+        if (statusEl)  statusEl.textContent = 'Errore di connessione: ' + err;
+    });
 }

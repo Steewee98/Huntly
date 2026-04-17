@@ -268,31 +268,35 @@ function vediReport(idx) {
     const nome = ((p.nome || '') + ' ' + (p.cognome || '')).trim();
     document.getElementById('modal-report-titolo').textContent = 'Report — ' + nome;
 
-    // Nascondi streaming, mostra subito il body
     var streamEl = document.getElementById('modal-report-streaming');
     var savedEl  = document.getElementById('modal-report-saved');
     if (streamEl) streamEl.classList.add('hidden');
     if (savedEl)  savedEl.classList.add('hidden');
 
-    // Costruisci oggetto dati compatibile con _mostraReportNelModal
     var datiArricchiti = p.dati_arricchiti || null;
     if (typeof datiArricchiti === 'string') {
         try { datiArricchiti = JSON.parse(datiArricchiti); } catch(e) { datiArricchiti = null; }
     }
 
     var dati = {
-        punteggio:       p.punteggio || 0,
-        analisi_percorso: p.analisi  || '',
-        spunti_contatto:  p.spunti   || [],
+        punteggio:         p.punteggio          || 0,
+        analisi_percorso:  p.analisi             || '',
+        spunti_contatto:   p.spunti              || [],
         messaggio_outreach: p.messaggio_outreach || '',
     };
+    if (datiArricchiti) { Object.assign(dati, datiArricchiti); dati.arricchito = true; }
 
-    if (datiArricchiti) {
-        Object.assign(dati, datiArricchiti);
-        dati.arricchito = true;
-    }
+    var testo = [
+        'Nome: '    + ((p.nome || '') + ' ' + (p.cognome || '')).trim(),
+        'Ruolo: '   + (p.ruolo   || ''),
+        'Azienda: ' + (p.azienda || ''),
+        p.testo_profilo ? 'Profilo:\n' + p.testo_profilo : '',
+    ].filter(Boolean).join('\n');
 
-    _mostraReportNelModal(dati);
+    var candidatoInfo = { testo: testo, linkedin: p.linkedin_url || null, tipo: 'A' };
+    var salvaCallback = function(nuoviDati) { _salvaDettaglio(idx, nuoviDati, null); };
+
+    _mostraReportNelModal(dati, candidatoInfo, salvaCallback);
 }
 
 /* ── Analisi singolo profilo con SSE streaming ─────────────────────── */

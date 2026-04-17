@@ -707,7 +707,9 @@ function avviaAnalisiDiretta(persona) {
                             document.getElementById('modal-report-status').innerHTML =
                                 '&#11088; Arricchimento con dati LinkedIn in corso...';
                         } else if (ev.type === 'done') {
-                            _mostraReportNelModal(ev.risultato);
+                            var candidatoInfo = { testo: testo, linkedin: p.linkedin || null, tipo: tipoAnalisiSelezionato };
+                            var salvaCallback = function(nuoviDati) { _salvaAnalisiRicerca(nuoviDati, p); };
+                            _mostraReportNelModal(ev.risultato, candidatoInfo, salvaCallback);
                             _salvaAnalisiRicerca(ev.risultato, p);
                         } else if (ev.type === 'errore') {
                             document.getElementById('modal-report-spinner').style.display = 'none';
