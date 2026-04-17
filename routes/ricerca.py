@@ -103,6 +103,46 @@ def _leggi_aggiorna_offset(db, tipo_profilo: str, ruoli: list) -> tuple:
     return start_page, ruolo_corrente, citta_corrente
 
 
+# Dizionario di normalizzazione città — Apify riconosce il formato completo "Città, Regione, Paese"
+_CITTA_NORMALIZE = {
+    'roma':     'Rome, Latium, Italy',
+    'rome':     'Rome, Latium, Italy',
+    'milano':   'Milan, Lombardy, Italy',
+    'milan':    'Milan, Lombardy, Italy',
+    'torino':   'Turin, Piedmont, Italy',
+    'turin':    'Turin, Piedmont, Italy',
+    'napoli':   'Naples, Campania, Italy',
+    'naples':   'Naples, Campania, Italy',
+    'firenze':  'Florence, Tuscany, Italy',
+    'florence': 'Florence, Tuscany, Italy',
+    'bologna':  'Bologna, Emilia-Romagna, Italy',
+    'genova':   'Genoa, Liguria, Italy',
+    'genoa':    'Genoa, Liguria, Italy',
+    'palermo':  'Palermo, Sicily, Italy',
+    'venezia':  'Venice, Veneto, Italy',
+    'venice':   'Venice, Veneto, Italy',
+    'verona':   'Verona, Veneto, Italy',
+    'bari':     'Bari, Apulia, Italy',
+}
+
+
+def _normalizza_citta(citta: str) -> str:
+    """
+    Normalizza il nome città per Apify.
+    - Se è nel dizionario → usa il nome completo
+    - Se non contiene già 'italy' → aggiunge ', Italy'
+    - Se vuota → restituisce 'Italy'
+    """
+    if not citta:
+        return "Italy"
+    key = citta.strip().lower()
+    if key in _CITTA_NORMALIZE:
+        return _CITTA_NORMALIZE[key]
+    if "italy" not in key:
+        return citta.strip() + ", Italy"
+    return citta.strip()
+
+
 def cerca_apify(ruolo, citta="", paese="", azienda="", parole_chiave="", num_pagine=1,
                 ruoli_lista=None, forza_italia=True, progress_cb=None, start_page=1):
     """
@@ -138,9 +178,10 @@ def cerca_apify(ruolo, citta="", paese="", azienda="", parole_chiave="", num_pag
     if kw_parts:
         run_input["keywords"] = " ".join(kw_parts)
 
-    # Location: sempre Italia se non specificato (migliora rilevanza risultati)
+    # Location: normalizza città e aggiunge Italy se necessario
     if citta or paese:
-        run_input["locations"] = [", ".join(filter(None, [citta, paese]))]
+        citta_norm = _normalizza_citta(citta) if citta else ""
+        run_input["locations"] = [", ".join(filter(None, [citta_norm, paese]))] if paese else [citta_norm]
     elif forza_italia:
         run_input["locations"] = ["Italy"]
 
