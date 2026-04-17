@@ -232,17 +232,6 @@
     </div>
 </div>
 
-<!-- Modal: report AI -->
-<div id="modal-report" class="modal-overlay hidden"
-     onclick="if(event.target===this)nascondi('modal-report')">
-    <div class="modal" style="max-width:680px;">
-        <div class="modal-header">
-            <h3 id="modal-report-titolo">Report Valutazione AI</h3>
-            <button class="modal-close" onclick="nascondi('modal-report')">&times;</button>
-        </div>
-        <div class="modal-body" id="modal-report-body"></div>
-    </div>
-</div>
 
 <!-- Dati profili per JS -->
 <script id="profili-data" type="application/json">{{ profili | tojson }}</script>
@@ -276,26 +265,37 @@ function vediProfilo(idx) {
 function vediReport(idx) {
     const p = profiliData[idx];
     if (!p) return;
-
-    let spunti = p.spunti || [];
-    if (typeof spunti === 'string') { try { spunti = JSON.parse(spunti); } catch { spunti = []; } }
-
-    const scoreClass = p.punteggio >= 8 ? 'score-alto' : (p.punteggio >= 5 ? 'score-medio' : 'score-basso');
-    const spuntiHtml = spunti.map(function(s) { return '<li class="spunto-item">' + s + '</li>'; }).join('');
     const nome = ((p.nome || '') + ' ' + (p.cognome || '')).trim();
-
     document.getElementById('modal-report-titolo').textContent = 'Report — ' + nome;
-    document.getElementById('modal-report-body').innerHTML =
-        '<div class="report-sezione" style="text-align:center;">' +
-        '<div class="report-score ' + scoreClass + '">' + (p.punteggio || '—') + '/10</div></div>' +
-        '<div class="report-sezione"><h4>Analisi del Percorso</h4><p>' + (p.analisi || '—') + '</p></div>' +
-        (spuntiHtml ? '<div class="report-sezione"><h4>Spunti per il Contatto</h4><ul>' + spuntiHtml + '</ul></div>' : '') +
-        (p.messaggio_outreach ? '<div class="report-sezione"><h4>Messaggio di Outreach</h4>' +
-        '<div class="outreach-box">' + p.messaggio_outreach + '</div></div>' : '');
-    mostra('modal-report');
+
+    // Nascondi streaming, mostra subito il body
+    var streamEl = document.getElementById('modal-report-streaming');
+    var savedEl  = document.getElementById('modal-report-saved');
+    if (streamEl) streamEl.classList.add('hidden');
+    if (savedEl)  savedEl.classList.add('hidden');
+
+    // Costruisci oggetto dati compatibile con _mostraReportNelModal
+    var datiArricchiti = p.dati_arricchiti || null;
+    if (typeof datiArricchiti === 'string') {
+        try { datiArricchiti = JSON.parse(datiArricchiti); } catch(e) { datiArricchiti = null; }
+    }
+
+    var dati = {
+        punteggio:       p.punteggio || 0,
+        analisi_percorso: p.analisi  || '',
+        spunti_contatto:  p.spunti   || [],
+        messaggio_outreach: p.messaggio_outreach || '',
+    };
+
+    if (datiArricchiti) {
+        Object.assign(dati, datiArricchiti);
+        dati.arricchito = true;
+    }
+
+    _mostraReportNelModal(dati);
 }
 
-/* ── Analisi singolo profilo ───────────────────────────────────────── */
+/* ── Analisi singolo profilo con SSE streaming ─────────────────────── */
 function analizzaSingolo(idx, btnEl) {
     const p = profiliData[idx];
     if (!p) return;
@@ -303,45 +303,145 @@ function analizzaSingolo(idx, btnEl) {
     btnEl.disabled = true;
     btnEl.innerHTML = '<span class="spinner"></span>';
 
-    const payload = {};
-    if (p.candidato_id) {
-        payload.candidato_id = p.candidato_id;
-    } else if (p.profilo_id) {
-        payload.profilo_ricerca_id = p.profilo_id;
-    }
-    // fallback con testo se né candidato_id né profilo_id
-    if (!payload.candidato_id && !payload.profilo_ricerca_id) {
-        payload.testo_profilo = p.testo_profilo || '';
-        payload.nome     = p.nome    || '';
-        payload.cognome  = p.cognome || '';
-        payload.ruolo    = p.ruolo   || '';
-        payload.azienda  = p.azienda || '';
-        payload.linkedin = p.linkedin_url || '';
-        payload.ricerca_id = ricercaId;
+    const nome = ((p.nome || '') + ' ' + (p.cognome || '')).trim() || 'candidato';
+
+    // Apri modal con streaming
+    document.getElementById('modal-report-titolo').textContent = '&#9733; Analisi AI: ' + nome;
+    var streamEl = document.getElementById('modal-report-streaming');
+    var bodyEl   = document.getElementById('modal-report-body');
+    var savedEl  = document.getElementById('modal-report-saved');
+    streamEl.classList.remove('hidden');
+    bodyEl.classList.add('hidden');
+    bodyEl.innerHTML = '';
+    savedEl.classList.add('hidden');
+    document.getElementById('modal-report-status').textContent = 'Analisi in corso...';
+    document.getElementById('modal-report-stream-text').textContent = '';
+    document.getElementById('modal-report-spinner').style.display = '';
+    mostra('modal-report');
+
+    const testo = [
+        'Nome: '    + ((p.nome || '') + ' ' + (p.cognome || '')).trim(),
+        'Ruolo: '   + (p.ruolo   || ''),
+        'Azienda: ' + (p.azienda || ''),
+        p.testo_profilo ? 'Profilo:\n' + p.testo_profilo : '',
+    ].filter(Boolean).join('\n');
+
+    fetch('/valutazione/analizza_stream', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            testo_profilo: testo,
+            tipo_profilo:  'A',
+            linkedin_url:  p.linkedin_url || null,
+        })
+    })
+    .then(function(response) {
+        var reader  = response.body.getReader();
+        var decoder = new TextDecoder();
+        var buffer  = '';
+
+        function read() {
+            return reader.read().then(function(result) {
+                if (result.done) return;
+                buffer += decoder.decode(result.value, {stream: true});
+                var lines = buffer.split('\n');
+                buffer = lines.pop();
+
+                lines.forEach(function(line) {
+                    if (!line.startsWith('data: ')) return;
+                    var dataStr = line.slice(6).trim();
+                    if (!dataStr) return;
+                    try {
+                        var ev = JSON.parse(dataStr);
+                        if (ev.type === 'chunk') {
+                            document.getElementById('modal-report-stream-text').textContent += ev.text || '';
+                            var st = document.getElementById('modal-report-stream-text');
+                            st.scrollTop = st.scrollHeight;
+                        } else if (ev.type === 'arricchimento_start') {
+                            document.getElementById('modal-report-status').innerHTML =
+                                '&#11088; Arricchimento con dati LinkedIn in corso...';
+                        } else if (ev.type === 'done') {
+                            _mostraReportNelModal(ev.risultato);
+                            _salvaDettaglio(idx, ev.risultato, btnEl);
+                        } else if (ev.type === 'errore') {
+                            document.getElementById('modal-report-spinner').style.display = 'none';
+                            document.getElementById('modal-report-status').textContent =
+                                'Errore: ' + (ev.messaggio || 'sconosciuto');
+                            btnEl.disabled = false;
+                            btnEl.innerHTML = '&#9733; Analizza';
+                        }
+                    } catch(e) {
+                        console.error('[SSE parse error]', e.message, '| line:', line.slice(0, 80));
+                    }
+                });
+                return read();
+            });
+        }
+        return read();
+    })
+    .catch(function(err) {
+        document.getElementById('modal-report-spinner').style.display = 'none';
+        document.getElementById('modal-report-status').textContent = 'Errore di connessione: ' + err;
+        btnEl.disabled = false;
+        btnEl.innerHTML = '&#9733; Analizza';
+    });
+}
+
+/* Salva analisi nel DB dopo SSE e aggiorna riga tabella             */
+function _salvaDettaglio(idx, dati, btnEl) {
+    const p = profiliData[idx];
+    const testo = [
+        'Nome: '    + ((p.nome || '') + ' ' + (p.cognome || '')).trim(),
+        'Ruolo: '   + (p.ruolo   || ''),
+        'Azienda: ' + (p.azienda || ''),
+        p.testo_profilo ? 'Profilo:\n' + p.testo_profilo : '',
+    ].filter(Boolean).join('\n');
+
+    var datiArricchiti = null;
+    if (dati.arricchito) {
+        datiArricchiti = JSON.stringify({
+            punteggio_compatibilita:   dati.punteggio_compatibilita,
+            indice_mobilita:           dati.indice_mobilita,
+            punteggio_qualita_profilo: dati.punteggio_qualita_profilo,
+            pattern_carriera:          dati.pattern_carriera,
+            momento_contatto:          dati.momento_contatto,
+            motivazione_probabile:     dati.motivazione_probabile,
+            segnali_positivi:          dati.segnali_positivi,
+            segnali_negativi:          dati.segnali_negativi,
+            rischi:                    dati.rischi,
+            analisi_attivita:          dati.analisi_attivita,
+            messaggio_personalizzato:  dati.messaggio_personalizzato,
+            sintesi:                   dati.sintesi,
+        });
     }
 
     fetch('/ricerca/analizza_candidato', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            profilo_ricerca_id:    p.profilo_id   || null,
+            candidato_id:          p.candidato_id || null,
+            testo_profilo:         testo,
+            nome:                  p.nome    || '',
+            cognome:               p.cognome || '',
+            ruolo:                 p.ruolo   || '',
+            azienda:               p.azienda || '',
+            linkedin:              p.linkedin_url || '',
+            tipo_profilo:          'A',
+            ricerca_id:            ricercaId,
+            risultato_precomputed: dati,
+            dati_arricchiti:       datiArricchiti,
+        })
     })
-    .then(function(r) {
-        if (!r.ok) return r.text().then(function(t) { throw new Error('Errore server ' + r.status + ': ' + t.substring(0, 200)); });
-        return r.json();
-    })
+    .then(function(r) { return r.json(); })
     .then(function(data) {
-        if (data.errore) {
-            btnEl.disabled = false;
-            btnEl.innerHTML = '&#9733; Analizza';
-            alert('Errore: ' + data.errore);
-            return;
-        }
-        aggiornaRiga(idx, data);
+        aggiornaRiga(idx, Object.assign({}, dati, data));
+        var savedEl = document.getElementById('modal-report-saved');
+        if (savedEl) savedEl.classList.remove('hidden');
     })
-    .catch(function(err) {
-        btnEl.disabled = false;
-        btnEl.innerHTML = '&#9733; Analizza';
-        alert('Errore di connessione: ' + err);
+    .catch(function(err) { console.error('[salva dettaglio]', err); })
+    .finally(function() {
+        if (btnEl) { btnEl.disabled = false; btnEl.innerHTML = '&#9733; Analizza'; }
     });
 }
 
@@ -431,12 +531,28 @@ function aggiornaRiga(idx, data) {
     const scoreClass = punteggio >= 8 ? 'alto' : (punteggio >= 5 ? 'medio' : 'basso');
 
     // Aggiorna dati locali
-    profiliData[idx].punteggio         = punteggio;
-    profiliData[idx].analisi           = data.analisi_percorso || '';
-    profiliData[idx].spunti            = data.spunti_contatto || [];
+    profiliData[idx].punteggio          = punteggio;
+    profiliData[idx].analisi            = data.analisi_percorso || '';
+    profiliData[idx].spunti             = data.spunti_contatto || [];
     profiliData[idx].messaggio_outreach = data.messaggio_outreach || '';
-    profiliData[idx].candidato_id      = data.candidato_id || profiliData[idx].candidato_id;
-    profiliData[idx].stato             = 'Da contattare';
+    profiliData[idx].candidato_id       = data.candidato_id || profiliData[idx].candidato_id;
+    profiliData[idx].stato              = 'Da contattare';
+    if (data.arricchito) {
+        profiliData[idx].dati_arricchiti = {
+            punteggio_compatibilita:   data.punteggio_compatibilita,
+            indice_mobilita:           data.indice_mobilita,
+            punteggio_qualita_profilo: data.punteggio_qualita_profilo,
+            pattern_carriera:          data.pattern_carriera,
+            momento_contatto:          data.momento_contatto,
+            motivazione_probabile:     data.motivazione_probabile,
+            segnali_positivi:          data.segnali_positivi,
+            segnali_negativi:          data.segnali_negativi,
+            rischi:                    data.rischi,
+            analisi_attivita:          data.analisi_attivita,
+            messaggio_personalizzato:  data.messaggio_personalizzato,
+            sintesi:                   data.sintesi,
+        };
+    }
 
     // Punteggio
     riga.querySelector('.cella-punteggio').innerHTML =

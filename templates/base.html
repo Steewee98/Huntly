@@ -104,6 +104,34 @@
     {% block content %}{% endblock %}
 </main>
 
+<!-- Modal Report AI — disponibile in tutte le pagine -->
+<div id="modal-report" class="modal-overlay hidden" onclick="if(event.target===this)chiudiModalReport()">
+    <div class="modal">
+        <div class="modal-header">
+            <h3 id="modal-report-titolo">Report AI</h3>
+            <button class="modal-close" onclick="chiudiModalReport()">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div id="modal-report-streaming" class="hidden">
+                <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.75rem;">
+                    <span class="spinner" id="modal-report-spinner"></span>
+                    <span id="modal-report-status" style="font-size:0.9rem;color:var(--grigio-testo);">Analisi in corso...</span>
+                </div>
+                <div id="modal-report-stream-text"
+                     style="background:#f8fafc;border-radius:var(--radius);padding:0.75rem;
+                            font-size:0.82rem;color:#374151;min-height:60px;white-space:pre-wrap;
+                            max-height:160px;overflow:auto;"></div>
+            </div>
+            <div id="modal-report-body"></div>
+            <div id="modal-report-saved" class="hidden"
+                 style="background:#f0fdf4;border:1px solid #86efac;border-radius:var(--radius);
+                        padding:0.75rem 1rem;margin-top:1rem;font-size:0.88rem;color:#16a34a;">
+                &#10003; Candidato salvato automaticamente in Pipeline
+            </div>
+        </div>
+    </div>
+</div>
+
 <script src="{{ url_for('static', filename='js/main.js') }}?v={{ static_version }}"></script>
 <script>
 (function () {
