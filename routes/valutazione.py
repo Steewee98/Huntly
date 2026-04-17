@@ -121,12 +121,13 @@ def analizza_stream():
     Endpoint SSE: streama l'analisi profilo LinkedIn chunk per chunk.
     Se punteggio >= 6 e c'è un URL LinkedIn, arricchisce con Proxycurl.
     """
-    print(f"=== ROUTE HIT: {request.path} ===")
+    import sys
+    print(f"=== ROUTE HIT: {request.path} ===", flush=True)
     dati          = request.get_json()
     testo_profilo = dati.get("testo_profilo", "").strip()
     tipo_profilo  = dati.get("tipo_profilo", "A")
     candidato_id  = dati.get("candidato_id")
-    print(f"=== STREAM PARAMS: tipo={tipo_profilo} candidato_id={candidato_id} linkedin_url={dati.get('linkedin_url')} testo_len={len(testo_profilo)} ===")
+    print(f"=== STREAM PARAMS: tipo={tipo_profilo} candidato_id={candidato_id} linkedin_url={dati.get('linkedin_url')} testo_len={len(testo_profilo)} ===", flush=True)
 
     if not testo_profilo:
         def _err():

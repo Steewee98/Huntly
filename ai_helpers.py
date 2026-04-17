@@ -286,7 +286,7 @@ def analizza_profilo_linkedin_stream(
       - Chiama Proxycurl (o usa cache se < 30 giorni)
       - Esegue seconda analisi Claude con dati arricchiti
     """
-    print(f"=== ANALISI START: linkedin_url={linkedin_url} ===")
+    print(f"=== ANALISI START: linkedin_url={linkedin_url} ===", flush=True)
     testo_profilo = clean_text(testo_profilo)
 
     # Stessa logica di costruzione prompt di analizza_profilo_linkedin
@@ -379,7 +379,7 @@ def analizza_profilo_linkedin_stream(
         # ── Arricchimento Proxycurl (solo se punteggio >= 6 e URL disponibile) ──
         risultato["arricchito"] = False
         punteggio_base = risultato.get("punteggio", 0) or 0
-        print(f"=== PUNTEGGIO BASE: {punteggio_base} ===")
+        print(f"=== PUNTEGGIO BASE: {punteggio_base} ===", flush=True)
         if punteggio_base >= 5 and (linkedin_url or dati_proxycurl_cached):
             yield f"data: {json.dumps({'type': 'arricchimento_start'}, ensure_ascii=False)}\n\n"
             try:
@@ -390,11 +390,11 @@ def analizza_profilo_linkedin_stream(
                     dati_prx = dati_proxycurl_cached
                     logger.info("[AI] Proxycurl: uso cache per %s", linkedin_url)
                 elif linkedin_url:
-                    print(f"=== ENRICHLAYER START: url={linkedin_url} ===")
+                    print(f"=== ENRICHLAYER START: url={linkedin_url} ===", flush=True)
                     dati_prx = arricchisci_profilo(linkedin_url)
-                    print(f"=== ENRICHLAYER DONE: campi={len(dati_prx) if dati_prx else 0} ===")
+                    print(f"=== ENRICHLAYER DONE: campi={len(dati_prx) if dati_prx else 0} ===", flush=True)
                 else:
-                    print(f"=== ENRICHLAYER SKIP: nessun linkedin_url disponibile ===")
+                    print(f"=== ENRICHLAYER SKIP: nessun linkedin_url disponibile ===", flush=True)
 
                 if dati_prx:
                     enriched = analizza_profilo_arricchito(testo_profilo, tipo_profilo, dati_prx, risultato)
@@ -406,14 +406,14 @@ def analizza_profilo_linkedin_stream(
                         yield f"data: {json.dumps({'type': '_proxycurl_data', 'dati': dati_prx}, ensure_ascii=False)}\n\n"
             except Exception as e_prx:
                 logger.error("[AI] Errore arricchimento Proxycurl: %s", e_prx)
-                print(f"=== ENRICHLAYER ERROR: {e_prx} ===")
+                print(f"=== ENRICHLAYER ERROR: {e_prx} ===", flush=True)
         else:
-            print(f"=== ENRICHLAYER SKIP: punteggio={punteggio_base} linkedin_url={linkedin_url} ===")
+            print(f"=== ENRICHLAYER SKIP: punteggio={punteggio_base} linkedin_url={linkedin_url} ===", flush=True)
 
         # done event senza dati_proxycurl (evita payload > 20 KB che rompe JSON.parse nel browser)
         risultato.pop("dati_proxycurl", None)
         arricchito = risultato.get("arricchito", False)
-        print(f"=== SSE DONE: arricchito={arricchito} campi={list(risultato.keys())} ===")
+        print(f"=== SSE DONE: arricchito={arricchito} campi={list(risultato.keys())} ===", flush=True)
         yield f"data: {json.dumps({'type': 'done', 'risultato': risultato}, ensure_ascii=False)}\n\n"
 
     except json.JSONDecodeError as e:
