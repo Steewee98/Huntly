@@ -4,6 +4,7 @@ Entry point dell'app, registra tutti i blueprint e inizializza il database.
 """
 
 import os
+import time
 from flask import Flask, redirect, url_for, request, jsonify
 from ai_helpers import test_connessione_api, CLAUDE_MODEL
 from dotenv import load_dotenv
@@ -41,6 +42,14 @@ for bp in [valutazione_bp, candidati_bp, pipeline_bp, contenuti_bp, ricerca_bp, 
     for endpoint, view_func in app.view_functions.items():
         if endpoint.startswith(bp.name + "."):
             app.view_functions[endpoint] = login_required(view_func)
+
+
+_STATIC_VERSION = str(int(time.time()))
+
+@app.context_processor
+def inject_static_version():
+    """Inietta static_version in tutti i template per evitare cache browser sui file statici."""
+    return {"static_version": _STATIC_VERSION}
 
 
 @app.after_request
