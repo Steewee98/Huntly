@@ -131,8 +131,11 @@ def analizza_stream():
             yield f"data: {json.dumps({'type': 'errore', 'messaggio': 'Inserire il testo del profilo LinkedIn'})}\n\n"
         return Response(_err(), mimetype="text/event-stream")
 
+    # URL LinkedIn passato esplicitamente dal frontend (priorità massima)
+    linkedin_url_esplicito = (dati.get("linkedin_url") or "").strip() or None
+
     # Recupera linkedin_url e dati_proxycurl cached dal DB (se candidato noto)
-    linkedin_url           = None
+    linkedin_url           = linkedin_url_esplicito
     dati_proxycurl_cached  = None
 
     _url_re = re.compile(r"https?://(?:www\.)?linkedin\.com/in/[\w\-]+/?")
@@ -146,11 +149,12 @@ def analizza_stream():
             ).fetchone()
             db.close()
             if row:
-                # profilo_linkedin può contenere il testo completo: estrai solo l'URL
-                lurl = row.get("profilo_linkedin") or ""
-                m = _url_re.search(lurl)
-                if m:
-                    linkedin_url = m.group(0)
+                # Usa URL dal DB solo se non già fornito esplicitamente dal frontend
+                if not linkedin_url:
+                    lurl = row.get("profilo_linkedin") or ""
+                    m = _url_re.search(lurl)
+                    if m:
+                        linkedin_url = m.group(0)
                 raw_prx = row.get("dati_proxycurl")
                 if raw_prx:
                     try:

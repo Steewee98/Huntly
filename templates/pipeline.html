@@ -228,6 +228,16 @@
         <!-- Testo profilo nascosto -->
         <textarea id="testo-profilo" class="hidden"></textarea>
 
+        <!-- URL LinkedIn opzionale per arricchimento -->
+        <div class="form-group" style="margin-bottom:0.75rem;">
+            <label class="form-label" style="display:flex;align-items:center;gap:0.4rem;">
+                URL LinkedIn
+                <span style="font-size:0.72rem;font-weight:400;color:var(--grigio-testo);">(opzionale — migliora l'analisi)</span>
+            </label>
+            <input type="text" id="linkedin-url-input" class="form-input"
+                   placeholder="https://www.linkedin.com/in/nome-cognome">
+        </div>
+
         <!-- Ricerca per nome -->
         <div class="form-group">
             <div class="form-row" style="margin-bottom:0.75rem;">
@@ -1251,13 +1261,18 @@ function renderProfiliNome(profili) {
 
 function selezionaProfilo(p) {
     document.getElementById('testo-profilo').value = p.testo_profilo || '';
+    // Auto-popola URL LinkedIn se disponibile dal risultato Apify
+    if (p.linkedin) {
+        document.getElementById('linkedin-url-input').value = p.linkedin;
+    }
     avviaAnalisi();
 }
 
 async function avviaAnalisi() {
-    var testo       = document.getElementById('testo-profilo').value.trim();
-    var tipoProfilo = document.querySelector('input[name="tipo_profilo"]:checked').value;
-    var candidatoId = document.getElementById('candidato-id').value || null;
+    var testo        = document.getElementById('testo-profilo').value.trim();
+    var tipoProfilo  = document.querySelector('input[name="tipo_profilo"]:checked').value;
+    var candidatoId  = document.getElementById('candidato-id').value || null;
+    var linkedinUrl  = (document.getElementById('linkedin-url-input').value || '').trim() || null;
 
     if (!testo) {
         mostraErroreVal('Inserire il testo del profilo LinkedIn prima di procedere.');
@@ -1271,6 +1286,7 @@ async function avviaAnalisi() {
     nascondi('errore-box');
     nascondi('skeleton-results');
     nascondi('arricchimento-badge');
+    // Non resettare linkedin-url-input: l'utente potrebbe averlo inserito manualmente
 
     var previewEl = document.getElementById('stream-preview');
     var streamTxt = document.getElementById('stream-testo');
@@ -1281,7 +1297,7 @@ async function avviaAnalisi() {
         var risposta = await fetch('/valutazione/analizza_stream', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ testo_profilo: testo, tipo_profilo: tipoProfilo, candidato_id: candidatoId })
+            body: JSON.stringify({ testo_profilo: testo, tipo_profilo: tipoProfilo, candidato_id: candidatoId, linkedin_url: linkedinUrl })
         });
         if (!risposta.ok) throw new Error('Errore HTTP ' + risposta.status);
 
@@ -1338,22 +1354,25 @@ async function avviaAnalisi() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ testo_profilo: testo, tipo_profilo: tipoProfilo, candidato_id: candidatoId, risultato: risultatoFinale })
-        }).then(function() {
-            // Aggiorna candidatiData in-memory così mostraReport mostra subito i dati arricchiti
-            if (candidatoId && risultatoFinale.arricchito) {
-                var cIdx = candidatiData.findIndex(function(x) { return String(x.id) === String(candidatoId); });
+        }).then(function(r) { return r.json(); }).then(function(resp) {
+            // Usa candidato_id_usato dal backend (include il fallback via LinkedIn URL)
+            var idUsato = (resp && resp.candidato_id_usato) ? resp.candidato_id_usato : candidatoId;
+            if (idUsato && risultatoFinale.arricchito) {
+                var datiArricchiti = {
+                    punteggio_compatibilita: risultatoFinale.punteggio_compatibilita,
+                    indice_mobilita: risultatoFinale.indice_mobilita,
+                    punteggio_qualita_profilo: risultatoFinale.punteggio_qualita_profilo,
+                    pattern_carriera: risultatoFinale.pattern_carriera,
+                    momento_contatto: risultatoFinale.momento_contatto,
+                    segnali_positivi: risultatoFinale.segnali_positivi,
+                    segnali_negativi: risultatoFinale.segnali_negativi,
+                    sintesi: risultatoFinale.sintesi,
+                    messaggio_personalizzato: risultatoFinale.messaggio_personalizzato,
+                };
+                // Aggiorna candidatiData in-memory: il Report in Pipeline mostra subito i dati
+                var cIdx = candidatiData.findIndex(function(x) { return String(x.id) === String(idUsato); });
                 if (cIdx >= 0) {
-                    candidatiData[cIdx].dati_arricchiti = JSON.stringify({
-                        punteggio_compatibilita: risultatoFinale.punteggio_compatibilita,
-                        indice_mobilita: risultatoFinale.indice_mobilita,
-                        punteggio_qualita_profilo: risultatoFinale.punteggio_qualita_profilo,
-                        pattern_carriera: risultatoFinale.pattern_carriera,
-                        momento_contatto: risultatoFinale.momento_contatto,
-                        segnali_positivi: risultatoFinale.segnali_positivi,
-                        segnali_negativi: risultatoFinale.segnali_negativi,
-                        sintesi: risultatoFinale.sintesi,
-                        messaggio_personalizzato: risultatoFinale.messaggio_personalizzato,
-                    });
+                    candidatiData[cIdx].dati_arricchiti = JSON.stringify(datiArricchiti);
                 }
             }
         }).catch(function(e) { console.warn('[valutazione] salvataggio fallito:', e); });
