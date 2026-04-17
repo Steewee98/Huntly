@@ -1338,6 +1338,24 @@ async function avviaAnalisi() {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ testo_profilo: testo, tipo_profilo: tipoProfilo, candidato_id: candidatoId, risultato: risultatoFinale })
+        }).then(function() {
+            // Aggiorna candidatiData in-memory così mostraReport mostra subito i dati arricchiti
+            if (candidatoId && risultatoFinale.arricchito) {
+                var cIdx = candidatiData.findIndex(function(x) { return String(x.id) === String(candidatoId); });
+                if (cIdx >= 0) {
+                    candidatiData[cIdx].dati_arricchiti = JSON.stringify({
+                        punteggio_compatibilita: risultatoFinale.punteggio_compatibilita,
+                        indice_mobilita: risultatoFinale.indice_mobilita,
+                        punteggio_qualita_profilo: risultatoFinale.punteggio_qualita_profilo,
+                        pattern_carriera: risultatoFinale.pattern_carriera,
+                        momento_contatto: risultatoFinale.momento_contatto,
+                        segnali_positivi: risultatoFinale.segnali_positivi,
+                        segnali_negativi: risultatoFinale.segnali_negativi,
+                        sintesi: risultatoFinale.sintesi,
+                        messaggio_personalizzato: risultatoFinale.messaggio_personalizzato,
+                    });
+                }
+            }
         }).catch(function(e) { console.warn('[valutazione] salvataggio fallito:', e); });
 
     } catch(err) {
@@ -1630,6 +1648,27 @@ function aggiornaCronologiaUI(dati, tipoProfilo, testoOriginale, nomeContatto) {
     var score = dati.punteggio;
     var scoreClass = score >= 8 ? 'alto' : (score >= 5 ? 'medio' : 'basso');
     var badgeClass = tipoProfilo === 'A' ? 'badge-profilo-a' : 'badge-profilo-b';
+
+    // Struttura corretta per mostraReportNelModal: i campi arricchiti
+    // nel risultato SSE sono diretti su dati, non sotto dati_arricchiti
+    var reportDati = {
+        punteggio: dati.punteggio,
+        analisi_percorso: dati.analisi_percorso,
+        spunti_contatto: dati.spunti_contatto,
+        messaggio_outreach: dati.messaggio_outreach,
+        dati_arricchiti: dati.arricchito ? {
+            punteggio_compatibilita: dati.punteggio_compatibilita,
+            indice_mobilita: dati.indice_mobilita,
+            punteggio_qualita_profilo: dati.punteggio_qualita_profilo,
+            pattern_carriera: dati.pattern_carriera,
+            momento_contatto: dati.momento_contatto,
+            segnali_positivi: dati.segnali_positivi,
+            segnali_negativi: dati.segnali_negativi,
+            sintesi: dati.sintesi,
+            messaggio_personalizzato: dati.messaggio_personalizzato,
+        } : null
+    };
+
     var tr = document.createElement('tr');
     tr.dataset.tipo = tipoProfilo;
     tr.dataset.punteggio = score;
@@ -1640,7 +1679,7 @@ function aggiornaCronologiaUI(dati, tipoProfilo, testoOriginale, nomeContatto) {
         '<td><span class="badge ' + badgeClass + '">Profilo ' + tipoProfilo + '</span></td>' +
         '<td><span class="score-badge score-badge-' + scoreClass + '">' + score + '/10</span></td>' +
         '<td><span style="font-size:0.82rem;color:var(--grigio-testo);">Manuale</span></td>' +
-        '<td><button class="btn btn-outline btn-xs" onclick=\'mostraReportNelModal(' + JSON.stringify(dati).replace(/"/g, '&quot;') + ')\'>Vedi Report</button></td>';
+        '<td><button class="btn btn-outline btn-xs" onclick=\'mostraReportNelModal(' + JSON.stringify(reportDati).replace(/"/g, '&quot;') + ')\'>Vedi Report</button></td>';
     tbody.insertBefore(tr, tbody.firstChild);
     var counter = document.getElementById('cronologia-count');
     if (counter) { counter.textContent = tbody.querySelectorAll('tr').length + ' valutazioni totali'; }
