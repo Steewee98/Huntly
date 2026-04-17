@@ -270,6 +270,18 @@ def salva_analisi():
          dati_arricchiti_json),
     )
 
+    # Fallback: se candidato_id è null, prova a trovare il candidato tramite URL LinkedIn
+    if not candidato_id and arricchito and testo_profilo:
+        m_url = re.search(r"https?://(?:www\.)?linkedin\.com/in/[\w\-]+/?", testo_profilo)
+        if m_url:
+            linkedin_url = m_url.group(0)
+            row_cand = db.execute(
+                "SELECT id FROM candidati WHERE profilo_linkedin LIKE ?",
+                (f"%{linkedin_url}%",),
+            ).fetchone()
+            if row_cand:
+                candidato_id = row_cand["id"]
+
     if candidato_id:
         db.execute(
             """UPDATE candidati SET
@@ -286,7 +298,7 @@ def salva_analisi():
 
     db.commit()
     db.close()
-    return jsonify({"successo": True})
+    return jsonify({"successo": True, "candidato_id_usato": candidato_id})
 
 
 @valutazione_bp.route("/valutazione/cerca_per_nome", methods=["POST"])
