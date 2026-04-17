@@ -458,9 +458,13 @@ def index():
 @ricerca_bp.route("/ricerca/cerca", methods=["POST"])
 def cerca():
     """
-    Esegue la ricerca su Apify, salva nella cronologia e persistela in profili_ricerca.
-    Ogni profilo trovato viene salvato permanentemente con il testo completo.
+    Esegue la ricerca su Apify con retry automatico se i nuovi profili sono < 3.
+    Fa fino a MAX_TENTATIVI chiamate ad Apify incrementando startPage ad ogni retry.
+    Salva UNA sola ricerca nella cronologia con i profili aggregati di tutti i tentativi.
     """
+    _MIN_NUOVI      = 3   # soglia minima: sotto questo valore si riprova
+    _MAX_TENTATIVI  = 5   # massimo tentativi prima di restituire quello che si ha
+
     dati = request.get_json()
     ruolo         = dati.get("ruolo", "").strip()
     citta         = dati.get("citta", "").strip()
@@ -473,61 +477,119 @@ def cerca():
     if not ruolo and not parole_chiave:
         return jsonify({"errore": "Inserisci almeno il ruolo o delle parole chiave"}), 400
 
-    # Varia startPage ad ogni ricerca manuale: conta quante ricerche manuali
-    # precedenti hanno usato lo stesso ruolo e scala di pagina ad ogni run.
+    # Calcola startPage iniziale: ruota tra ricerche diverse per variare i risultati
     db_cnt = get_db()
-    n_precedenti_stessa_query = db_cnt.execute(
+    n_precedenti = db_cnt.execute(
         "SELECT COUNT(*) AS n FROM ricerche_automatiche WHERE fonte='manuale'",
     ).fetchone()["n"] or 0
     db_cnt.close()
-    start_page_manuale = (n_precedenti_stessa_query % 10) + 1
+    start_page_iniziale = (n_precedenti % 10) + 1
 
-    log.info("Ricerca manuale: ruolo=%r citta=%r start_page=%d", ruolo, citta, start_page_manuale)
+    log.info("Ricerca manuale: ruolo=%r citta=%r start_page_iniziale=%d",
+             ruolo, citta, start_page_iniziale)
 
-    items, errore = cerca_apify(ruolo, citta, paese, azienda, parole_chiave, num_pagine,
-                                start_page=start_page_manuale)
-    if errore:
-        return jsonify({"errore": errore}), 500
-
+    # ── Retry loop ─────────────────────────────────────────────────────────────
     db_check = get_db()
-    persone = []
-    for item in items:
-        if not isinstance(item, dict):
+    tutti_profili   = []   # tutti i profili unici trovati in tutti i tentativi
+    tutti_linkedin  = set()  # linkedin_url già visti in questo run (dedup cross-attempt)
+    tutti_nomi      = set()  # "nome cognome" già visti in questo run
+    tentativi_fatti = 0
+    primo_errore    = None
+
+    for tentativo in range(1, _MAX_TENTATIVI + 1):
+        start_page = start_page_iniziale + (tentativo - 1)
+        tentativi_fatti = tentativo
+
+        print(f"=== TENTATIVO {tentativo}/{_MAX_TENTATIVI}: ruolo={ruolo!r} citta={citta!r} start_page={start_page} ===")
+        log.info("Tentativo %d/%d: ruolo=%r citta=%r start_page=%d",
+                 tentativo, _MAX_TENTATIVI, ruolo, citta, start_page)
+
+        items, errore = cerca_apify(ruolo, citta, paese, azienda, parole_chiave, num_pagine,
+                                    start_page=start_page)
+
+        if errore:
+            log.warning("Tentativo %d fallito: %s", tentativo, errore)
+            if tentativo == 1:
+                primo_errore = errore  # salva per ritornarlo se anche gli altri falliscono
             continue
-        p = normalizza_profilo(item)
-        dup, motivo_dup, cand_id = is_duplicate(db_check, p)
-        p["gia_in_pipeline"] = dup
-        p["candidato_id_esistente"] = cand_id
-        nome_log = f"{p.get('nome','')} {p.get('cognome','')}".strip() or "?"
-        log.info("Profilo %s: linkedin_url=%s — già in DB: %s%s",
-                 nome_log, p.get("linkedin", "—"),
-                 "SI" if dup else "NO",
-                 f" ({motivo_dup})" if dup else "")
-        persone.append(p)
+
+        trovati_questo_tentativo = 0
+        nuovi_questo_tentativo   = 0
+
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            p = normalizza_profilo(item)
+
+            # Dedup cross-attempt: salta se già visto in un tentativo precedente
+            li = (p.get("linkedin") or "").strip().lower()
+            nk = f"{p.get('nome','').strip()} {p.get('cognome','').strip()}".strip().lower()
+
+            if li and li in tutti_linkedin:
+                continue
+            if nk and nk in tutti_nomi and not li:
+                continue
+
+            trovati_questo_tentativo += 1
+            if li:
+                tutti_linkedin.add(li)
+            if nk:
+                tutti_nomi.add(nk)
+
+            dup, motivo_dup, cand_id = is_duplicate(db_check, p)
+            p["gia_in_pipeline"] = dup
+            p["candidato_id_esistente"] = cand_id
+
+            nome_log = f"{p.get('nome','')} {p.get('cognome','')}".strip() or "?"
+            log.info("  Profilo %s: linkedin=%s — già in DB: %s%s",
+                     nome_log, p.get("linkedin", "—"),
+                     "SI" if dup else "NO",
+                     f" ({motivo_dup})" if dup else "")
+            tutti_profili.append(p)
+            if not dup:
+                nuovi_questo_tentativo += 1
+
+        nuovi_totale = sum(1 for q in tutti_profili if not q["gia_in_pipeline"])
+        print(f"Tentativo {tentativo}: trovati={trovati_questo_tentativo} nuovi={nuovi_questo_tentativo} "
+              f"(totale nuovi finora: {nuovi_totale})")
+        log.info("Tentativo %d: trovati=%d nuovi=%d totale_nuovi=%d",
+                 tentativo, trovati_questo_tentativo, nuovi_questo_tentativo, nuovi_totale)
+
+        if nuovi_totale >= _MIN_NUOVI:
+            log.info("Raggiunta soglia %d nuovi — stop ai tentativi", _MIN_NUOVI)
+            break
+
     db_check.close()
 
-    # Riepilogo deduplicazione
-    gia_presenti = sum(1 for p in persone if p["gia_in_pipeline"])
-    nuovi        = len(persone) - gia_presenti
-    log.info("Ricerca manuale completata: trovati=%d gia_presenti=%d nuovi=%d start_page=%d",
-             len(persone), gia_presenti, nuovi, start_page_manuale)
+    # Se tutti i tentativi hanno fallito con errore e non abbiamo nulla
+    if not tutti_profili and primo_errore:
+        return jsonify({"errore": primo_errore}), 500
 
-    # Salva la ricerca nella cronologia
+    # ── Calcola statistiche finali ─────────────────────────────────────────────
+    gia_presenti = sum(1 for p in tutti_profili if p["gia_in_pipeline"])
+    nuovi        = len(tutti_profili) - gia_presenti
+
+    log.info("Ricerca manuale completata: tentativi=%d trovati=%d gia_presenti=%d nuovi=%d",
+             tentativi_fatti, len(tutti_profili), gia_presenti, nuovi)
+    print(f"=== RISULTATO FINALE: tentativi={tentativi_fatti} trovati={len(tutti_profili)} "
+          f"nuovi={nuovi} gia_presenti={gia_presenti} ===")
+
+    # ── Salva in DB (una sola ricerca per tutti i tentativi) ───────────────────
     parametri_str = json.dumps({
         'ruolo': ruolo, 'citta': citta, 'azienda': azienda,
-        'parole_chiave': parole_chiave, 'start_page': start_page_manuale,
+        'parole_chiave': parole_chiave, 'start_page': start_page_iniziale,
+        'tentativi': tentativi_fatti,
     }, ensure_ascii=False)
     db = get_db()
     cur = db.execute(
         """INSERT INTO ricerche_automatiche
            (tipo_profilo, parametri, profili_trovati, profili_importati, fonte, stato)
            VALUES (?, ?, ?, 0, 'manuale', 'completata')""",
-        (tipo_profilo, parametri_str, len(persone))
+        (tipo_profilo, parametri_str, len(tutti_profili))
     )
     ricerca_id = cur.lastrowid
 
-    # Salva ogni profilo trovato in profili_ricerca con il testo completo
-    for p in persone:
+    for p in tutti_profili:
         testo = _costruisci_testo_profilo(p)
         cur_p = db.execute(
             """INSERT INTO profili_ricerca
@@ -542,12 +604,13 @@ def cerca():
     db.close()
 
     return jsonify({
-        "persone":      persone,
-        "totale":       len(persone),
-        "gia_presenti": gia_presenti,
-        "nuovi":        nuovi,
-        "start_page":   start_page_manuale,
-        "ricerca_id":   ricerca_id,
+        "persone":          tutti_profili,
+        "totale":           len(tutti_profili),
+        "gia_presenti":     gia_presenti,
+        "nuovi":            nuovi,
+        "start_page":       start_page_iniziale,
+        "ricerca_id":       ricerca_id,
+        "tentativi_fatti":  tentativi_fatti,
     })
 
 

@@ -600,7 +600,7 @@ function cercaFigure() {
             document.getElementById('nessun-risultato').classList.remove('hidden');
             return;
         }
-        renderRisultati(data.persone, data.totale);
+        renderRisultati(data.persone, data.totale, data.tentativi_fatti || 1);
     })
     .catch(function(err) {
         btn.disabled = false;
@@ -609,7 +609,8 @@ function cercaFigure() {
     });
 }
 
-function renderRisultati(persone, totale) {
+function renderRisultati(persone, totale, tentativi) {
+    tentativi = tentativi || 1;
     const tbody = document.getElementById('risultati-tbody');
     tbody.innerHTML = '';
 
@@ -641,9 +642,10 @@ function renderRisultati(persone, totale) {
     });
 
     // Titolo e avviso profili già in pipeline
+    var tentativi_str = tentativi > 1 ? ' dopo ' + tentativi + ' tentativi' : '';
     const titoloEl = document.getElementById('risultati-titolo');
     if (nuovi.length === 0) {
-        titoloEl.textContent = 'Nessun profilo nuovo trovato';
+        titoloEl.textContent = 'Nessun profilo nuovo trovato' + tentativi_str;
         if (giPresenti.length > 0) {
             mostraAvviso(
                 'Tutti già in pipeline',
@@ -652,7 +654,7 @@ function renderRisultati(persone, totale) {
             );
         }
     } else {
-        titoloEl.textContent = nuovi.length + ' nuov' + (nuovi.length === 1 ? 'o profilo' : 'i profili') + ' trovati';
+        titoloEl.textContent = nuovi.length + ' nuov' + (nuovi.length === 1 ? 'o profilo' : 'i profili') + ' trovati' + tentativi_str;
         if (giPresenti.length > 0) {
             titoloEl.textContent += ' (' + giPresenti.length + ' già in pipeline, esclus' + (giPresenti.length === 1 ? 'o' : 'i') + ')';
         }
