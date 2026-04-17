@@ -736,9 +736,8 @@ function apriModalAnalisi(persona) {
     document.getElementById('toggle-analisi-a').classList.toggle('selected', tipoAnalisiSelezionato === 'A');
     document.getElementById('toggle-analisi-b').classList.toggle('selected', tipoAnalisiSelezionato === 'B');
 
-    // Reset allo step 1
+    // Reset step 1
     document.getElementById('analisi-step1').classList.remove('hidden');
-    document.getElementById('analisi-risultato').classList.add('hidden');
     document.getElementById('btn-avvia-analisi').disabled = false;
     document.getElementById('btn-avvia-analisi').innerHTML = '&#9889; Avvia Analisi AI';
 
