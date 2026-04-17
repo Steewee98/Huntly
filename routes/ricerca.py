@@ -878,10 +878,12 @@ def analizza_candidato():
     Salva automaticamente in candidati (pipeline) e valutazioni (cronologia).
     """
     dati = request.get_json()
-    candidato_id       = dati.get("candidato_id")
-    profilo_ricerca_id = dati.get("profilo_ricerca_id")
-    tipo_profilo       = dati.get("tipo_profilo", "A")
-    ricerca_id         = dati.get("ricerca_id")
+    candidato_id          = dati.get("candidato_id")
+    profilo_ricerca_id    = dati.get("profilo_ricerca_id")
+    tipo_profilo          = dati.get("tipo_profilo", "A")
+    ricerca_id            = dati.get("ricerca_id")
+    risultato_precomputed = dati.get("risultato_precomputed")  # se già calcolato dal frontend (SSE)
+    dati_arricchiti_json  = dati.get("dati_arricchiti")        # JSON string con campi arricchiti
 
     db = get_db()
 
@@ -945,17 +947,21 @@ def analizza_candidato():
         db.close()
         return jsonify({"errore": "Testo profilo mancante"}), 400
 
-    # Carica impostazioni per il tipo profilo selezionato
-    imp_row = db.execute(
-        "SELECT * FROM impostazioni_profilo WHERE profilo = ?", (tipo_profilo,)
-    ).fetchone()
-    imp = dict(imp_row) if imp_row else None
+    if risultato_precomputed:
+        # Risultato già calcolato dal frontend tramite SSE streaming — salta la chiamata AI
+        risultato = risultato_precomputed
+    else:
+        # Carica impostazioni per il tipo profilo selezionato
+        imp_row = db.execute(
+            "SELECT * FROM impostazioni_profilo WHERE profilo = ?", (tipo_profilo,)
+        ).fetchone()
+        imp = dict(imp_row) if imp_row else None
 
-    try:
-        risultato = analizza_profilo_linkedin(testo_profilo, tipo_profilo, imp)
-    except Exception as e:
-        db.close()
-        return jsonify({"errore": str(e)}), 500
+        try:
+            risultato = analizza_profilo_linkedin(testo_profilo, tipo_profilo, imp)
+        except Exception as e:
+            db.close()
+            return jsonify({"errore": str(e)}), 500
 
     # Coercion tipi: ogni valore dal risultato AI deve essere del tipo giusto per PostgreSQL
     def _s(v, fallback=None):
@@ -1020,6 +1026,13 @@ def analizza_candidato():
              spunti_json, messaggio_str, ricerca_id, _gestore)
         )
         candidato_id = cur.lastrowid
+
+    # Salva dati arricchiti se presenti (analisi SSE con EnrichLayer)
+    if dati_arricchiti_json and candidato_id:
+        db.execute(
+            "UPDATE candidati SET dati_arricchiti = ? WHERE id = ?",
+            (dati_arricchiti_json, candidato_id)
+        )
 
     # Fonte nella cronologia: "ricerca_[id]" se viene da una ricerca, "ricerca_manuale" altrimenti
     fonte = f"ricerca_{ricerca_id}" if ricerca_id else "ricerca_manuale"

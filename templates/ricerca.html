@@ -205,6 +205,55 @@
     </div>
 </div>
 
+<!-- Panel analisi inline (appare dopo aver cliccato "Analizza") -->
+<div id="analisi-inline-panel" class="hidden" style="margin-top:1.5rem;">
+    <div class="card" style="border-left:4px solid var(--azzurro);">
+        <div class="card-header" style="align-items:flex-start;">
+            <div style="display:flex;align-items:center;gap:0.75rem;flex-wrap:wrap;">
+                <h3>&#9733; Analisi AI: <span id="analisi-inline-nome"></span></h3>
+                <div id="analisi-arricchimento-badge" class="hidden"
+                     style="font-size:0.75rem;padding:3px 10px;border-radius:20px;
+                            background:#dbeafe;color:#1e40af;font-weight:600;">
+                    &#11088; Profilo Arricchito
+                </div>
+            </div>
+            <button onclick="chiudiInlinePanel()"
+                    style="background:none;border:none;font-size:1.5rem;cursor:pointer;
+                           color:var(--grigio-testo);line-height:1;padding:0;">&times;</button>
+        </div>
+        <div class="card-body">
+            <!-- Streaming progress -->
+            <div id="analisi-inline-streaming">
+                <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.75rem;">
+                    <span class="spinner" id="analisi-inline-spinner"></span>
+                    <span id="analisi-inline-status"
+                          style="font-size:0.9rem;color:var(--grigio-testo);">Analisi in corso...</span>
+                </div>
+                <div id="analisi-streaming-text"
+                     style="background:#f8fafc;border-radius:var(--radius);padding:0.75rem;
+                            font-size:0.82rem;color:#374151;min-height:60px;white-space:pre-wrap;
+                            max-height:140px;overflow:auto;"></div>
+            </div>
+            <!-- Full report after done -->
+            <div id="analisi-inline-report" class="hidden">
+                <div id="analisi-inline-score-area" style="text-align:center;margin-bottom:1.25rem;"></div>
+                <div id="analisi-inline-cards"
+                     style="display:none;grid-template-columns:repeat(3,1fr);gap:0.75rem;margin-bottom:1.5rem;"></div>
+                <div id="analisi-inline-body"></div>
+                <div id="analisi-inline-saved" class="hidden"
+                     style="background:#f0fdf4;border:1px solid #86efac;border-radius:var(--radius);
+                            padding:0.75rem 1rem;margin-top:1rem;font-size:0.88rem;color:#16a34a;">
+                    &#10003; Candidato salvato automaticamente in Pipeline
+                </div>
+                <div class="form-actions" style="margin-top:1.25rem;">
+                    <a href="/pipeline" class="btn btn-primary btn-sm">&#9776; Vedi in Pipeline</a>
+                    <button class="btn btn-secondary btn-sm" onclick="chiudiInlinePanel()">Chiudi</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- Cronologia Ricerche -->
 <div class="card" style="margin-top:2rem;">
     <div class="card-header">
@@ -343,19 +392,6 @@
                         &#9889; Avvia Analisi AI
                     </button>
                     <button class="btn btn-secondary" onclick="chiudiModalAnalisi()">Annulla</button>
-                </div>
-            </div>
-            <!-- Step 2: risultato analisi -->
-            <div id="analisi-risultato" class="hidden">
-                <div id="analisi-score-box" style="text-align:center;margin-bottom:1.5rem;"></div>
-                <div id="analisi-body"></div>
-                <div style="background:#f0fdf4;border:1px solid #86efac;border-radius:var(--radius);
-                            padding:0.75rem 1rem;margin-top:1rem;font-size:0.88rem;color:#16a34a;">
-                    &#10003; Candidato salvato automaticamente in Pipeline e Cronologia Valutazioni
-                </div>
-                <div class="form-actions" style="margin-top:1.25rem;">
-                    <a id="link-pipeline" href="/pipeline" class="btn btn-primary btn-sm">&#9776; Vedi in Pipeline</a>
-                    <button class="btn btn-secondary btn-sm" onclick="chiudiModalAnalisi()">Chiudi</button>
                 </div>
             </div>
         </div>
@@ -718,15 +754,32 @@ function selezionaTipoAnalisi(tipo) {
 }
 
 function avviaAnalisi() {
-    const p = personaInAnalisi;
+    var p = personaInAnalisi;
     if (!p) return;
 
-    const btn = document.getElementById('btn-avvia-analisi');
+    var btn = document.getElementById('btn-avvia-analisi');
     btn.disabled = true;
-    btn.innerHTML = '<span class="spinner"></span> Analisi in corso...';
+    btn.innerHTML = '<span class="spinner"></span> Avvio...';
 
-    // Costruisce testo profilo dai dati disponibili
-    const testo = [
+    // Chiudi modal e prepara il panel inline
+    document.getElementById('modal-analisi').classList.add('hidden');
+
+    var nomeCompleto = [p.nome, p.cognome].filter(Boolean).join(' ') || 'candidato';
+    document.getElementById('analisi-inline-nome').textContent = nomeCompleto;
+    document.getElementById('analisi-arricchimento-badge').classList.add('hidden');
+    document.getElementById('analisi-inline-streaming').classList.remove('hidden');
+    document.getElementById('analisi-inline-report').classList.add('hidden');
+    document.getElementById('analisi-inline-saved').classList.add('hidden');
+    document.getElementById('analisi-inline-status').textContent = 'Analisi in corso...';
+    document.getElementById('analisi-streaming-text').textContent = '';
+    document.getElementById('analisi-inline-spinner').style.display = '';
+    document.getElementById('analisi-inline-panel').classList.remove('hidden');
+
+    setTimeout(function() {
+        document.getElementById('analisi-inline-panel').scrollIntoView({behavior: 'smooth', block: 'start'});
+    }, 100);
+
+    var testo = [
         'Nome: ' + [p.nome, p.cognome].filter(Boolean).join(' '),
         'Ruolo: ' + (p.ruolo || ''),
         'Azienda: ' + (p.azienda || ''),
@@ -734,75 +787,236 @@ function avviaAnalisi() {
         'Sommario: ' + (p.sommario || ''),
     ].join('\n');
 
+    fetch('/valutazione/analizza_stream', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            testo_profilo: testo,
+            tipo_profilo:  tipoAnalisiSelezionato,
+            linkedin_url:  p.linkedin || null,
+        })
+    })
+    .then(function(response) {
+        var reader  = response.body.getReader();
+        var decoder = new TextDecoder();
+        var buffer  = '';
+
+        function read() {
+            return reader.read().then(function(result) {
+                if (result.done) return;
+                buffer += decoder.decode(result.value, {stream: true});
+                var lines = buffer.split('\n');
+                buffer = lines.pop();
+
+                lines.forEach(function(line) {
+                    if (!line.startsWith('data: ')) return;
+                    var dataStr = line.slice(6).trim();
+                    if (!dataStr) return;
+                    try {
+                        var ev = JSON.parse(dataStr);
+                        if (ev.type === 'chunk') {
+                            document.getElementById('analisi-streaming-text').textContent += ev.text || '';
+                            var st = document.getElementById('analisi-streaming-text');
+                            st.scrollTop = st.scrollHeight;
+                        } else if (ev.type === 'arricchimento_start') {
+                            document.getElementById('analisi-inline-status').textContent =
+                                '&#11088; Arricchimento con dati LinkedIn in corso...';
+                        } else if (ev.type === 'done') {
+                            mostraRisultatoArricchitoInline(ev.risultato, p);
+                        } else if (ev.type === 'errore') {
+                            document.getElementById('analisi-inline-spinner').style.display = 'none';
+                            document.getElementById('analisi-inline-status').textContent =
+                                'Errore: ' + (ev.messaggio || 'sconosciuto');
+                        }
+                    } catch(e) {}
+                });
+
+                return read();
+            });
+        }
+        return read();
+    })
+    .catch(function(err) {
+        document.getElementById('analisi-inline-spinner').style.display = 'none';
+        document.getElementById('analisi-inline-status').textContent = 'Errore di connessione: ' + err;
+    });
+}
+
+function _buildScoreCard(label, value) {
+    var v = (value != null) ? value : '—';
+    var color = '#374151';
+    if (typeof v === 'number') {
+        color = v >= 8 ? '#16a34a' : (v >= 5 ? '#d97706' : '#dc2626');
+    }
+    return '<div style="background:#f8fafc;border:1px solid var(--grigio-bordo);' +
+        'border-radius:var(--radius);padding:0.75rem;text-align:center;">' +
+        '<div style="font-size:1.4rem;font-weight:700;color:' + color + ';">' + v + '</div>' +
+        '<div style="font-size:0.78rem;color:var(--grigio-testo);margin-top:0.2rem;">' + label + '</div>' +
+        '</div>';
+}
+
+function mostraRisultatoArricchitoInline(dati, p) {
+    document.getElementById('analisi-inline-spinner').style.display = 'none';
+    document.getElementById('analisi-inline-streaming').classList.add('hidden');
+
+    var arricchito = !!dati.arricchito;
+
+    if (arricchito) {
+        document.getElementById('analisi-arricchimento-badge').classList.remove('hidden');
+    }
+
+    var punteggio  = dati.punteggio || 0;
+    var scoreClass = punteggio >= 8 ? 'score-alto' : (punteggio >= 5 ? 'score-medio' : 'score-basso');
+    document.getElementById('analisi-inline-score-area').innerHTML =
+        '<div class="report-score ' + scoreClass + '">' + punteggio + '/10</div>';
+
+    var cardsEl = document.getElementById('analisi-inline-cards');
+    if (arricchito) {
+        cardsEl.innerHTML =
+            _buildScoreCard('Compatibilit\u00e0', dati.punteggio_compatibilita) +
+            _buildScoreCard('Mobilit\u00e0', dati.indice_mobilita) +
+            _buildScoreCard('Qualit\u00e0 Profilo', dati.punteggio_qualita_profilo);
+        cardsEl.style.display = 'grid';
+    } else {
+        cardsEl.style.display = 'none';
+    }
+
+    var html = '';
+
+    if (arricchito) {
+        if (dati.sintesi) {
+            html += '<div class="report-sezione"><h4>Sintesi</h4>' +
+                    '<p>' + escHtml(dati.sintesi) + '</p></div>';
+        }
+        if (dati.pattern_carriera || dati.momento_contatto) {
+            html += '<div class="report-sezione"><h4>Pattern Carriera &amp; Momento Contatto</h4>';
+            if (dati.pattern_carriera) {
+                html += '<p><strong>Pattern:</strong> ' + escHtml(dati.pattern_carriera) + '</p>';
+            }
+            if (dati.momento_contatto) {
+                html += '<p><strong>Momento contatto:</strong> ' + escHtml(dati.momento_contatto) + '</p>';
+            }
+            html += '</div>';
+        }
+        var spPos = dati.segnali_positivi;
+        if (spPos && spPos.length) {
+            html += '<div class="report-sezione"><h4>&#10003; Segnali Positivi</h4><ul>' +
+                spPos.map(function(s) { return '<li>' + escHtml(s) + '</li>'; }).join('') +
+                '</ul></div>';
+        }
+        var spNeg = dati.segnali_negativi;
+        if (spNeg && spNeg.length) {
+            html += '<div class="report-sezione"><h4>&#9888; Segnali Negativi</h4><ul>' +
+                spNeg.map(function(s) { return '<li>' + escHtml(s) + '</li>'; }).join('') +
+                '</ul></div>';
+        }
+        var rischi = dati.rischi;
+        if (rischi && rischi.length) {
+            html += '<div class="report-sezione"><h4>&#9888; Rischi</h4><ul>' +
+                rischi.map(function(s) { return '<li>' + escHtml(s) + '</li>'; }).join('') +
+                '</ul></div>';
+        }
+        if (dati.analisi_attivita) {
+            html += '<div class="report-sezione"><h4>Attivit\u00e0 LinkedIn</h4>' +
+                    '<p>' + escHtml(dati.analisi_attivita) + '</p></div>';
+        }
+        if (dati.motivazione_probabile) {
+            html += '<div class="report-sezione"><h4>Motivazione Probabile</h4>' +
+                    '<p>' + escHtml(dati.motivazione_probabile) + '</p></div>';
+        }
+        if (dati.messaggio_personalizzato) {
+            html += '<div class="report-sezione"><h4>&#9993; Messaggio Personalizzato</h4>' +
+                    '<div class="outreach-box">' + escHtml(dati.messaggio_personalizzato) + '</div></div>';
+        }
+    }
+
+    html += '<div class="report-sezione"><h4>Analisi del Percorso</h4>' +
+            '<p>' + escHtml(dati.analisi_percorso || '\u2014') + '</p></div>';
+
+    var spunti = dati.spunti_contatto || [];
+    if (typeof spunti === 'string') { try { spunti = JSON.parse(spunti); } catch(e) { spunti = []; } }
+    if (spunti.length) {
+        html += '<div class="report-sezione"><h4>Spunti per il Contatto</h4><ul>' +
+            spunti.map(function(s) { return '<li class="spunto-item">' + escHtml(s) + '</li>'; }).join('') +
+            '</ul></div>';
+    }
+    if (!arricchito && dati.messaggio_outreach) {
+        html += '<div class="report-sezione"><h4>Messaggio di Outreach</h4>' +
+                '<div class="outreach-box">' + escHtml(dati.messaggio_outreach) + '</div></div>';
+    }
+
+    document.getElementById('analisi-inline-body').innerHTML = html;
+    document.getElementById('analisi-inline-report').classList.remove('hidden');
+
+    _salvaAnalisiRicerca(dati, p);
+}
+
+function _salvaAnalisiRicerca(dati, p) {
+    var testo = [
+        'Nome: ' + [p.nome, p.cognome].filter(Boolean).join(' '),
+        'Ruolo: ' + (p.ruolo || ''),
+        'Azienda: ' + (p.azienda || ''),
+        'Location: ' + (p.location || ''),
+        'Sommario: ' + (p.sommario || ''),
+    ].join('\n');
+
+    var datiArricchiti = null;
+    if (dati.arricchito) {
+        datiArricchiti = JSON.stringify({
+            punteggio_compatibilita:   dati.punteggio_compatibilita,
+            indice_mobilita:           dati.indice_mobilita,
+            punteggio_qualita_profilo: dati.punteggio_qualita_profilo,
+            pattern_carriera:          dati.pattern_carriera,
+            momento_contatto:          dati.momento_contatto,
+            motivazione_probabile:     dati.motivazione_probabile,
+            segnali_positivi:          dati.segnali_positivi,
+            segnali_negativi:          dati.segnali_negativi,
+            rischi:                    dati.rischi,
+            analisi_attivita:          dati.analisi_attivita,
+            messaggio_personalizzato:  dati.messaggio_personalizzato,
+            sintesi:                   dati.sintesi,
+        });
+    }
+
     fetch('/ricerca/analizza_candidato', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({
-            profilo_ricerca_id: p.profilo_ricerca_id || null,
-            testo_profilo:      testo,
-            nome:               p.nome || '',
-            cognome:            p.cognome || '',
-            ruolo:              p.ruolo || '',
-            azienda:            p.azienda || '',
-            linkedin:           p.linkedin || '',
-            tipo_profilo:       tipoAnalisiSelezionato,
-            ricerca_id:         ricercaIdCorrente,
+            profilo_ricerca_id:    p.profilo_ricerca_id || null,
+            testo_profilo:         testo,
+            nome:                  p.nome || '',
+            cognome:               p.cognome || '',
+            ruolo:                 p.ruolo || '',
+            azienda:               p.azienda || '',
+            linkedin:              p.linkedin || '',
+            tipo_profilo:          tipoAnalisiSelezionato,
+            ricerca_id:            ricercaIdCorrente,
+            risultato_precomputed: dati,
+            dati_arricchiti:       datiArricchiti,
         })
     })
     .then(function(r) {
         if (r.status === 409) {
-            return r.json().then(function(data) {
-                chiudiModalAnalisi();
-                mostraAvviso(
-                    'Profilo già presente',
-                    'Questo candidato è già in pipeline.',
-                    data.candidato_id ? '/pipeline?candidato_id=' + data.candidato_id : null
-                );
+            return r.json().then(function(resp) {
+                var savedEl = document.getElementById('analisi-inline-saved');
+                savedEl.innerHTML = '&#9888; Candidato gi\u00e0 in Pipeline &mdash; <a href="/pipeline">Vedi Pipeline</a>';
+                savedEl.style.background = '#fef3c7';
+                savedEl.style.borderColor = '#fcd34d';
+                savedEl.style.color = '#92400e';
+                savedEl.classList.remove('hidden');
             });
         }
-        if (!r.ok) return r.text().then(function(t) { throw new Error('Errore server ' + r.status + (t ? ': ' + t.substring(0, 200) : '')); });
-        return r.json();
+        return r.json().then(function(resp) {
+            if (resp && !resp.errore) {
+                document.getElementById('analisi-inline-saved').classList.remove('hidden');
+            }
+        });
     })
-    .then(function(data) {
-        if (!data || data.errore) {
-            btn.disabled = false;
-            btn.innerHTML = '&#9889; Avvia Analisi AI';
-            if (data) alert('Errore analisi: ' + data.errore);
-            return;
-        }
-        mostraRisultatoAnalisi(data);
-    })
-    .catch(function(err) {
-        btn.disabled = false;
-        btn.innerHTML = '&#9889; Avvia Analisi AI';
-        alert('Errore di connessione: ' + err);
-    });
+    .catch(function(err) { console.error('[salva analisi ricerca]', err); });
 }
 
-function mostraRisultatoAnalisi(data) {
-    const punteggio  = data.punteggio || 0;
-    const scoreClass = punteggio >= 8 ? 'score-alto' : (punteggio >= 5 ? 'score-medio' : 'score-basso');
-
-    let spunti = data.spunti_contatto || [];
-    if (typeof spunti === 'string') {
-        try { spunti = JSON.parse(spunti); } catch { spunti = []; }
-    }
-    const spuntiHtml = spunti.map(function(s) {
-        return '<li class="spunto-item">' + escHtml(s) + '</li>';
-    }).join('');
-
-    document.getElementById('analisi-score-box').innerHTML =
-        '<div class="report-score ' + scoreClass + '">' + punteggio + '/10</div>';
-
-    document.getElementById('analisi-body').innerHTML =
-        '<div class="report-sezione"><h4>Analisi del Percorso</h4>' +
-        '<p>' + escHtml(data.analisi_percorso || '—') + '</p></div>' +
-        (spuntiHtml ? '<div class="report-sezione"><h4>Spunti per il Contatto</h4><ul>' + spuntiHtml + '</ul></div>' : '') +
-        (data.messaggio_outreach ? '<div class="report-sezione"><h4>Messaggio di Outreach</h4>' +
-        '<div class="outreach-box">' + escHtml(data.messaggio_outreach) + '</div></div>' : '');
-
-    document.getElementById('analisi-step1').classList.add('hidden');
-    document.getElementById('analisi-risultato').classList.remove('hidden');
+function chiudiInlinePanel() {
+    document.getElementById('analisi-inline-panel').classList.add('hidden');
 }
 
 /* ------------------------------------------------------------------ */
