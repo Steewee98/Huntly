@@ -462,7 +462,7 @@ def cerca():
     Fa fino a MAX_TENTATIVI chiamate ad Apify incrementando startPage ad ogni retry.
     Salva UNA sola ricerca nella cronologia con i profili aggregati di tutti i tentativi.
     """
-    _MIN_NUOVI      = 3   # soglia minima: sotto questo valore si riprova
+    _MIN_NUOVI      = 1   # soglia minima: 1 solo profilo nuovo è sufficiente per fermarsi
     _MAX_TENTATIVI  = 5   # massimo tentativi prima di restituire quello che si ha
 
     dati = request.get_json()
@@ -551,13 +551,19 @@ def cerca():
 
         nuovi_totale = sum(1 for q in tutti_profili if not q["gia_in_pipeline"])
         print(f"Tentativo {tentativo}: trovati={trovati_questo_tentativo} nuovi={nuovi_questo_tentativo} "
-              f"(totale nuovi finora: {nuovi_totale})")
+              f"(totale nuovi finora: {nuovi_totale})", flush=True)
         log.info("Tentativo %d: trovati=%d nuovi=%d totale_nuovi=%d",
                  tentativo, trovati_questo_tentativo, nuovi_questo_tentativo, nuovi_totale)
 
         if nuovi_totale >= _MIN_NUOVI:
             log.info("Raggiunta soglia %d nuovi — stop ai tentativi", _MIN_NUOVI)
             break
+
+        # 0 profili nuovi in questo tentativo: log esplicito e continua
+        if nuovi_questo_tentativo == 0 and tentativo < _MAX_TENTATIVI:
+            next_page = start_page_iniziale + tentativo
+            print(f"Tentativo {tentativo}: 0 nuovi trovati, riprovo con startPage={next_page}", flush=True)
+            log.info("Tentativo %d: 0 nuovi trovati, riprovo con startPage=%d", tentativo, next_page)
 
     db_check.close()
 
@@ -603,6 +609,16 @@ def cerca():
     db.commit()
     db.close()
 
+    # Messaggio finale se dopo tutti i tentativi non ci sono profili nuovi
+    messaggio_zero = ""
+    if nuovi == 0 and tentativi_fatti >= _MAX_TENTATIVI:
+        messaggio_zero = (
+            "Tutti i profili disponibili per questa ricerca sono già in pipeline. "
+            "Prova a cambiare ruolo o città."
+        )
+        print(f"=== ATTENZIONE: {_MAX_TENTATIVI} tentativi completati, 0 nuovi trovati ===", flush=True)
+        log.warning("Tutti i %d tentativi esauriti senza nuovi profili", _MAX_TENTATIVI)
+
     return jsonify({
         "persone":          tutti_profili,
         "totale":           len(tutti_profili),
@@ -611,6 +627,7 @@ def cerca():
         "start_page":       start_page_iniziale,
         "ricerca_id":       ricerca_id,
         "tentativi_fatti":  tentativi_fatti,
+        "messaggio":        messaggio_zero,
     })
 
 
@@ -781,12 +798,27 @@ def _esegui_ricerca_background(job_id, tipo_profilo, max_profili, imp):
 
             log.info("Tentativo %d/%d: trovati=%d importati_nuovi=%d (totale_nuovi=%d)",
                      tentativo, MAX_TENTATIVI, trovati_t, importati_t, len(items_da_importare))
+
+            if importati_t == 0 and tentativo < MAX_TENTATIVI:
+                next_page_t = (start_page_base + tentativo - 1) % 10 + 1
+                print(f"Tentativo {tentativo}: 0 nuovi trovati, riprovo con startPage={next_page_t}", flush=True)
+                log.info("Tentativo %d: 0 nuovi trovati, riprovo con startPage=%d", tentativo, next_page_t)
+
             aggiorna(
                 step=f'Tentativo {tentativo}/{MAX_TENTATIVI}: trovati {trovati_t}, nuovi {importati_t}. Totale: {len(items_da_importare)}',
                 pct=min(85, 10 + tentativo * 15),
             )
 
         trovati_filtrati = len(items_da_importare)
+
+        msg_zero = ""
+        if trovati_filtrati == 0:
+            msg_zero = (
+                "Tutti i profili disponibili per questa ricerca sono già in pipeline. "
+                "Prova a cambiare ruolo o città."
+            )
+            print(f"=== ATTENZIONE: {MAX_TENTATIVI} tentativi completati, 0 nuovi trovati ===", flush=True)
+            log.warning("Tutti i %d tentativi esauriti senza nuovi profili (tipo=%s)", MAX_TENTATIVI, tipo_profilo)
         aggiorna(step=f'Filtraggio completato. Salvataggio {trovati_filtrati} candidati...', pct=90)
 
         cur_r = db.execute(
@@ -861,11 +893,13 @@ def _esegui_ricerca_background(job_id, tipo_profilo, max_profili, imp):
             "scartati_filtro":  scartati_filtro,
             "motivi_qualita":   motivi_qualita,
             "motivi_filtro":    motivi_filtro,
+            "messaggio":        msg_zero,
         }, ensure_ascii=False)
 
+        step_finale = msg_zero if msg_zero else 'Completato'
         db.execute(
-            "UPDATE job_ricerche SET status='completato', step='Completato', risultati=?, percentuale=100, data_fine=CURRENT_TIMESTAMP WHERE job_id=?",
-            (risultati_json, job_id)
+            "UPDATE job_ricerche SET status='completato', step=?, risultati=?, percentuale=100, data_fine=CURRENT_TIMESTAMP WHERE job_id=?",
+            (step_finale, risultati_json, job_id)
         )
         db.commit()
 
