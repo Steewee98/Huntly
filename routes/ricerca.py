@@ -487,6 +487,7 @@ def cerca():
 
     log.info("Ricerca manuale: ruolo=%r citta=%r start_page_iniziale=%d",
              ruolo, citta, start_page_iniziale)
+    print(f"=== CERCA START: ruolo={ruolo} citta={citta} ===", flush=True)
 
     # ── Retry loop ─────────────────────────────────────────────────────────────
     db_check = get_db()
@@ -500,7 +501,7 @@ def cerca():
         start_page = start_page_iniziale + (tentativo - 1)
         tentativi_fatti = tentativo
 
-        print(f"=== TENTATIVO {tentativo}/{_MAX_TENTATIVI}: ruolo={ruolo!r} citta={citta!r} start_page={start_page} ===")
+        print(f"=== TENTATIVO {tentativo}: startPage={start_page} ===", flush=True)
         log.info("Tentativo %d/%d: ruolo=%r citta=%r start_page=%d",
                  tentativo, _MAX_TENTATIVI, ruolo, citta, start_page)
 
@@ -550,8 +551,7 @@ def cerca():
                 nuovi_questo_tentativo += 1
 
         nuovi_totale = sum(1 for q in tutti_profili if not q["gia_in_pipeline"])
-        print(f"Tentativo {tentativo}: trovati={trovati_questo_tentativo} nuovi={nuovi_questo_tentativo} "
-              f"(totale nuovi finora: {nuovi_totale})", flush=True)
+        print(f"=== TENTATIVO {tentativo}: trovati={trovati_questo_tentativo} nuovi={nuovi_questo_tentativo} totale_nuovi={nuovi_totale} ===", flush=True)
         log.info("Tentativo %d: trovati=%d nuovi=%d totale_nuovi=%d",
                  tentativo, trovati_questo_tentativo, nuovi_questo_tentativo, nuovi_totale)
 
