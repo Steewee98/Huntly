@@ -798,63 +798,6 @@ function _salvaAnalisiRicerca(dati, p) {
     .catch(function(err) { console.error('[salva analisi ricerca]', err); });
 }
 
-/* ------------------------------------------------------------------ */
-/* Scarta profilo — blacklist                                          */
-/* ------------------------------------------------------------------ */
-function scartaProfilo(p, btn) {
-    btn.disabled = true;
-    fetch('/ricerca/scarta', {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-            linkedin: p.linkedin || '',
-            nome:     p.nome    || '',
-            cognome:  p.cognome || '',
-            ruolo:    p.ruolo   || '',
-            azienda:  p.azienda || '',
-            motivo:   'non_importato'
-        })
-    })
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-        if (data.successo) {
-            // Rimuovi la riga dalla tabella
-            var riga = btn.closest('tr');
-            if (riga) {
-                riga.style.transition = 'opacity 0.3s';
-                riga.style.opacity = '0';
-                setTimeout(function() { riga.remove(); }, 300);
-            }
-            mostraToast('Profilo scartato — non verrà più proposto');
-        } else {
-            btn.disabled = false;
-            alert('Errore durante lo scarto del profilo.');
-        }
-    })
-    .catch(function(err) {
-        btn.disabled = false;
-        console.error('[scarta]', err);
-    });
-}
-
-function mostraToast(testo) {
-    var toast = document.getElementById('toast-scarta');
-    if (!toast) {
-        toast = document.createElement('div');
-        toast.id = 'toast-scarta';
-        toast.style.cssText = [
-            'position:fixed', 'bottom:1.5rem', 'right:1.5rem',
-            'background:#1A2E4A', 'color:#fff', 'padding:0.75rem 1.25rem',
-            'border-radius:6px', 'font-size:0.875rem', 'z-index:9999',
-            'box-shadow:0 4px 12px rgba(0,0,0,0.25)', 'opacity:0',
-            'transition:opacity 0.3s'
-        ].join(';');
-        document.body.appendChild(toast);
-    }
-    toast.textContent = testo;
-    toast.style.opacity = '1';
-    setTimeout(function() { toast.style.opacity = '0'; }, 3000);
-}
 
 </script>
 {% endblock %}

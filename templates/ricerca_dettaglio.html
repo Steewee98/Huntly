@@ -197,6 +197,11 @@
                             {% if p.candidato_id %}
                             <a href="/pipeline" class="btn btn-secondary btn-xs">Pipeline &#8594;</a>
                             {% endif %}
+                            <button class="btn btn-outline btn-xs"
+                                    style="color:#c0392b;border-color:#c0392b;"
+                                    onclick="scartaProfilo({{ {'linkedin': p.linkedin_url or '', 'nome': p.nome or '', 'cognome': p.cognome or '', 'ruolo': p.ruolo or '', 'azienda': p.azienda or ''}|tojson }}, this)">
+                                &#10005; Scarta
+                            </button>
                         </div>
                     </td>
                 </tr>
