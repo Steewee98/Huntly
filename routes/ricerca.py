@@ -492,8 +492,8 @@ def cerca():
     Fa fino a MAX_TENTATIVI chiamate ad Apify incrementando startPage ad ogni retry.
     Salva UNA sola ricerca nella cronologia con i profili aggregati di tutti i tentativi.
     """
-    _MIN_NUOVI      = 1   # soglia minima: 1 solo profilo nuovo è sufficiente per fermarsi
-    _MAX_TENTATIVI  = 5   # massimo tentativi prima di restituire quello che si ha
+    _MIN_NUOVI      = 10  # obiettivo: almeno 10 profili nuovi
+    _MAX_TENTATIVI  = 5   # max tentativi con il ruolo originale, poi si passa ai correlati
 
     dati = request.get_json()
     ruolo         = dati.get("ruolo", "").strip()
@@ -528,6 +528,7 @@ def cerca():
     tentativi_fatti = 0
     primo_errore    = None
     _sp_base        = start_page_iniziale  # base resettabile per il calcolo di startPage
+    nuovi_per_ruolo = {}  # {ruolo_usato: n_nuovi} per il messaggio riepilogo
 
     for tentativo in range(1, _MAX_TENTATIVI + 1):
         start_page = min(_sp_base + (tentativo - 1), 5)  # cap assoluto a 5
@@ -581,6 +582,7 @@ def cerca():
             tutti_profili.append(p)
             if not dup:
                 nuovi_questo_tentativo += 1
+                nuovi_per_ruolo[ruolo] = nuovi_per_ruolo.get(ruolo, 0) + 1
 
         nuovi_totale = sum(1 for q in tutti_profili if not q["gia_in_pipeline"])
         print(f"=== TENTATIVO {tentativo}: trovati={trovati_questo_tentativo} nuovi={nuovi_questo_tentativo} totale_nuovi={nuovi_totale} ===", flush=True)
@@ -609,20 +611,22 @@ def cerca():
     if not tutti_profili and primo_errore:
         return jsonify({"errore": primo_errore}), 500
 
-    # ── Ruoli correlati: se 0 nuovi dopo tutti i tentativi, allarga la ricerca ──
+    # ── FASE 2: ruoli correlati — attivata se < _MIN_NUOVI dopo il loop principale ──
     nuovi_totale_dopo_main = sum(1 for q in tutti_profili if not q["gia_in_pipeline"])
     ruoli_correlati_usati  = []
 
-    if nuovi_totale_dopo_main == 0 and ruolo:
+    if nuovi_totale_dopo_main < _MIN_NUOVI and ruolo:
         correlati = RUOLI_CORRELATI.get(ruolo.lower().strip(), [])
-        print(f"=== RUOLI CORRELATI: 0 nuovi con '{ruolo}', provo {correlati} ===", flush=True)
-        log.info("0 nuovi con ruolo=%r — provo ruoli correlati: %s", ruolo, correlati)
+        print(f"=== FASE 2: {nuovi_totale_dopo_main} nuovi con '{ruolo}' (obiettivo {_MIN_NUOVI}), provo correlati: {correlati} ===", flush=True)
+        log.info("Fase 2: %d nuovi con ruolo=%r — provo correlati: %s", nuovi_totale_dopo_main, ruolo, correlati)
 
         db_corr = get_db()
         for ruolo_corr in correlati:
             if nuovi_totale_dopo_main >= _MIN_NUOVI:
                 break
             for sp in (1, 2):
+                if nuovi_totale_dopo_main >= _MIN_NUOVI:
+                    break
                 print(f"=== CORRELATO '{ruolo_corr}' startPage={sp} ===", flush=True)
                 log.info("Correlato '%s' startPage=%d", ruolo_corr, sp)
                 items_c, err_c = cerca_apify(ruolo_corr, citta, paese, azienda, parole_chiave,
@@ -649,19 +653,17 @@ def cerca():
                     dup, _, cand_id = is_duplicate(db_corr, p)
                     p["gia_in_pipeline"] = dup
                     p["candidato_id_esistente"] = cand_id
-                    p["ruolo_ricerca"] = ruolo_corr  # traccia da quale correlato arriva
+                    p["ruolo_ricerca"] = ruolo_corr
                     tutti_profili.append(p)
                     if not dup:
                         nuovi_corr += 1
+                        nuovi_per_ruolo[ruolo_corr] = nuovi_per_ruolo.get(ruolo_corr, 0) + 1
 
                 nuovi_totale_dopo_main = sum(1 for q in tutti_profili if not q["gia_in_pipeline"])
                 print(f"=== CORRELATO '{ruolo_corr}' pag {sp}: nuovi_questo={nuovi_corr} totale_nuovi={nuovi_totale_dopo_main} ===", flush=True)
 
                 if ruolo_corr not in ruoli_correlati_usati:
                     ruoli_correlati_usati.append(ruolo_corr)
-
-                if nuovi_totale_dopo_main >= _MIN_NUOVI:
-                    break
 
         db_corr.close()
 
@@ -707,8 +709,6 @@ def cerca():
     messaggio_zero = ""
     if nuovi == 0:
         if ruoli_correlati_usati:
-            # Ha provato anche i correlati, ma ancora 0 nuovi
-            correlati_str = "' e '".join(ruoli_correlati_usati)
             messaggio_zero = (
                 f"Nessun profilo nuovo trovato per '{ruolo}' e ruoli simili a {citta or 'Italia'}. "
                 "Tutti i profili disponibili sono già in pipeline."
@@ -721,13 +721,16 @@ def cerca():
         print(f"=== ATTENZIONE: 0 nuovi trovati (correlati usati: {ruoli_correlati_usati}) ===", flush=True)
         log.warning("0 nuovi profili — correlati usati: %s", ruoli_correlati_usati)
 
-    # Titolo arricchito se ha usato ruoli correlati con successo
+    # Riepilogo dettagliato per ruolo: "8 nuovi: 3 da 'consulente patrimoniale', 3 da 'private banker'..."
     messaggio_correlati = ""
-    if ruoli_correlati_usati and nuovi > 0:
-        correlati_str = "' e '".join(ruoli_correlati_usati[:2])
-        messaggio_correlati = (
-            f"{nuovi} profili trovati cercando anche '{correlati_str}'"
-        )
+    if nuovi_per_ruolo and nuovi > 0:
+        parti = [f"{n} da '{r}'" for r, n in nuovi_per_ruolo.items() if n > 0]
+        if len(parti) > 1:
+            messaggio_correlati = f"{nuovi} nuovi profili trovati: {', '.join(parti)}"
+        elif ruoli_correlati_usati:
+            # Trovati solo con correlati (un unico ruolo)
+            ruolo_unico = list(nuovi_per_ruolo.keys())[0]
+            messaggio_correlati = f"{nuovi} nuovi profili trovati cercando anche '{ruolo_unico}'"
 
     return jsonify({
         "persone":              tutti_profili,
