@@ -502,6 +502,29 @@ def normalizza_profilo(p):
     }
 
 
+@ricerca_bp.route("/ricerca/scarta", methods=["POST"])
+def scarta():
+    """Aggiunge un profilo alla blacklist profili_scartati."""
+    dati = request.get_json()
+    db = get_db()
+    db.execute(
+        """INSERT INTO profili_scartati (linkedin_url, nome, cognome, ruolo, azienda, motivo)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (
+            (dati.get("linkedin") or "").strip(),
+            (dati.get("nome") or "").strip(),
+            (dati.get("cognome") or "").strip(),
+            (dati.get("ruolo") or "").strip(),
+            (dati.get("azienda") or "").strip(),
+            (dati.get("motivo") or "non_importato"),
+        )
+    )
+    db.commit()
+    db.close()
+    log.info("Profilo scartato: %s %s (%s)", dati.get("nome"), dati.get("cognome"), dati.get("linkedin"))
+    return jsonify({"successo": True})
+
+
 @ricerca_bp.route("/ricerca")
 def index():
     """Pagina di ricerca automatica figure con Apify/LinkedIn."""

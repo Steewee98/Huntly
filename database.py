@@ -346,6 +346,19 @@ def init_db():
     ultimo_aggiornamento TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )""",
 
+        # ── Tabella profili scartati (blacklist) ───────────────────────────
+        """CREATE TABLE IF NOT EXISTS profili_scartati (
+    id           SERIAL PRIMARY KEY,
+    linkedin_url TEXT,
+    nome         TEXT,
+    cognome      TEXT,
+    ruolo        TEXT,
+    azienda      TEXT,
+    motivo       TEXT DEFAULT 'non_importato',
+    data_scarto  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)""",
+        "CREATE INDEX IF NOT EXISTS idx_profili_scartati_linkedin ON profili_scartati(linkedin_url) WHERE linkedin_url IS NOT NULL AND linkedin_url <> ''",
+
         # ── Indici per performance query ───────────────────────────────────
         "CREATE INDEX IF NOT EXISTS idx_candidati_tipo_profilo  ON candidati(tipo_profilo)",
         "CREATE INDEX IF NOT EXISTS idx_candidati_stato          ON candidati(stato)",

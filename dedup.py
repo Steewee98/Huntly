@@ -41,33 +41,21 @@ def _normalize_linkedin(url: str) -> str:
 
 def is_duplicate(db, profilo: dict) -> tuple:
     """
-    Verifica se il profilo esiste già nella tabella candidati.
+    Verifica se il profilo esiste già nella tabella candidati O è stato scartato.
 
     Ordine di priorità:
-      1. LinkedIn URL (normalizzato) — controllo più affidabile
+      0. Blacklist profili_scartati (LinkedIn o nome+cognome+azienda)
+      1. LinkedIn URL (normalizzato) — controllo candidati più affidabile
       2. nome + cognome + azienda (case-insensitive, strip)
       3. nome + cognome + ruolo (fallback se azienda mancante)
 
     Returns:
         (is_dup: bool, motivo: str, candidato_id: int | None)
     """
-    # ── 1. LinkedIn URL ───────────────────────────────────────────────────────
     linkedin = (
         profilo.get("linkedin") or profilo.get("linkedin_url") or
         profilo.get("profilo_linkedin") or ""
     ).strip()
-
-    if linkedin:
-        linkedin_norm = _normalize_linkedin(linkedin)
-        rows = db.execute(
-            "SELECT id, profilo_linkedin FROM candidati "
-            "WHERE profilo_linkedin IS NOT NULL AND profilo_linkedin <> ''"
-        ).fetchall()
-        for row in rows:
-            if _normalize_linkedin(row["profilo_linkedin"]) == linkedin_norm:
-                return True, f"URL LinkedIn già presente", row["id"]
-
-    # ── 2. nome + cognome + azienda ───────────────────────────────────────────
     nome    = (profilo.get("nome") or profilo.get("first_name") or "").strip().lower()
     cognome = (profilo.get("cognome") or profilo.get("last_name") or "").strip().lower()
     azienda = (profilo.get("azienda") or profilo.get("company") or "").strip().lower()
@@ -76,6 +64,39 @@ def is_duplicate(db, profilo: dict) -> tuple:
         profilo.get("headline") or ""
     ).strip().lower()
 
+    # ── 0. Blacklist profili scartati ─────────────────────────────────────────
+    if linkedin:
+        linkedin_norm = _normalize_linkedin(linkedin)
+        scartati = db.execute(
+            "SELECT id, linkedin_url FROM profili_scartati "
+            "WHERE linkedin_url IS NOT NULL AND linkedin_url <> ''"
+        ).fetchall()
+        for row in scartati:
+            if _normalize_linkedin(row["linkedin_url"] or "") == linkedin_norm:
+                return True, "Profilo scartato (blacklist LinkedIn)", None
+
+    if nome and cognome and azienda:
+        row = db.execute(
+            "SELECT id FROM profili_scartati "
+            "WHERE LOWER(TRIM(nome))=? AND LOWER(TRIM(cognome))=? "
+            "AND LOWER(TRIM(azienda))=?",
+            (nome, cognome, azienda),
+        ).fetchone()
+        if row:
+            return True, f"Profilo scartato (blacklist nome+azienda: {nome} {cognome} @ {azienda})", None
+
+    # ── 1. LinkedIn URL in candidati ──────────────────────────────────────────
+    if linkedin:
+        linkedin_norm = _normalize_linkedin(linkedin)
+        rows = db.execute(
+            "SELECT id, profilo_linkedin FROM candidati "
+            "WHERE profilo_linkedin IS NOT NULL AND profilo_linkedin <> ''"
+        ).fetchall()
+        for row in rows:
+            if _normalize_linkedin(row["profilo_linkedin"]) == linkedin_norm:
+                return True, "URL LinkedIn già presente", row["id"]
+
+    # ── 2. nome + cognome + azienda ───────────────────────────────────────────
     if nome and cognome and azienda:
         row = db.execute(
             "SELECT id FROM candidati "

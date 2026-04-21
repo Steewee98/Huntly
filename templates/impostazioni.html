@@ -200,6 +200,60 @@
         </div>
     </form>
 </div>
+
+<!-- ===== PROFILI SCARTATI ===== -->
+<div style="margin-top:2.5rem;">
+    <h2 style="font-size:1.15rem;font-weight:700;color:#1A2E4A;margin-bottom:0.75rem;">
+        &#128683; Profili Scartati
+    </h2>
+    <p style="color:#666;font-size:0.875rem;margin-bottom:1rem;">
+        Questi profili non verranno mai più proposti nelle ricerche.
+        Clicca "Ripristina" per riammetterli.
+    </p>
+
+    {% if scartati %}
+    <div class="card">
+        <div class="card-body" style="padding:0;">
+            <table class="table" style="margin:0;">
+                <thead>
+                    <tr>
+                        <th>Nome</th>
+                        <th>Ruolo</th>
+                        <th>Azienda</th>
+                        <th>LinkedIn</th>
+                        <th>Scartato il</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody id="scartati-tbody">
+                {% for s in scartati %}
+                <tr id="scartato-{{ s.id }}">
+                    <td>{{ s.nome or '—' }} {{ s.cognome or '' }}</td>
+                    <td>{{ s.ruolo or '—' }}</td>
+                    <td>{{ s.azienda or '—' }}</td>
+                    <td>
+                        {% if s.linkedin_url %}
+                        <a href="{{ s.linkedin_url }}" target="_blank" class="btn btn-outline btn-xs">LinkedIn</a>
+                        {% else %}—{% endif %}
+                    </td>
+                    <td style="white-space:nowrap;">{{ (s.data_scarto or '')[:10] }}</td>
+                    <td>
+                        <button class="btn btn-outline btn-xs"
+                                onclick="ripristina({{ s.id }}, this)"
+                                style="color:#27ae60;border-color:#27ae60;">
+                            &#8635; Ripristina
+                        </button>
+                    </td>
+                </tr>
+                {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% else %}
+    <p style="color:#999;font-size:0.875rem;">Nessun profilo scartato.</p>
+    {% endif %}
+</div>
 {% endblock %}
 
 {% block scripts %}
@@ -250,6 +304,29 @@ function salvaImpostazioni(e, profilo) {
     .catch(function(err) {
         btn.disabled = false;
         btn.innerHTML = '&#10003; Salva Profilo ' + profilo;
+        alert('Errore di connessione: ' + err);
+    });
+}
+
+function ripristina(id, btn) {
+    btn.disabled = true;
+    fetch('/impostazioni/ripristina/' + id, { method: 'POST' })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.successo) {
+            var riga = document.getElementById('scartato-' + id);
+            if (riga) {
+                riga.style.transition = 'opacity 0.3s';
+                riga.style.opacity = '0';
+                setTimeout(function() { riga.remove(); }, 300);
+            }
+        } else {
+            btn.disabled = false;
+            alert('Errore durante il ripristino.');
+        }
+    })
+    .catch(function(err) {
+        btn.disabled = false;
         alert('Errore di connessione: ' + err);
     });
 }

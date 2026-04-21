@@ -5,6 +5,9 @@ I parametri vengono salvati nel DB e letti da ai_helpers.py durante l'analisi.
 
 from flask import Blueprint, render_template, request, jsonify
 from database import get_db
+import logging
+
+log = logging.getLogger(__name__)
 
 impostazioni_bp = Blueprint("impostazioni", __name__)
 
@@ -23,14 +26,29 @@ def get_impostazioni(profilo):
 def index():
     """Pagina impostazioni profili."""
     db = get_db()
-    imp_a = db.execute("SELECT * FROM impostazioni_profilo WHERE profilo = 'A'").fetchone()
-    imp_b = db.execute("SELECT * FROM impostazioni_profilo WHERE profilo = 'B'").fetchone()
+    imp_a    = db.execute("SELECT * FROM impostazioni_profilo WHERE profilo = 'A'").fetchone()
+    imp_b    = db.execute("SELECT * FROM impostazioni_profilo WHERE profilo = 'B'").fetchone()
+    scartati = db.execute(
+        "SELECT * FROM profili_scartati ORDER BY data_scarto DESC"
+    ).fetchall()
     db.close()
     return render_template(
         "impostazioni.html",
         imp_a=dict(imp_a) if imp_a else {},
         imp_b=dict(imp_b) if imp_b else {},
+        scartati=scartati or [],
     )
+
+
+@impostazioni_bp.route("/impostazioni/ripristina/<int:scartato_id>", methods=["POST"])
+def ripristina(scartato_id):
+    """Rimuove un profilo dalla blacklist."""
+    db = get_db()
+    db.execute("DELETE FROM profili_scartati WHERE id = ?", (scartato_id,))
+    db.commit()
+    db.close()
+    log.info("Profilo %d rimosso dalla blacklist", scartato_id)
+    return jsonify({"successo": True})
 
 
 @impostazioni_bp.route("/impostazioni/salva", methods=["POST"])
