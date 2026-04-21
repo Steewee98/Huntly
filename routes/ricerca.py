@@ -61,26 +61,60 @@ RUOLI_CORRELATI = {
         'consulente finanziario',
         'promotore finanziario',
         'financial advisor',
+        'consulente investimenti',
+        'gestore patrimoni',
+        'banker',
     ],
     'private banker': [
         'consulente patrimoniale',
         'wealth manager',
         'consulente finanziario',
         'relationship manager',
+        'promotore finanziario',
+        'financial advisor',
+        'banker',
     ],
     'wealth manager': [
         'private banker',
         'consulente patrimoniale',
         'consulente finanziario',
         'investment advisor',
+        'asset manager',
+        'financial planner',
+        'promotore finanziario',
     ],
     'consulente finanziario': [
         'private banker',
         'consulente patrimoniale',
         'promotore finanziario',
         'financial advisor',
+        'wealth manager',
+        'consulente investimenti',
+        'banker',
+    ],
+    'promotore finanziario': [
+        'consulente finanziario',
+        'private banker',
+        'consulente patrimoniale',
+        'financial advisor',
+        'wealth manager',
+    ],
+    'banker': [
+        'private banker',
+        'consulente finanziario',
+        'wealth manager',
+        'consulente patrimoniale',
+        'relationship manager',
     ],
 }
+
+# Keywords generiche per FASE 3 (fallback quando ruolo + correlati non bastano)
+_KW_GENERICHE_FALLBACK = [
+    'banca consulenza finanziaria',
+    'private banking italia',
+    'consulenza patrimoniale italia',
+    'finanza personale',
+]
 
 
 def _leggi_aggiorna_offset(db, tipo_profilo: str, ruoli: list) -> tuple:
@@ -667,6 +701,60 @@ def cerca():
 
         db_corr.close()
 
+    # ── FASE 3: fallback keyword generiche ─────────────────────────────────────
+    nuovi_totale_dopo_fase2 = sum(1 for q in tutti_profili if not q["gia_in_pipeline"])
+    keywords_generiche_usate = []
+
+    if nuovi_totale_dopo_fase2 < _MIN_NUOVI:
+        print(f"=== FASE 3: {nuovi_totale_dopo_fase2} nuovi, provo keyword generiche ===", flush=True)
+        log.info("Fase 3: %d nuovi — provo keyword generiche", nuovi_totale_dopo_fase2)
+
+        db_kw = get_db()
+        for kw in _KW_GENERICHE_FALLBACK:
+            if nuovi_totale_dopo_fase2 >= _MIN_NUOVI:
+                break
+            for sp in (1, 2):
+                if nuovi_totale_dopo_fase2 >= _MIN_NUOVI:
+                    break
+                print(f"=== KW_GENERICA '{kw}' startPage={sp} ===", flush=True)
+                log.info("KW generica '%s' startPage=%d", kw, sp)
+                items_k, err_k = cerca_apify("", citta, paese, "", kw, num_pagine, start_page=sp)
+                if err_k:
+                    log.warning("KW generica '%s' pag %d errore: %s", kw, sp, err_k)
+                    continue
+
+                nuovi_kw = 0
+                for item in (items_k or []):
+                    if not isinstance(item, dict):
+                        continue
+                    p = normalizza_profilo(item)
+                    li = (p.get("linkedin") or "").strip().lower()
+                    nk = f"{p.get('nome','').strip()} {p.get('cognome','').strip()}".strip().lower()
+                    if li and li in tutti_linkedin:
+                        continue
+                    if nk and nk in tutti_nomi and not li:
+                        continue
+                    if li:
+                        tutti_linkedin.add(li)
+                    if nk:
+                        tutti_nomi.add(nk)
+                    dup, _, cand_id = is_duplicate(db_kw, p)
+                    p["gia_in_pipeline"] = dup
+                    p["candidato_id_esistente"] = cand_id
+                    p["ruolo_ricerca"] = kw
+                    tutti_profili.append(p)
+                    if not dup:
+                        nuovi_kw += 1
+                        nuovi_per_ruolo[kw] = nuovi_per_ruolo.get(kw, 0) + 1
+
+                nuovi_totale_dopo_fase2 = sum(1 for q in tutti_profili if not q["gia_in_pipeline"])
+                print(f"=== KW '{kw}' pag {sp}: nuovi_questo={nuovi_kw} totale_nuovi={nuovi_totale_dopo_fase2} ===", flush=True)
+
+                if kw not in keywords_generiche_usate and nuovi_kw > 0:
+                    keywords_generiche_usate.append(kw)
+
+        db_kw.close()
+
     # ── Calcola statistiche finali ─────────────────────────────────────────────
     gia_presenti = sum(1 for p in tutti_profili if p["gia_in_pipeline"])
     nuovi        = len(tutti_profili) - gia_presenti
@@ -705,44 +793,38 @@ def cerca():
     db.commit()
     db.close()
 
-    # ── Messaggio finale ───────────────────────────────────────────────────────
-    messaggio_zero = ""
-    if nuovi == 0:
-        if ruoli_correlati_usati:
-            messaggio_zero = (
-                f"Nessun profilo nuovo trovato per '{ruolo}' e ruoli simili a {citta or 'Italia'}. "
-                "Tutti i profili disponibili sono già in pipeline."
-            )
-        else:
-            messaggio_zero = (
-                "Tutti i profili disponibili per questa ricerca sono già in pipeline. "
-                "Prova a cambiare ruolo o città."
-            )
-        print(f"=== ATTENZIONE: 0 nuovi trovati (correlati usati: {ruoli_correlati_usati}) ===", flush=True)
-        log.warning("0 nuovi profili — correlati usati: %s", ruoli_correlati_usati)
+    # ── Messaggio finale sempre informativo ────────────────────────────────────
+    fasi_usate = []
+    if ruoli_correlati_usati:
+        fasi_usate.append("correlati")
+    if keywords_generiche_usate:
+        fasi_usate.append("ricerca generica")
 
-    # Riepilogo dettagliato per ruolo: "8 nuovi: 3 da 'consulente patrimoniale', 3 da 'private banker'..."
-    messaggio_correlati = ""
-    if nuovi_per_ruolo and nuovi > 0:
+    if nuovi == 0:
+        messaggio = "Nessun profilo disponibile. Prova a cambiare città."
+        print(f"=== ATTENZIONE: 0 nuovi dopo tutte le fasi (correlati={ruoli_correlati_usati} kw={keywords_generiche_usate}) ===", flush=True)
+        log.warning("0 nuovi dopo tutte le fasi — correlati: %s, kw: %s", ruoli_correlati_usati, keywords_generiche_usate)
+    else:
+        # Riepilogo sempre: "X nuovi profili trovati: N da 'ruolo', M da 'correlato'..."
         parti = [f"{n} da '{r}'" for r, n in nuovi_per_ruolo.items() if n > 0]
         if len(parti) > 1:
-            messaggio_correlati = f"{nuovi} nuovi profili trovati: {', '.join(parti)}"
-        elif ruoli_correlati_usati:
-            # Trovati solo con correlati (un unico ruolo)
-            ruolo_unico = list(nuovi_per_ruolo.keys())[0]
-            messaggio_correlati = f"{nuovi} nuovi profili trovati cercando anche '{ruolo_unico}'"
+            messaggio = f"{nuovi} nuovi profili trovati: {', '.join(parti)}"
+        else:
+            messaggio = f"{nuovi} nuov{'o profilo' if nuovi == 1 else 'i profili'} trovat{'o' if nuovi == 1 else 'i'}"
+        if fasi_usate:
+            messaggio += f" (usando anche {' e '.join(fasi_usate)})"
 
     return jsonify({
-        "persone":              tutti_profili,
-        "totale":               len(tutti_profili),
-        "gia_presenti":         gia_presenti,
-        "nuovi":                nuovi,
-        "start_page":           start_page_iniziale,
-        "ricerca_id":           ricerca_id,
-        "tentativi_fatti":      tentativi_fatti,
-        "messaggio":            messaggio_zero,
-        "messaggio_correlati":  messaggio_correlati,
-        "ruoli_correlati_usati": ruoli_correlati_usati,
+        "persone":                  tutti_profili,
+        "totale":                   len(tutti_profili),
+        "gia_presenti":             gia_presenti,
+        "nuovi":                    nuovi,
+        "start_page":               start_page_iniziale,
+        "ricerca_id":               ricerca_id,
+        "tentativi_fatti":          tentativi_fatti,
+        "messaggio":                messaggio,
+        "ruoli_correlati_usati":    ruoli_correlati_usati,
+        "keywords_generiche_usate": keywords_generiche_usate,
     })
 
 

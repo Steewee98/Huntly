@@ -517,7 +517,7 @@ function cercaFigure() {
             document.getElementById('nessun-risultato').classList.remove('hidden');
             return;
         }
-        renderRisultati(data.persone, data.totale, data.tentativi_fatti || 1);
+        renderRisultati(data.persone, data.totale, data.tentativi_fatti || 1, data.messaggio || '');
     })
     .catch(function(err) {
         btn.disabled = false;
@@ -526,12 +526,13 @@ function cercaFigure() {
     });
 }
 
-function renderRisultati(persone, totale, tentativi) {
+function renderRisultati(persone, totale, tentativi, messaggio) {
     tentativi = tentativi || 1;
+    messaggio = messaggio || '';
     const tbody = document.getElementById('risultati-tbody');
     tbody.innerHTML = '';
 
-    // Separa nuovi da già in pipeline
+    // Mostra SOLO profili non ancora in pipeline — quelli già presenti non appaiono mai
     const nuovi      = persone.filter(function(p) { return !p.gia_in_pipeline; });
     const giPresenti = persone.filter(function(p) { return  p.gia_in_pipeline; });
 
@@ -558,11 +559,10 @@ function renderRisultati(persone, totale, tentativi) {
             '</tr>';
     });
 
-    // Titolo e avviso profili già in pipeline
-    var tentativi_str = tentativi > 1 ? ' dopo ' + tentativi + ' tentativi' : '';
+    // Titolo: usa il messaggio riepilogo dal backend se disponibile
     const titoloEl = document.getElementById('risultati-titolo');
     if (nuovi.length === 0) {
-        titoloEl.textContent = 'Nessun profilo nuovo trovato' + tentativi_str;
+        titoloEl.textContent = messaggio || 'Nessun profilo nuovo trovato';
         if (giPresenti.length > 0) {
             mostraAvviso(
                 'Tutti già in pipeline',
@@ -571,7 +571,9 @@ function renderRisultati(persone, totale, tentativi) {
             );
         }
     } else {
-        titoloEl.textContent = nuovi.length + ' nuov' + (nuovi.length === 1 ? 'o profilo' : 'i profili') + ' trovati' + tentativi_str;
+        // Messaggio sempre informativo dal backend (include fasi usate e per-ruolo)
+        titoloEl.textContent = messaggio ||
+            (nuovi.length + ' nuov' + (nuovi.length === 1 ? 'o profilo' : 'i profili') + ' trovati');
         if (giPresenti.length > 0) {
             titoloEl.textContent += ' (' + giPresenti.length + ' già in pipeline, esclus' + (giPresenti.length === 1 ? 'o' : 'i') + ')';
         }
