@@ -1,0 +1,348 @@
+{% extends "base.html" %}
+{% block title %}Il mio profilo — Huntly{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1 class="page-title">&#128100; Il mio profilo LinkedIn</h1>
+    <p class="page-subtitle">Analizza il tuo profilo e ricevi suggerimenti concreti per attrarre candidati migliori</p>
+</div>
+
+<!-- ===== FORM INPUT ===== -->
+<div id="sezione-form">
+    <div class="card" style="max-width:640px;">
+        <div class="card-body">
+            <div class="form-group" style="margin-bottom:1rem;">
+                <label class="form-label">URL del tuo profilo LinkedIn</label>
+                <input type="text" id="linkedin-url" class="form-input"
+                       placeholder="https://www.linkedin.com/in/nomeutente"
+                       style="font-family:monospace;">
+            </div>
+
+            <!-- Fallback textarea (hidden by default) -->
+            <div id="fallback-wrapper" class="hidden">
+                <div style="margin-bottom:0.75rem;padding:0.75rem;background:#fefce8;border:1px solid #fde68a;border-radius:var(--radius);font-size:0.85rem;color:#92400e;">
+                    &#9888; EnrichLayer non ha potuto estrarre i dati automaticamente.
+                    Incolla manualmente il testo del tuo profilo LinkedIn (copia da About, esperienze, ecc.).
+                </div>
+                <div class="form-group" style="margin-bottom:1rem;">
+                    <label class="form-label">Testo del profilo <span class="required">*</span></label>
+                    <textarea id="testo-manuale" class="form-input" rows="8"
+                              placeholder="Incolla qui headline, about, esperienze principali..."
+                              style="resize:vertical;min-height:150px;"></textarea>
+                </div>
+            </div>
+
+            <div style="display:flex;gap:0.75rem;align-items:center;flex-wrap:wrap;">
+                <button id="btn-analizza" class="btn btn-primary btn-lg" onclick="avviaAnalisi()">
+                    <span id="btn-testo">&#128269; Analizza profilo</span>
+                    <span id="btn-loading" class="hidden"><span class="spinner"></span> Analisi in corso...</span>
+                </button>
+                <span id="analisi-errore" style="color:#dc2626;font-size:0.88rem;"></span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Storico analisi precedenti -->
+    {% if storico %}
+    <div style="margin-top:1.5rem;max-width:640px;">
+        <h3 style="font-size:0.9rem;color:var(--grigio-testo);margin-bottom:0.75rem;text-transform:uppercase;letter-spacing:0.05em;">Analisi precedenti</h3>
+        <div style="display:flex;flex-direction:column;gap:0.5rem;">
+            {% for s in storico %}
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:0.6rem 0.9rem;
+                        background:#fff;border:1px solid var(--grigio-bordo);border-radius:var(--radius);
+                        cursor:pointer;" onclick="caricaAnalisi({{ s.id }})">
+                <div style="font-size:0.84rem;">
+                    <span style="font-weight:600;">{{ s.linkedin_url or 'Profilo manuale' }}</span>
+                    <span style="color:var(--grigio-testo);margin-left:0.5rem;">{{ s.creato_il[:10] }}</span>
+                </div>
+                {% if s.punteggio %}
+                <span style="font-weight:700;font-size:0.9rem;
+                      color:{% if s.punteggio >= 8 %}#16a34a{% elif s.punteggio >= 5 %}#d97706{% else %}#dc2626{% endif %};">
+                    {{ s.punteggio }}/10
+                </span>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- ===== RISULTATI ANALISI ===== -->
+<div id="sezione-risultati" class="hidden">
+
+    <!-- Header risultati + azioni -->
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;margin-bottom:1.5rem;">
+        <button class="btn btn-outline btn-sm" onclick="tornaAlForm()">&#8592; Nuova analisi</button>
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+            <button class="btn btn-outline btn-sm" onclick="avviaAnalisi()">&#8635; Rigenera analisi</button>
+            <button id="btn-salva-voce" class="btn btn-primary btn-sm" onclick="salvaProfiloVoce()">
+                &#9733; Salva come profilo voce
+            </button>
+        </div>
+    </div>
+
+    <!-- Score + motivazione -->
+    <div style="display:flex;align-items:center;gap:2rem;margin-bottom:1.5rem;flex-wrap:wrap;">
+        <div style="text-align:center;flex-shrink:0;">
+            <div id="score-circle"
+                 style="width:100px;height:100px;border-radius:50%;display:flex;align-items:center;
+                        justify-content:center;font-size:2rem;font-weight:800;color:#fff;
+                        background:conic-gradient(#16a34a 0%, #16a34a 70%, #e5e7eb 70%);
+                        box-shadow:0 4px 12px rgba(0,0,0,0.12);">
+                <span id="score-num" style="position:relative;z-index:1;">—</span>
+            </div>
+            <div style="font-size:0.8rem;color:var(--grigio-testo);margin-top:0.4rem;">Punteggio</div>
+        </div>
+        <div>
+            <h2 style="margin:0 0 0.4rem;font-size:1.1rem;">Valutazione del profilo</h2>
+            <p id="score-motivazione" style="color:var(--grigio-testo);font-size:0.88rem;line-height:1.55;margin:0;"></p>
+        </div>
+    </div>
+
+    <!-- Headline: attuale vs suggerita -->
+    <div class="card" style="margin-bottom:1rem;">
+        <div class="card-header"><h3>&#9993; Headline</h3></div>
+        <div class="card-body" style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+            <div>
+                <div style="font-size:0.75rem;font-weight:600;color:var(--grigio-testo);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.4rem;">Attuale</div>
+                <p id="headline-attuale" style="font-size:0.88rem;color:#1e293b;background:#f8fafc;padding:0.75rem;border-radius:var(--radius);margin:0;"></p>
+            </div>
+            <div>
+                <div style="font-size:0.75rem;font-weight:600;color:#16a34a;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.4rem;">Suggerita &#10003;</div>
+                <p id="headline-suggerita" style="font-size:0.88rem;color:#1e293b;background:#f0fdf4;padding:0.75rem;border-radius:var(--radius);border:1px solid #bbf7d0;margin:0;"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- About: attuale vs suggerita -->
+    <div class="card" style="margin-bottom:1rem;">
+        <div class="card-header"><h3>&#128203; About / Summary</h3></div>
+        <div class="card-body" style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+            <div>
+                <div style="font-size:0.75rem;font-weight:600;color:var(--grigio-testo);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.4rem;">Attuale</div>
+                <p id="about-attuale" style="font-size:0.84rem;color:#1e293b;background:#f8fafc;padding:0.75rem;border-radius:var(--radius);margin:0;white-space:pre-line;"></p>
+            </div>
+            <div>
+                <div style="font-size:0.75rem;font-weight:600;color:#16a34a;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.4rem;">Suggerito &#10003;</div>
+                <p id="about-suggerito" style="font-size:0.84rem;color:#1e293b;background:#f0fdf4;padding:0.75rem;border-radius:var(--radius);border:1px solid #bbf7d0;margin:0;white-space:pre-line;"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Punti di forza + Aree di miglioramento -->
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">
+        <div class="card">
+            <div class="card-header"><h3>&#127942; Punti di forza</h3></div>
+            <div class="card-body">
+                <ul id="punti-forza" style="margin:0;padding-left:1.25rem;display:flex;flex-direction:column;gap:0.5rem;"></ul>
+            </div>
+        </div>
+        <div class="card">
+            <div class="card-header"><h3>&#128161; Aree di miglioramento</h3></div>
+            <div class="card-body">
+                <ul id="aree-miglioramento" style="margin:0;padding-left:1.25rem;display:flex;flex-direction:column;gap:0.5rem;"></ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Keyword mancanti -->
+    <div class="card" style="margin-bottom:1rem;">
+        <div class="card-header"><h3>&#128269; Parole chiave mancanti</h3></div>
+        <div class="card-body">
+            <div id="keyword-mancanti" style="display:flex;flex-wrap:wrap;gap:0.4rem;"></div>
+        </div>
+    </div>
+
+    <!-- Conferma salvataggio profilo voce -->
+    <div id="salva-conferma" class="hidden"
+         style="padding:1rem 1.25rem;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:var(--radius);
+                display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;">
+        <div>
+            <strong style="color:#16a34a;">&#10003; Profilo salvato come profilo voce!</strong>
+            <div style="font-size:0.84rem;color:var(--grigio-testo);margin-top:0.2rem;">
+                Puoi usarlo nella sezione Contenuti LinkedIn per generare post personalizzati.
+            </div>
+        </div>
+        <a href="{{ url_for('contenuti.index') }}" class="btn btn-primary btn-sm">&#9998; Vai ai Contenuti</a>
+    </div>
+
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<style>
+@media (max-width: 768px) {
+    #sezione-risultati .card-body[style*="grid-template-columns:1fr 1fr"] {
+        display: flex !important;
+        flex-direction: column !important;
+    }
+    #sezione-risultati > div[style*="grid-template-columns:1fr 1fr"] {
+        display: flex !important;
+        flex-direction: column !important;
+    }
+}
+</style>
+<script>
+var _analisiCorrente = null;
+
+async function avviaAnalisi() {
+    var url   = document.getElementById('linkedin-url').value.trim();
+    var testo = document.getElementById('testo-manuale').value.trim();
+
+    if (!url && !testo) {
+        document.getElementById('analisi-errore').textContent = 'Inserisci l\'URL LinkedIn o incolla il testo del profilo.';
+        return;
+    }
+
+    document.getElementById('analisi-errore').textContent = '';
+    document.getElementById('btn-analizza').disabled = true;
+    document.getElementById('btn-testo').classList.add('hidden');
+    document.getElementById('btn-loading').classList.remove('hidden');
+    document.getElementById('sezione-risultati').classList.add('hidden');
+    document.getElementById('salva-conferma').classList.add('hidden');
+
+    try {
+        var resp = await fetch('/profilo-personale/analizza', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ linkedin_url: url, testo_manuale: testo })
+        });
+
+        var dati = await jsonSicuro(resp);
+
+        if (resp.status === 422 && dati.errore === 'non_disponibile') {
+            // Mostra fallback textarea
+            document.getElementById('fallback-wrapper').classList.remove('hidden');
+            document.getElementById('analisi-errore').textContent = dati.messaggio;
+            return;
+        }
+
+        if (dati.errore) throw new Error(dati.errore);
+
+        _analisiCorrente = dati;
+        mostraRisultati(dati);
+
+    } catch(e) {
+        document.getElementById('analisi-errore').textContent = 'Errore: ' + e.message;
+    } finally {
+        document.getElementById('btn-analizza').disabled = false;
+        document.getElementById('btn-testo').classList.remove('hidden');
+        document.getElementById('btn-loading').classList.add('hidden');
+    }
+}
+
+function mostraRisultati(dati) {
+    // Score
+    var punteggio = dati.punteggio || 0;
+    var colore    = punteggio >= 8 ? '#16a34a' : (punteggio >= 5 ? '#d97706' : '#dc2626');
+    var pct       = (punteggio / 10) * 100;
+    var circle    = document.getElementById('score-circle');
+    circle.style.background = `conic-gradient(${colore} 0%, ${colore} ${pct}%, #e5e7eb ${pct}%)`;
+    // Inner white circle for doughnut effect
+    circle.style.position = 'relative';
+    circle.innerHTML = `<div style="width:74px;height:74px;border-radius:50%;background:#fff;
+        position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
+        display:flex;align-items:center;justify-content:center;
+        font-size:1.6rem;font-weight:800;color:${colore};">${punteggio}/10</div>`;
+
+    document.getElementById('score-motivazione').textContent = dati.punteggio_motivazione || '';
+
+    // Headline / About
+    document.getElementById('headline-attuale').textContent  = dati.headline_attuale   || '(non rilevata)';
+    document.getElementById('headline-suggerita').textContent = dati.headline_suggerita || '';
+    document.getElementById('about-attuale').textContent     = dati.about_attuale      || '(non presente)';
+    document.getElementById('about-suggerito').textContent   = dati.about_suggerito    || '';
+
+    // Punti di forza
+    var pfEl = document.getElementById('punti-forza');
+    pfEl.innerHTML = '';
+    (dati.punti_forza || []).forEach(function(p) {
+        var li = document.createElement('li');
+        li.style.cssText = 'font-size:0.85rem;color:#1e293b;';
+        li.textContent = p;
+        pfEl.appendChild(li);
+    });
+
+    // Aree di miglioramento
+    var amEl = document.getElementById('aree-miglioramento');
+    amEl.innerHTML = '';
+    (dati.aree_miglioramento || []).forEach(function(a) {
+        var li = document.createElement('li');
+        li.style.cssText = 'font-size:0.85rem;color:#1e293b;';
+        li.textContent = a;
+        amEl.appendChild(li);
+    });
+
+    // Keyword mancanti
+    var kwEl = document.getElementById('keyword-mancanti');
+    kwEl.innerHTML = '';
+    (dati.keyword_mancanti || []).forEach(function(k) {
+        var span = document.createElement('span');
+        span.style.cssText = 'padding:0.25rem 0.6rem;background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;border-radius:20px;font-size:0.8rem;font-weight:500;';
+        span.textContent = k;
+        kwEl.appendChild(span);
+    });
+
+    document.getElementById('sezione-risultati').classList.remove('hidden');
+    document.getElementById('sezione-risultati').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+async function caricaAnalisi(id) {
+    try {
+        var resp = await fetch('/profilo-personale/' + id);
+        var dati = await jsonSicuro(resp);
+        if (dati.errore) { alert(dati.errore); return; }
+        // dati_raw contiene l'oggetto completo
+        var analisi = dati.dati_raw || dati;
+        if (typeof analisi === 'string') analisi = JSON.parse(analisi);
+        _analisiCorrente = analisi;
+        mostraRisultati(analisi);
+    } catch(e) {
+        alert('Errore caricamento analisi: ' + e);
+    }
+}
+
+async function salvaProfiloVoce() {
+    if (!_analisiCorrente) return;
+    var url   = document.getElementById('linkedin-url').value.trim();
+    var nome  = prompt('Come ti chiami? (verrà usato come nome del profilo voce)', '');
+    if (nome === null) return;
+    if (!nome.trim()) { alert('Il nome è obbligatorio.'); return; }
+
+    var btn = document.getElementById('btn-salva-voce');
+    btn.disabled = true;
+    btn.textContent = 'Salvataggio...';
+
+    try {
+        var resp = await fetch('/profilo-personale/salva-profilo-voce', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                nome:            nome.trim(),
+                linkedin_url:    url,
+                bio_breve:       _analisiCorrente.bio_breve       || '',
+                tono_prevalente: _analisiCorrente.tono_prevalente || '',
+                settore:         _analisiCorrente.settore         || '',
+            })
+        });
+        var dati = await jsonSicuro(resp);
+        if (dati.errore) throw new Error(dati.errore);
+
+        document.getElementById('salva-conferma').classList.remove('hidden');
+        btn.textContent = '✓ Salvato';
+
+    } catch(e) {
+        alert('Errore salvataggio: ' + e.message);
+        btn.disabled = false;
+        btn.textContent = '⭐ Salva come profilo voce';
+    }
+}
+
+function tornaAlForm() {
+    document.getElementById('sezione-risultati').classList.add('hidden');
+    document.getElementById('sezione-form').scrollIntoView({ behavior: 'smooth' });
+}
+</script>
+{% endblock %}

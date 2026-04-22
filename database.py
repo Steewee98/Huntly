@@ -252,6 +252,22 @@ def init_db():
     bio_breve         TEXT,
     creato_il         TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )""",
+        # ── Tabella analisi profilo personale LinkedIn ────────────────────
+        """CREATE TABLE IF NOT EXISTS analisi_profilo (
+    id                    SERIAL PRIMARY KEY,
+    linkedin_url          TEXT,
+    punteggio             INTEGER,
+    headline_attuale      TEXT,
+    headline_suggerita    TEXT,
+    about_attuale         TEXT,
+    about_suggerito       TEXT,
+    punti_forza           TEXT,
+    aree_miglioramento    TEXT,
+    keyword_mancanti      TEXT,
+    dati_raw              TEXT,
+    creato_il             TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)""",
+
         # Nuovi campi per storico contenuti con profilo voce
         "ALTER TABLE contenuti_linkedin ADD COLUMN IF NOT EXISTS obiettivo TEXT",
         "ALTER TABLE contenuti_linkedin ADD COLUMN IF NOT EXISTS contesto TEXT",

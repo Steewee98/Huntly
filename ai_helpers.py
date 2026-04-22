@@ -670,3 +670,48 @@ def analizza_profilo_voce(dati_proxycurl: dict, nome: str) -> dict:
     except Exception as e:
         logger.error("[AI] analizza_profilo_voce fallita: %s", e)
         return {"tono_prevalente": "", "settore": "", "bio_breve": ""}
+
+
+def analizza_profilo_personale(testo_profilo: str) -> dict:
+    """
+    Analizza un profilo LinkedIn per personal branding.
+    Restituisce punteggio, suggerimenti headline/about, punti di forza,
+    aree di miglioramento, keyword mancanti e dati per profilo voce.
+    """
+    prompt = (
+        "Sei un esperto di personal branding LinkedIn per recruiter e HR manager.\n"
+        "Analizza il seguente profilo LinkedIn e fornisci suggerimenti concreti.\n\n"
+        f"PROFILO:\n{testo_profilo[:3000]}\n\n"
+        "Restituisci ESCLUSIVAMENTE questo JSON valido (no markdown, no backtick):\n"
+        "{\n"
+        '  "punteggio": <numero intero 1-10>,\n'
+        '  "punteggio_motivazione": "<2 righe che spiegano il punteggio>",\n'
+        '  "headline_attuale": "<headline attuale estratta dal profilo>",\n'
+        '  "headline_suggerita": "<versione migliorata, max 120 caratteri>",\n'
+        '  "about_attuale": "<testo about/summary attuale del profilo, max 500 caratteri>",\n'
+        '  "about_suggerito": "<riscrittura suggerita in prima persona, max 300 caratteri>",\n'
+        '  "punti_forza": ["<punto 1>", "<punto 2>", "<punto 3>"],\n'
+        '  "aree_miglioramento": ["<suggerimento concreto 1>", "<suggerimento 2>", "<suggerimento 3>"],\n'
+        '  "keyword_mancanti": ["<keyword 1>", "<keyword 2>", "<keyword 3>", "<keyword 4>", "<keyword 5>"],\n'
+        '  "tono_prevalente": "<3-5 aggettivi che descrivono lo stile di scrittura del profilo>",\n'
+        '  "settore": "<settore professionale principale in 3-5 parole>",\n'
+        '  "bio_breve": "<2-3 frasi in prima persona per presentarsi, usabili come bio nei post>"\n'
+        "}"
+    )
+
+    payload = {
+        "model":      CLAUDE_MODEL,
+        "max_tokens": 1500,
+        "messages":   [{"role": "user", "content": clean_text(prompt)}],
+    }
+    try:
+        risposta = _chiama_api("analizza_profilo_personale", payload)
+        testo = risposta.content[0].text.strip()
+        if testo.startswith("```"):
+            testo = testo.split("```")[1]
+            if testo.startswith("json"):
+                testo = testo[4:]
+        return json.loads(testo)
+    except Exception as e:
+        logger.error("[AI] analizza_profilo_personale fallita: %s", e)
+        raise
