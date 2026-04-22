@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crea account — Huntly</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}?v={{ static_version }}">
+    <style>
+        body { display:flex;align-items:center;justify-content:center;min-height:100vh;background:var(--grigio-bg);padding:2rem 1rem; }
+        .login-box { background:#fff;border-radius:var(--radius);box-shadow:var(--shadow-lg);padding:2.5rem 2rem;width:100%;max-width:440px; }
+        .login-logo { display:flex;align-items:center;gap:.875rem;margin-bottom:2rem;justify-content:center; }
+        .login-logo-icon { width:46px;height:46px;background:var(--azzurro);border-radius:10px;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:1.4rem;color:#fff; }
+        .login-logo-text .logo-title { display:block;font-weight:700;font-size:1.15rem;color:var(--blu-scuro); }
+        .login-logo-text .logo-sub   { display:block;font-size:.75rem;color:var(--grigio-testo); }
+        .login-title { font-size:1.25rem;font-weight:700;color:var(--blu-scuro);margin-bottom:.25rem;text-align:center; }
+        .login-sub   { font-size:.875rem;color:var(--grigio-testo);text-align:center;margin-bottom:1.75rem; }
+        .login-footer { text-align:center;margin-top:1.25rem;font-size:.85rem;color:var(--grigio-testo); }
+        .login-footer a { color:var(--azzurro);text-decoration:none;font-weight:500; }
+        .form-row-half { display:grid;grid-template-columns:1fr 1fr;gap:.75rem; }
+    </style>
+</head>
+<body>
+    <div class="login-box">
+        <div class="login-logo">
+            <div class="login-logo-icon">H</div>
+            <div class="login-logo-text">
+                <span class="logo-title">Huntly</span>
+                <span class="logo-sub">Recruiting AI</span>
+            </div>
+        </div>
+
+        <h1 class="login-title">Crea account gratuito</h1>
+        <p class="login-sub">Inizia a usare Huntly in 30 secondi</p>
+
+        {% if errore %}
+        <div class="alert alert-errore" style="margin-bottom:1rem;">{{ errore }}</div>
+        {% endif %}
+
+        <form method="POST">
+            <div class="form-group" style="margin-bottom:1rem;">
+                <label class="form-label" for="nome">Nome completo</label>
+                <input type="text" id="nome" name="nome" class="form-input"
+                       placeholder="Mario Rossi" autofocus autocomplete="name"
+                       value="{{ request.form.get('nome', '') }}">
+            </div>
+
+            <div class="form-group" style="margin-bottom:1rem;">
+                <label class="form-label" for="nome_azienda">Nome azienda / organizzazione</label>
+                <input type="text" id="nome_azienda" name="nome_azienda" class="form-input"
+                       placeholder="Acme Recruiting Srl"
+                       value="{{ request.form.get('nome_azienda', '') }}">
+            </div>
+
+            <div class="form-group" style="margin-bottom:1rem;">
+                <label class="form-label" for="email">Email</label>
+                <input type="email" id="email" name="email" class="form-input"
+                       placeholder="mario@azienda.it" autocomplete="email"
+                       value="{{ request.form.get('email', '') }}">
+            </div>
+
+            <div class="form-row-half" style="margin-bottom:1.5rem;">
+                <div class="form-group" style="margin-bottom:0;">
+                    <label class="form-label" for="password">Password</label>
+                    <input type="password" id="password" name="password" class="form-input"
+                           placeholder="Min. 8 caratteri" autocomplete="new-password">
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                    <label class="form-label" for="password2">Conferma</label>
+                    <input type="password" id="password2" name="password2" class="form-input"
+                           placeholder="Ripeti password" autocomplete="new-password">
+                </div>
+            </div>
+
+            <button type="submit" class="btn btn-primary btn-lg" style="width:100%;justify-content:center;">
+                Crea account gratuito
+            </button>
+        </form>
+
+        <div class="login-footer">
+            Hai già un account? <a href="{{ url_for('auth.login') }}">Accedi</a>
+        </div>
+    </div>
+</body>
+</html>

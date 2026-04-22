@@ -9,6 +9,7 @@ from datetime import datetime
 from flask import Blueprint, render_template, jsonify, Response
 
 from database import get_db
+from routes.auth import get_org_id
 
 dashboard_bp = Blueprint("dashboard", __name__)
 
@@ -30,34 +31,37 @@ GESTORI = ["Admin", "Recruiter", "Non assegnato"]
 # ─────────────────────────────────────────────
 
 def _get_stats():
+    org_id = get_org_id()
     db = get_db()
 
-    totale = db.execute("SELECT COUNT(*) AS n FROM candidati").fetchone()["n"] or 0
+    totale = db.execute("SELECT COUNT(*) AS n FROM candidati WHERE organizzazione_id = ?", (org_id,)).fetchone()["n"] or 0
 
     per_stato = {}
     for s in STATI:
-        row = db.execute("SELECT COUNT(*) AS n FROM candidati WHERE stato=?", (s,)).fetchone()
+        row = db.execute("SELECT COUNT(*) AS n FROM candidati WHERE stato=? AND organizzazione_id=?", (s, org_id)).fetchone()
         per_stato[s] = row["n"] if row else 0
 
     per_profilo = {}
     for p in ["A", "B"]:
-        row = db.execute("SELECT COUNT(*) AS n FROM candidati WHERE tipo_profilo=?", (p,)).fetchone()
+        row = db.execute("SELECT COUNT(*) AS n FROM candidati WHERE tipo_profilo=? AND organizzazione_id=?", (p, org_id)).fetchone()
         per_profilo[p] = row["n"] if row else 0
 
     per_gestore = {}
     for g in GESTORI:
-        row = db.execute("SELECT COUNT(*) AS n FROM candidati WHERE gestore=?", (g,)).fetchone()
+        row = db.execute("SELECT COUNT(*) AS n FROM candidati WHERE gestore=? AND organizzazione_id=?", (g, org_id)).fetchone()
         per_gestore[g] = row["n"] if row else 0
 
     avg_row = db.execute(
-        "SELECT ROUND(AVG(punteggio::numeric), 1) AS avg FROM candidati WHERE punteggio IS NOT NULL"
+        "SELECT ROUND(AVG(punteggio::numeric), 1) AS avg FROM candidati WHERE punteggio IS NOT NULL AND organizzazione_id = ?",
+        (org_id,)
     ).fetchone()
     punteggio_medio = float(avg_row["avg"]) if avg_row and avg_row["avg"] else None
 
     ultimi = [dict(r) for r in db.execute(
         """SELECT id, nome, cognome, ruolo_attuale, stato, punteggio,
                   tipo_profilo, gestore, data_inserimento
-           FROM candidati ORDER BY data_inserimento DESC LIMIT 5"""
+           FROM candidati WHERE organizzazione_id = ? ORDER BY data_inserimento DESC LIMIT 5""",
+        (org_id,)
     ).fetchall()]
 
     prossimi = [dict(r) for r in db.execute(
@@ -66,14 +70,17 @@ def _get_stats():
            FROM appuntamenti a
            LEFT JOIN candidati c ON a.candidato_id = c.id
            WHERE a.stato = 'Da fare' AND a.data_ora >= CURRENT_TIMESTAMP
-           ORDER BY a.data_ora ASC LIMIT 3"""
+             AND a.organizzazione_id = ?
+           ORDER BY a.data_ora ASC LIMIT 3""",
+        (org_id,)
     ).fetchall()]
 
     ultime_ricerche = []
     for r in db.execute(
         """SELECT id, tipo_profilo, parametri, profili_trovati,
                   profili_importati, stato, data_ricerca
-           FROM ricerche_automatiche ORDER BY data_ricerca DESC LIMIT 3"""
+           FROM ricerche_automatiche WHERE organizzazione_id = ? ORDER BY data_ricerca DESC LIMIT 3""",
+        (org_id,)
     ).fetchall():
         row = dict(r)
         try:
@@ -82,7 +89,7 @@ def _get_stats():
             row["parametri"] = {}
         ultime_ricerche.append(row)
 
-    tot_ricerche = db.execute("SELECT COUNT(*) AS n FROM ricerche_automatiche").fetchone()["n"] or 0
+    tot_ricerche = db.execute("SELECT COUNT(*) AS n FROM ricerche_automatiche WHERE organizzazione_id = ?", (org_id,)).fetchone()["n"] or 0
 
     db.close()
 
@@ -121,14 +128,15 @@ def candidati_per_stato(stato):
     if stato not in STATI:
         return jsonify({"errore": "Stato non valido"}), 400
 
+    org_id = get_org_id()
     db = get_db()
     rows = db.execute(
         """SELECT id, nome, cognome, ruolo_attuale, azienda,
                   tipo_profilo, punteggio, gestore, data_inserimento
            FROM candidati
-           WHERE stato = ?
+           WHERE stato = ? AND organizzazione_id = ?
            ORDER BY punteggio DESC NULLS LAST, data_inserimento DESC""",
-        (stato,),
+        (stato, org_id),
     ).fetchall()
     db.close()
 
@@ -155,19 +163,22 @@ def report_pdf():
     except ImportError:
         return jsonify({"errore": "ReportLab non installato. Aggiungi 'reportlab' a requirements.txt."}), 500
 
+    org_id = get_org_id()
     db = get_db()
 
     # ── Dati ──────────────────────────────────────────────────────────────────
     tutti_candidati = [dict(r) for r in db.execute(
         """SELECT nome, cognome, ruolo_attuale, tipo_profilo, punteggio,
                   stato, gestore, data_inserimento, data_aggiornamento
-           FROM candidati ORDER BY stato, punteggio DESC NULLS LAST"""
+           FROM candidati WHERE organizzazione_id = ? ORDER BY stato, punteggio DESC NULLS LAST""",
+        (org_id,)
     ).fetchall()]
 
     tutte_ricerche = [dict(r) for r in db.execute(
         """SELECT tipo_profilo, parametri, profili_trovati, profili_importati,
                   stato, data_ricerca
-           FROM ricerche_automatiche ORDER BY data_ricerca DESC"""
+           FROM ricerche_automatiche WHERE organizzazione_id = ? ORDER BY data_ricerca DESC""",
+        (org_id,)
     ).fetchall()]
 
     db.close()

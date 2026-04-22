@@ -52,8 +52,16 @@ _STATIC_VERSION = str(int(time.time()))
 
 @app.context_processor
 def inject_static_version():
-    """Inietta static_version in tutti i template per evitare cache browser sui file statici."""
-    return {"static_version": _STATIC_VERSION}
+    """Inietta static_version e utente corrente in tutti i template."""
+    from flask import session as _session
+    return {
+        "static_version": _STATIC_VERSION,
+        "current_user": {
+            "nome":             _session.get("nome", ""),
+            "email":            _session.get("username", ""),
+            "organizzazione_id": _session.get("organizzazione_id"),
+        },
+    }
 
 
 @app.after_request

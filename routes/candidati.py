@@ -7,6 +7,7 @@ import json
 from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
 from database import get_db
 from dedup import is_duplicate
+from routes.auth import get_org_id
 from datetime import datetime
 
 # Blueprint per il modulo inserimento candidati
@@ -68,20 +69,22 @@ def inserisci():
 
     db = get_db()
 
+    org_id = get_org_id()
+
     # Registra la ricerca manuale nella cronologia
     ricerca_cur = db.execute(
         """INSERT INTO ricerche_automatiche
-           (tipo_profilo, parametri, profili_trovati, profili_importati, fonte, stato)
-           VALUES (?, ?, 1, 1, 'manuale', 'completata')""",
-        (tipo_profilo, parametri_str)
+           (tipo_profilo, parametri, profili_trovati, profili_importati, fonte, stato, organizzazione_id)
+           VALUES (?, ?, 1, 1, 'manuale', 'completata', ?)""",
+        (tipo_profilo, parametri_str, org_id)
     )
     ricerca_id = ricerca_cur.lastrowid
 
     cur = db.execute(
         """INSERT INTO candidati
-           (nome, cognome, ruolo_attuale, azienda, anni_esperienza, note, tipo_profilo, ricerca_id, gestore, profilo_linkedin)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (nome, cognome, ruolo_attuale, azienda, anni_esperienza, note, tipo_profilo, ricerca_id, gestore_default, profilo_linkedin or None),
+           (nome, cognome, ruolo_attuale, azienda, anni_esperienza, note, tipo_profilo, ricerca_id, gestore, profilo_linkedin, organizzazione_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (nome, cognome, ruolo_attuale, azienda, anni_esperienza, note, tipo_profilo, ricerca_id, gestore_default, profilo_linkedin or None, org_id),
     )
     db.commit()
     nuovo_id = cur.lastrowid
@@ -135,11 +138,12 @@ def da_cronologia():
             "SELECT * FROM valutazioni WHERE id = ?", (valutazione_id,)
         ).fetchone()
 
+    org_id = get_org_id()
     cur = db.execute(
         """INSERT INTO candidati
            (nome, cognome, ruolo_attuale, azienda, anni_esperienza, note, tipo_profilo,
-            punteggio, analisi, spunti, messaggio_outreach, gestore)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            punteggio, analisi, spunti, messaggio_outreach, gestore, organizzazione_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             nome, cognome, ruolo_attuale, azienda, anni_esperienza, note, tipo_profilo,
             val["punteggio"] if val else None,
@@ -147,6 +151,7 @@ def da_cronologia():
             val["spunti"] if val else None,
             val["messaggio_outreach"] if val else None,
             gestore_default,
+            org_id,
         ),
     )
     db.commit()

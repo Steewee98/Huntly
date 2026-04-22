@@ -395,6 +395,51 @@ def init_db():
 )""",
         "CREATE INDEX IF NOT EXISTS idx_profili_scartati_linkedin ON profili_scartati(linkedin_url) WHERE linkedin_url IS NOT NULL AND linkedin_url <> ''",
 
+        # ── Tabella organizzazioni (multi-tenant) ─────────────────────────
+        """CREATE TABLE IF NOT EXISTS organizzazioni (
+    id        SERIAL PRIMARY KEY,
+    nome      VARCHAR(100) NOT NULL,
+    slug      VARCHAR(50) UNIQUE NOT NULL,
+    piano     VARCHAR(20) DEFAULT 'free',
+    creato_il TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)""",
+        # Organizzazione default per dati legacy
+        """INSERT INTO organizzazioni (nome, slug, piano)
+           VALUES ('Default', 'default', 'pro')
+           ON CONFLICT (slug) DO NOTHING""",
+
+        # ── Tabella utenti ────────────────────────────────────────────────
+        """CREATE TABLE IF NOT EXISTS utenti (
+    id                  SERIAL PRIMARY KEY,
+    organizzazione_id   INTEGER REFERENCES organizzazioni(id),
+    email               VARCHAR(120) UNIQUE NOT NULL,
+    password_hash       TEXT NOT NULL,
+    nome                VARCHAR(100),
+    ruolo               VARCHAR(20) DEFAULT 'admin',
+    attivo              BOOLEAN DEFAULT TRUE,
+    creato_il           TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)""",
+
+        # ── organizzazione_id su tutte le tabelle principali ──────────────
+        "ALTER TABLE candidati           ADD COLUMN IF NOT EXISTS organizzazione_id INTEGER",
+        "ALTER TABLE profili_voce        ADD COLUMN IF NOT EXISTS organizzazione_id INTEGER",
+        "ALTER TABLE ricerche_automatiche ADD COLUMN IF NOT EXISTS organizzazione_id INTEGER",
+        "ALTER TABLE analisi_profilo     ADD COLUMN IF NOT EXISTS organizzazione_id INTEGER",
+        "ALTER TABLE valutazioni         ADD COLUMN IF NOT EXISTS organizzazione_id INTEGER",
+        "ALTER TABLE appuntamenti        ADD COLUMN IF NOT EXISTS organizzazione_id INTEGER",
+        "ALTER TABLE contenuti_linkedin  ADD COLUMN IF NOT EXISTS organizzazione_id INTEGER",
+        "ALTER TABLE impostazioni_profilo ADD COLUMN IF NOT EXISTS organizzazione_id INTEGER",
+
+        # Migra dati legacy all'organizzazione default (id=1)
+        "UPDATE candidati            SET organizzazione_id = 1 WHERE organizzazione_id IS NULL",
+        "UPDATE profili_voce         SET organizzazione_id = 1 WHERE organizzazione_id IS NULL",
+        "UPDATE ricerche_automatiche SET organizzazione_id = 1 WHERE organizzazione_id IS NULL",
+        "UPDATE analisi_profilo      SET organizzazione_id = 1 WHERE organizzazione_id IS NULL",
+        "UPDATE valutazioni          SET organizzazione_id = 1 WHERE organizzazione_id IS NULL",
+        "UPDATE appuntamenti         SET organizzazione_id = 1 WHERE organizzazione_id IS NULL",
+        "UPDATE contenuti_linkedin   SET organizzazione_id = 1 WHERE organizzazione_id IS NULL",
+        "UPDATE impostazioni_profilo SET organizzazione_id = 1 WHERE organizzazione_id IS NULL",
+
         # ── Tabella profili target configurabili ───────────────────────────
         """CREATE TABLE IF NOT EXISTS profili_target (
     id                    SERIAL PRIMARY KEY,
@@ -411,6 +456,8 @@ def init_db():
     attivo                BOOLEAN DEFAULT TRUE,
     creato_il             TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )""",
+        "ALTER TABLE profili_target ADD COLUMN IF NOT EXISTS organizzazione_id INTEGER",
+        "UPDATE profili_target SET organizzazione_id = 1 WHERE organizzazione_id IS NULL",
         # Seed: 2 profili generici se la tabella è vuota
         """INSERT INTO profili_target (nome, descrizione, ruoli_target, settori, eta_min, eta_max, anni_esperienza_min, keyword_positive, colore)
 SELECT 'Profilo Senior', 'Figure manageriali con almeno 10 anni di esperienza', '', '', 40, 65, 10, '', '#6366f1'

@@ -39,7 +39,7 @@ def _normalize_linkedin(url: str) -> str:
 # Funzione pubblica
 # ─────────────────────────────────────────────
 
-def is_duplicate(db, profilo: dict) -> tuple:
+def is_duplicate(db, profilo: dict, org_id=None) -> tuple:
     """
     Verifica se il profilo esiste già nella tabella candidati O è stato scartato.
 
@@ -63,6 +63,10 @@ def is_duplicate(db, profilo: dict) -> tuple:
         profilo.get("ruolo") or profilo.get("ruolo_attuale") or
         profilo.get("headline") or ""
     ).strip().lower()
+
+    # Filtro organizzazione per le query sui candidati
+    _org_filter = " AND organizzazione_id = ?" if org_id else ""
+    _org_val    = (org_id,) if org_id else ()
 
     # ── 0. Blacklist profili scartati ─────────────────────────────────────────
     if linkedin:
@@ -91,6 +95,8 @@ def is_duplicate(db, profilo: dict) -> tuple:
         rows = db.execute(
             "SELECT id, profilo_linkedin FROM candidati "
             "WHERE profilo_linkedin IS NOT NULL AND profilo_linkedin <> ''"
+            + _org_filter,
+            _org_val,
         ).fetchall()
         for row in rows:
             if _normalize_linkedin(row["profilo_linkedin"]) == linkedin_norm:
@@ -101,8 +107,8 @@ def is_duplicate(db, profilo: dict) -> tuple:
         row = db.execute(
             "SELECT id FROM candidati "
             "WHERE LOWER(TRIM(nome))=? AND LOWER(TRIM(cognome))=? "
-            "AND LOWER(TRIM(azienda))=?",
-            (nome, cognome, azienda),
+            "AND LOWER(TRIM(azienda))=?" + _org_filter,
+            (nome, cognome, azienda) + _org_val,
         ).fetchone()
         if row:
             return True, f"Nome+azienda già presenti ({nome} {cognome} @ {azienda})", row["id"]
@@ -112,8 +118,8 @@ def is_duplicate(db, profilo: dict) -> tuple:
         row = db.execute(
             "SELECT id FROM candidati "
             "WHERE LOWER(TRIM(nome))=? AND LOWER(TRIM(cognome))=? "
-            "AND LOWER(TRIM(ruolo_attuale))=?",
-            (nome, cognome, ruolo),
+            "AND LOWER(TRIM(ruolo_attuale))=?" + _org_filter,
+            (nome, cognome, ruolo) + _org_val,
         ).fetchone()
         if row:
             return True, f"Nome+ruolo già presenti ({nome} {cognome} — {ruolo})", row["id"]

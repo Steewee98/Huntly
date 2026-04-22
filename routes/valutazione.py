@@ -12,6 +12,7 @@ import requests
 from flask import Blueprint, render_template, request, jsonify, redirect, url_for, Response
 from ai_helpers import analizza_profilo_linkedin, rigenera_messaggio_outreach, analizza_profilo_linkedin_stream
 from database import get_db
+from routes.auth import get_org_id
 
 APIFY_BASE  = "https://api.apify.com/v2"
 APIFY_CERCA_NOME = "harvestapi~linkedin-profile-search-by-name"
@@ -46,6 +47,7 @@ def analizza():
     # Anteprima: prime 120 caratteri del testo profilo
     anteprima = testo_profilo[:120].replace("\n", " ").strip()
 
+    org_id = get_org_id()
     db = get_db()
 
     # Dati estratti da Claude — forzati al tipo corretto per PostgreSQL
@@ -72,8 +74,8 @@ def analizza():
     db.execute(
         """INSERT INTO valutazioni
            (nome_contatto, ruolo_attuale, azienda, anni_esperienza,
-            tipo_profilo, anteprima_testo, punteggio, analisi, spunti, messaggio_outreach, candidato_id, fonte)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            tipo_profilo, anteprima_testo, punteggio, analisi, spunti, messaggio_outreach, candidato_id, fonte, organizzazione_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             nome_contatto, ruolo_attuale, azienda, anni_esperienza,
             tipo_profilo, anteprima,
@@ -83,6 +85,7 @@ def analizza():
             risultato["messaggio_outreach"],
             candidato_id or None,
             'manuale',
+            org_id,
         ),
     )
 
@@ -97,7 +100,7 @@ def analizza():
                profilo_linkedin = ?,
                tipo_profilo = ?,
                data_aggiornamento = CURRENT_TIMESTAMP
-               WHERE id = ?""",
+               WHERE id = ? AND organizzazione_id = ?""",
             (
                 risultato["punteggio"],
                 risultato["analisi_percorso"],
@@ -106,6 +109,7 @@ def analizza():
                 testo_profilo,
                 tipo_profilo,
                 candidato_id,
+                org_id,
             ),
         )
 
@@ -185,10 +189,11 @@ def analizza_stream():
                     ev = json.loads(chunk[chunk.index('data:') + 5:].strip())
                     if ev.get("type") == "_proxycurl_data" and candidato_id:
                         dati_prx_json = json.dumps(ev["dati"], ensure_ascii=False)
+                        _org_id = get_org_id()
                         db2 = get_db()
                         db2.execute(
-                            "UPDATE candidati SET dati_proxycurl=? WHERE id=?",
-                            (dati_prx_json, candidato_id),
+                            "UPDATE candidati SET dati_proxycurl=? WHERE id=? AND organizzazione_id=?",
+                            (dati_prx_json, candidato_id, _org_id),
                         )
                         db2.commit()
                         db2.close()
@@ -253,10 +258,14 @@ def salva_analisi():
     else:
         dati_arricchiti_json = None
 
+    org_id = get_org_id()
     db = get_db()
 
     if not nome_contatto and candidato_id:
-        row = db.execute("SELECT nome, cognome FROM candidati WHERE id = ?", (candidato_id,)).fetchone()
+        row = db.execute(
+            "SELECT nome, cognome FROM candidati WHERE id = ? AND organizzazione_id = ?",
+            (candidato_id, org_id)
+        ).fetchone()
         if row:
             nome_contatto = f"{row['nome']} {row['cognome']}"
 
@@ -264,8 +273,8 @@ def salva_analisi():
         """INSERT INTO valutazioni
            (nome_contatto, ruolo_attuale, azienda, anni_esperienza,
             tipo_profilo, anteprima_testo, punteggio, analisi, spunti, messaggio_outreach,
-            candidato_id, fonte, dati_arricchiti)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            candidato_id, fonte, dati_arricchiti, organizzazione_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (nome_contatto, ruolo_attuale, azienda, anni_esperienza,
          tipo_profilo, anteprima,
          risultato.get("punteggio"),
@@ -274,7 +283,8 @@ def salva_analisi():
          risultato.get("messaggio_outreach"),
          candidato_id or None,
          "manuale",
-         dati_arricchiti_json),
+         dati_arricchiti_json,
+         org_id),
     )
 
     # Fallback: se candidato_id è null, prova a trovare il candidato tramite URL LinkedIn
@@ -283,8 +293,8 @@ def salva_analisi():
         if m_url:
             linkedin_url = m_url.group(0)
             row_cand = db.execute(
-                "SELECT id FROM candidati WHERE profilo_linkedin LIKE ?",
-                (f"%{linkedin_url}%",),
+                "SELECT id FROM candidati WHERE profilo_linkedin LIKE ? AND organizzazione_id = ?",
+                (f"%{linkedin_url}%", org_id),
             ).fetchone()
             if row_cand:
                 candidato_id = row_cand["id"]
@@ -297,10 +307,10 @@ def salva_analisi():
                dati_proxycurl=COALESCE(?, dati_proxycurl),
                dati_arricchiti=COALESCE(?, dati_arricchiti),
                data_aggiornamento=CURRENT_TIMESTAMP
-               WHERE id=?""",
+               WHERE id=? AND organizzazione_id=?""",
             (risultato.get("punteggio"), risultato.get("analisi_percorso"),
              spunti_json, risultato.get("messaggio_outreach"),
-             tipo_profilo, dati_prx_json, dati_arricchiti_json, candidato_id),
+             tipo_profilo, dati_prx_json, dati_arricchiti_json, candidato_id, org_id),
         )
 
     db.commit()
@@ -424,9 +434,11 @@ def poll_run(run_id):
 @valutazione_bp.route("/valutazione/export_csv")
 def export_csv():
     """Esporta la cronologia valutazioni in formato CSV."""
+    org_id = get_org_id()
     db = get_db()
     rows = db.execute(
-        "SELECT * FROM valutazioni ORDER BY data_valutazione DESC"
+        "SELECT * FROM valutazioni WHERE organizzazione_id = ? ORDER BY data_valutazione DESC",
+        (org_id,)
     ).fetchall()
     db.close()
 

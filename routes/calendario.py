@@ -4,6 +4,7 @@ Modulo Calendario — Gestione appuntamenti con i candidati.
 from datetime import datetime, timedelta
 from flask import Blueprint, render_template, request, jsonify, redirect, url_for
 from database import get_db
+from routes.auth import get_org_id
 
 calendario_bp = Blueprint('calendario', __name__)
 
@@ -39,11 +40,12 @@ def nuovo():
     except ValueError:
         data_ora_db = data_ora
 
+    org_id = get_org_id()
     db = get_db()
     cur = db.execute(
-        """INSERT INTO appuntamenti (candidato_id, gestore, tipo, data_ora, note, stato)
-           VALUES (?, ?, ?, ?, ?, ?)""",
-        (candidato_id, gestore, tipo, data_ora_db, note, stato)
+        """INSERT INTO appuntamenti (candidato_id, gestore, tipo, data_ora, note, stato, organizzazione_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?)""",
+        (candidato_id, gestore, tipo, data_ora_db, note, stato, org_id)
     )
     db.commit()
     nuovo_id = cur.lastrowid
@@ -68,12 +70,13 @@ def aggiorna(app_id):
     except ValueError:
         data_ora_db = data_ora
 
+    org_id = get_org_id()
     db = get_db()
     db.execute(
         """UPDATE appuntamenti
            SET candidato_id=?, gestore=?, tipo=?, data_ora=?, note=?, stato=?
-           WHERE id=?""",
-        (candidato_id, gestore, tipo, data_ora_db, note, stato, app_id)
+           WHERE id=? AND organizzazione_id=?""",
+        (candidato_id, gestore, tipo, data_ora_db, note, stato, app_id, org_id)
     )
     db.commit()
     db.close()
@@ -82,8 +85,9 @@ def aggiorna(app_id):
 
 @calendario_bp.route('/calendario/elimina/<int:app_id>', methods=['DELETE'])
 def elimina(app_id):
+    org_id = get_org_id()
     db = get_db()
-    db.execute("DELETE FROM appuntamenti WHERE id = ?", (app_id,))
+    db.execute("DELETE FROM appuntamenti WHERE id = ? AND organizzazione_id = ?", (app_id, org_id))
     db.commit()
     db.close()
     return jsonify({'successo': True})
@@ -92,6 +96,7 @@ def elimina(app_id):
 @calendario_bp.route('/calendario/prossimi')
 def prossimi():
     """Appuntamenti nelle prossime 24 ore — usato per il banner promemoria."""
+    org_id = get_org_id()
     db = get_db()
     now = datetime.now()
     domani = now + timedelta(hours=24)
@@ -104,8 +109,9 @@ def prossimi():
            WHERE a.stato = 'Da fare'
              AND a.data_ora >= ?
              AND a.data_ora <= ?
+             AND a.organizzazione_id = ?
            ORDER BY a.data_ora ASC""",
-        (now.strftime('%Y-%m-%d %H:%M:%S'), domani.strftime('%Y-%m-%d %H:%M:%S'))
+        (now.strftime('%Y-%m-%d %H:%M:%S'), domani.strftime('%Y-%m-%d %H:%M:%S'), org_id)
     ).fetchall()
     db.close()
 

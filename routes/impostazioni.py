@@ -5,6 +5,7 @@ I parametri vengono salvati nel DB e letti da ai_helpers.py durante l'analisi.
 
 from flask import Blueprint, render_template, request, jsonify
 from database import get_db
+from routes.auth import get_org_id
 import logging
 
 log = logging.getLogger(__name__)
@@ -25,9 +26,10 @@ def get_impostazioni(profilo):
 @impostazioni_bp.route("/impostazioni")
 def index():
     """Pagina impostazioni profili."""
+    org_id = get_org_id()
     db = get_db()
-    imp_a    = db.execute("SELECT * FROM impostazioni_profilo WHERE profilo = 'A'").fetchone()
-    imp_b    = db.execute("SELECT * FROM impostazioni_profilo WHERE profilo = 'B'").fetchone()
+    imp_a    = db.execute("SELECT * FROM impostazioni_profilo WHERE profilo = 'A' AND organizzazione_id = ?", (org_id,)).fetchone()
+    imp_b    = db.execute("SELECT * FROM impostazioni_profilo WHERE profilo = 'B' AND organizzazione_id = ?", (org_id,)).fetchone()
     scartati = db.execute(
         "SELECT * FROM profili_scartati ORDER BY data_scarto DESC"
     ).fetchall()
@@ -73,9 +75,10 @@ def salva():
     for c in campi_txt:
         vals[c] = str(dati.get(c, "") or "").strip()
 
+    org_id = get_org_id()
     db = get_db()
     esistente = db.execute(
-        "SELECT id FROM impostazioni_profilo WHERE profilo = ?", (profilo,)
+        "SELECT id FROM impostazioni_profilo WHERE profilo = ? AND organizzazione_id = ?", (profilo, org_id)
     ).fetchone()
 
     if esistente:
@@ -87,12 +90,12 @@ def salva():
                peso_eta=?, peso_esperienza=?, peso_settore=?,
                peso_ruolo=?, peso_keyword=?,
                data_aggiornamento=CURRENT_TIMESTAMP
-               WHERE profilo=?""",
+               WHERE profilo=? AND organizzazione_id=?""",
             (vals["eta_min"], vals["eta_max"], vals["anni_esperienza_min"],
              vals["settori"], vals["istituti"], vals["ruoli_target"],
              vals["keyword_positive"], vals["keyword_negative"],
              vals["peso_eta"], vals["peso_esperienza"], vals["peso_settore"],
-             vals["peso_ruolo"], vals["peso_keyword"], profilo)
+             vals["peso_ruolo"], vals["peso_keyword"], profilo, org_id)
         )
     else:
         db.execute(
@@ -101,13 +104,13 @@ def salva():
                 settori, istituti, ruoli_target,
                 keyword_positive, keyword_negative,
                 peso_eta, peso_esperienza, peso_settore,
-                peso_ruolo, peso_keyword)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                peso_ruolo, peso_keyword, organizzazione_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (profilo, vals["eta_min"], vals["eta_max"], vals["anni_esperienza_min"],
              vals["settori"], vals["istituti"], vals["ruoli_target"],
              vals["keyword_positive"], vals["keyword_negative"],
              vals["peso_eta"], vals["peso_esperienza"], vals["peso_settore"],
-             vals["peso_ruolo"], vals["peso_keyword"])
+             vals["peso_ruolo"], vals["peso_keyword"], org_id)
         )
 
     db.commit()

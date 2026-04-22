@@ -10,6 +10,7 @@ import requests
 from flask import Blueprint, render_template, request, jsonify
 from database import get_db
 from ai_helpers import genera_contenuti_linkedin, genera_prompt_immagine, analizza_profilo_voce
+from routes.auth import get_org_id
 
 # Blueprint per il modulo contenuti
 contenuti_bp = Blueprint("contenuti", __name__)
@@ -18,12 +19,15 @@ contenuti_bp = Blueprint("contenuti", __name__)
 @contenuti_bp.route("/contenuti")
 def index():
     """Pagina principale del modulo creazione contenuti."""
+    org_id = get_org_id()
     db = get_db()
     storico = db.execute(
-        "SELECT * FROM contenuti_linkedin ORDER BY data_creazione DESC LIMIT 10"
+        "SELECT * FROM contenuti_linkedin WHERE organizzazione_id = ? ORDER BY data_creazione DESC LIMIT 10",
+        (org_id,)
     ).fetchall()
     profili_voce = db.execute(
-        "SELECT * FROM profili_voce ORDER BY creato_il DESC"
+        "SELECT * FROM profili_voce WHERE organizzazione_id = ? ORDER BY creato_il DESC",
+        (org_id,)
     ).fetchall()
     db.close()
     return render_template(
@@ -59,16 +63,18 @@ def analizza_profilo():
             import logging
             logging.getLogger(__name__).warning("analizza_profilo_voce failed: %s", e)
 
+    org_id = get_org_id()
     db = get_db()
     cur = db.execute(
-        """INSERT INTO profili_voce (nome, linkedin_url, settore, tono_prevalente, bio_breve)
-           VALUES (?, ?, ?, ?, ?)""",
+        """INSERT INTO profili_voce (nome, linkedin_url, settore, tono_prevalente, bio_breve, organizzazione_id)
+           VALUES (?, ?, ?, ?, ?, ?)""",
         (
             nome,
             linkedin_url,
             analisi.get("settore", ""),
             analisi.get("tono_prevalente", ""),
             analisi.get("bio_breve", ""),
+            org_id,
         ),
     )
     db.commit()
@@ -81,8 +87,9 @@ def analizza_profilo():
 
 @contenuti_bp.route("/contenuti/profilo/<int:pid>", methods=["DELETE"])
 def elimina_profilo(pid):
+    org_id = get_org_id()
     db = get_db()
-    db.execute("DELETE FROM profili_voce WHERE id = ?", (pid,))
+    db.execute("DELETE FROM profili_voce WHERE id = ? AND organizzazione_id = ?", (pid, org_id))
     db.commit()
     db.close()
     return jsonify({"ok": True})
@@ -101,10 +108,14 @@ def genera():
         return jsonify({"errore": "Inserire il tema del post"}), 400
 
     # Carica il profilo voce se specificato
+    org_id = get_org_id()
     profilo_voce = {}
     if profilo_voce_id:
         db = get_db()
-        row = db.execute("SELECT * FROM profili_voce WHERE id = ?", (profilo_voce_id,)).fetchone()
+        row = db.execute(
+            "SELECT * FROM profili_voce WHERE id = ? AND organizzazione_id = ?",
+            (profilo_voce_id, org_id)
+        ).fetchone()
         db.close()
         if row:
             profilo_voce = dict(row)
@@ -117,8 +128,8 @@ def genera():
     db.execute(
         """INSERT INTO contenuti_linkedin
            (tema, tono, profilo_destinazione, variante_1, variante_2, variante_3,
-            obiettivo, contesto, profilo_voce_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            obiettivo, contesto, profilo_voce_id, organizzazione_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             tema,
             obiettivo,
@@ -129,6 +140,7 @@ def genera():
             obiettivo,
             contesto,
             profilo_voce_id,
+            org_id,
         ),
     )
     db.commit()

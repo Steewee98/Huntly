@@ -9,6 +9,7 @@ import logging
 from flask import Blueprint, render_template, request, jsonify
 from database import get_db
 from ai_helpers import analizza_profilo_personale
+from routes.auth import get_org_id
 
 log = logging.getLogger(__name__)
 
@@ -111,9 +112,11 @@ def _estrai_testo_profilo_completo(dati_prx: dict) -> str:
 @profilo_personale_bp.route("/profilo-personale")
 def index():
     """Pagina analisi profilo personale."""
+    org_id = get_org_id()
     db = get_db()
     storico = db.execute(
-        "SELECT id, linkedin_url, punteggio, creato_il FROM analisi_profilo ORDER BY creato_il DESC LIMIT 5"
+        "SELECT id, linkedin_url, punteggio, creato_il FROM analisi_profilo WHERE organizzazione_id = ? ORDER BY creato_il DESC LIMIT 5",
+        (org_id,)
     ).fetchall()
     db.close()
     return render_template("profilo_personale.html", storico=[dict(r) for r in storico])
@@ -164,13 +167,14 @@ def analizza():
         return jsonify({"errore": f"Errore analisi AI: {str(e)}"}), 500
 
     # Salva in DB
+    org_id = get_org_id()
     db = get_db()
     cur = db.execute(
         """INSERT INTO analisi_profilo
            (linkedin_url, punteggio, headline_attuale, headline_suggerita,
             about_attuale, about_suggerito, punti_forza, aree_miglioramento,
-            keyword_mancanti, dati_raw)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            keyword_mancanti, dati_raw, organizzazione_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             linkedin_url,
             risultato.get("punteggio"),
@@ -182,6 +186,7 @@ def analizza():
             json.dumps(risultato.get("aree_miglioramento", []), ensure_ascii=False),
             json.dumps(risultato.get("keyword_mancanti", []), ensure_ascii=False),
             json.dumps(risultato, ensure_ascii=False),
+            org_id,
         ),
     )
     db.commit()
@@ -209,11 +214,12 @@ def salva_profilo_voce():
     if not nome:
         return jsonify({"errore": "Il nome è obbligatorio."}), 400
 
+    org_id = get_org_id()
     db = get_db()
     cur = db.execute(
-        """INSERT INTO profili_voce (nome, linkedin_url, bio_breve, tono_prevalente, settore)
-           VALUES (?, ?, ?, ?, ?)""",
-        (nome, linkedin_url, bio_breve, tono, settore),
+        """INSERT INTO profili_voce (nome, linkedin_url, bio_breve, tono_prevalente, settore, organizzazione_id)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        (nome, linkedin_url, bio_breve, tono, settore, org_id),
     )
     db.commit()
     profilo_id = cur.lastrowid
@@ -225,8 +231,11 @@ def salva_profilo_voce():
 @profilo_personale_bp.route("/profilo-personale/<int:analisi_id>")
 def dettaglio(analisi_id):
     """Carica un'analisi precedente."""
+    org_id = get_org_id()
     db = get_db()
-    row = db.execute("SELECT * FROM analisi_profilo WHERE id = ?", (analisi_id,)).fetchone()
+    row = db.execute(
+        "SELECT * FROM analisi_profilo WHERE id = ? AND organizzazione_id = ?", (analisi_id, org_id)
+    ).fetchone()
     db.close()
     if not row:
         return jsonify({"errore": "Analisi non trovata"}), 404

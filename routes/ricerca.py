@@ -17,6 +17,7 @@ from flask import Blueprint, render_template, request, jsonify, Response
 from database import get_db
 from ai_helpers import analizza_profilo_linkedin
 from dedup import is_duplicate
+from routes.auth import get_org_id
 from sources.multi_source import cerca_multi_source
 from sources.utils import normalizza_citta as _normalizza_citta, _CITTA_NORMALIZE
 
@@ -493,12 +494,15 @@ def scarta():
 @ricerca_bp.route("/ricerca")
 def index():
     """Pagina di ricerca automatica figure con Apify/LinkedIn."""
+    org_id = get_org_id()
     db = get_db()
     profili_target = db.execute(
-        "SELECT id, nome, descrizione, colore FROM profili_target WHERE attivo = TRUE ORDER BY creato_il"
+        "SELECT id, nome, descrizione, colore FROM profili_target WHERE attivo = TRUE AND organizzazione_id = ? ORDER BY creato_il",
+        (org_id,)
     ).fetchall()
     cronologia = db.execute(
-        "SELECT * FROM ricerche_automatiche ORDER BY data_ricerca DESC"
+        "SELECT * FROM ricerche_automatiche WHERE organizzazione_id = ? ORDER BY data_ricerca DESC",
+        (org_id,)
     ).fetchall()
     db.close()
     cronologia = [dict(r) for r in cronologia]
@@ -526,9 +530,11 @@ def cerca():
         return jsonify({"errore": "Inserisci almeno il ruolo o delle parole chiave"}), 400
 
     # Calcola startPage iniziale: ruota tra pagine 1, 2, 3 per variare i risultati LinkedIn
+    org_id = get_org_id()
     db_cnt = get_db()
     n_precedenti = db_cnt.execute(
-        "SELECT COUNT(*) AS n FROM ricerche_automatiche WHERE fonte='manuale'",
+        "SELECT COUNT(*) AS n FROM ricerche_automatiche WHERE fonte='manuale' AND organizzazione_id = ?",
+        (org_id,)
     ).fetchone()["n"] or 0
     db_cnt.close()
     start_page_iniziale = (n_precedenti % 3) + 1
@@ -613,9 +619,9 @@ def cerca():
     db = get_db()
     cur = db.execute(
         """INSERT INTO ricerche_automatiche
-           (tipo_profilo, parametri, profili_trovati, profili_importati, fonte, stato)
-           VALUES (?, ?, ?, 0, 'manuale', 'completata')""",
-        (tipo_profilo, parametri_str, len(tutti_profili))
+           (tipo_profilo, parametri, profili_trovati, profili_importati, fonte, stato, organizzazione_id)
+           VALUES (?, ?, ?, 0, 'manuale', 'completata', ?)""",
+        (tipo_profilo, parametri_str, len(tutti_profili), org_id)
     )
     ricerca_id = cur.lastrowid
 
@@ -657,7 +663,7 @@ def cerca():
     })
 
 
-def _esegui_ricerca_background(job_id, tipo_profilo, max_profili, imp):
+def _esegui_ricerca_background(job_id, tipo_profilo, max_profili, imp, org_id=1):
     """Thread daemon: esegue la ricerca Apify + analisi AI in background."""
     import logging
     log = logging.getLogger(__name__)
@@ -776,8 +782,8 @@ def _esegui_ricerca_background(job_id, tipo_profilo, max_profili, imp):
                 if tentativo == 1:
                     # Primo tentativo fallito: registra errore e termina
                     db.execute(
-                        "INSERT INTO ricerche_automatiche (tipo_profilo, parametri, profili_trovati, profili_importati, stato) VALUES (?, ?, 0, 0, 'errore')",
-                        (tipo_profilo, parametri_str)
+                        "INSERT INTO ricerche_automatiche (tipo_profilo, parametri, profili_trovati, profili_importati, stato, organizzazione_id) VALUES (?, ?, 0, 0, 'errore', ?)",
+                        (tipo_profilo, parametri_str, org_id)
                     )
                     db.commit()
                     aggiorna(status='errore', step=errore)
@@ -848,8 +854,8 @@ def _esegui_ricerca_background(job_id, tipo_profilo, max_profili, imp):
         aggiorna(step=f'Filtraggio completato. Salvataggio {trovati_filtrati} candidati...', pct=90)
 
         cur_r = db.execute(
-            "INSERT INTO ricerche_automatiche (tipo_profilo, parametri, profili_trovati, fonte, stato) VALUES (?, ?, ?, 'apify', 'in_corso')",
-            (tipo_profilo, parametri_str, trovati_apify)
+            "INSERT INTO ricerche_automatiche (tipo_profilo, parametri, profili_trovati, fonte, stato, organizzazione_id) VALUES (?, ?, ?, 'apify', 'in_corso', ?)",
+            (tipo_profilo, parametri_str, trovati_apify, org_id)
         )
         ricerca_id = cur_r.lastrowid
         db.commit()
@@ -858,8 +864,8 @@ def _esegui_ricerca_background(job_id, tipo_profilo, max_profili, imp):
             testo = _costruisci_testo_profilo(p)
             _gestore = "Admin" if tipo_profilo == "A" else ("Recruiter" if tipo_profilo == "B" else "Non assegnato")
             cur = db.execute(
-                "INSERT INTO candidati (nome, cognome, ruolo_attuale, azienda, profilo_linkedin, tipo_profilo, stato, note, ricerca_id, gestore) VALUES (?, ?, ?, ?, ?, ?, 'Da valutare', ?, ?, ?)",
-                (p["nome"], p["cognome"], p["ruolo"], p["azienda"], p["linkedin"], tipo_profilo, p["headline"], ricerca_id, _gestore)
+                "INSERT INTO candidati (nome, cognome, ruolo_attuale, azienda, profilo_linkedin, tipo_profilo, stato, note, ricerca_id, gestore, organizzazione_id) VALUES (?, ?, ?, ?, ?, ?, 'Da valutare', ?, ?, ?, ?)",
+                (p["nome"], p["cognome"], p["ruolo"], p["azienda"], p["linkedin"], tipo_profilo, p["headline"], ricerca_id, _gestore, org_id)
             )
             db.commit()
             candidato_id = cur.lastrowid
@@ -888,8 +894,8 @@ def _esegui_ricerca_background(job_id, tipo_profilo, max_profili, imp):
                     nome_completo = f"{p['nome']} {p['cognome']}".strip() or None
                     anteprima     = f"{p['nome']} {p['cognome']} — {p['ruolo']}".strip()[:120]
                     db.execute(
-                        "INSERT INTO valutazioni (nome_contatto, ruolo_attuale, azienda, tipo_profilo, anteprima_testo, punteggio, analisi, spunti, messaggio_outreach, candidato_id, fonte) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                        (nome_completo, p['ruolo'] or None, p['azienda'] or None, tipo_profilo, anteprima, punteggio, analisi_str, spunti_json, messaggio_str, candidato_id, 'ricerca_automatica')
+                        "INSERT INTO valutazioni (nome_contatto, ruolo_attuale, azienda, tipo_profilo, anteprima_testo, punteggio, analisi, spunti, messaggio_outreach, candidato_id, fonte, organizzazione_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        (nome_completo, p['ruolo'] or None, p['azienda'] or None, tipo_profilo, anteprima, punteggio, analisi_str, spunti_json, messaggio_str, candidato_id, 'ricerca_automatica', org_id)
                     )
                     db.commit()
                     valutati += 1
@@ -954,9 +960,11 @@ def automatica():
         return jsonify({"errore": "Nessun profilo selezionato. "
                                   "Vai in Profili Target e crea almeno un profilo."}), 400
 
+    org_id = get_org_id()
     db = get_db()
     imp_row = db.execute(
-        "SELECT * FROM profili_target WHERE id = ? AND attivo = TRUE", (profilo_id,)
+        "SELECT * FROM profili_target WHERE id = ? AND attivo = TRUE AND organizzazione_id = ?",
+        (profilo_id, org_id)
     ).fetchone()
     db.close()
 
@@ -982,6 +990,7 @@ def automatica():
     t = threading.Thread(
         target=_esegui_ricerca_background,
         args=(job_id, tipo_profilo, max_profili, imp),
+        kwargs={"org_id": org_id},
         daemon=True
     )
     t.start()
@@ -1009,9 +1018,11 @@ def stato_job(job_id):
 @ricerca_bp.route("/ricerca/export_csv")
 def export_csv():
     """Esporta la cronologia ricerche automatiche in formato CSV."""
+    org_id = get_org_id()
     db = get_db()
     rows = db.execute(
-        "SELECT * FROM ricerche_automatiche ORDER BY data_ricerca DESC"
+        "SELECT * FROM ricerche_automatiche WHERE organizzazione_id = ? ORDER BY data_ricerca DESC",
+        (org_id,)
     ).fetchall()
     db.close()
 
@@ -1058,12 +1069,13 @@ def analizza_candidato():
     risultato_precomputed = dati.get("risultato_precomputed")  # se già calcolato dal frontend (SSE)
     dati_arricchiti_json  = dati.get("dati_arricchiti")        # JSON string con campi arricchiti
 
+    org_id = get_org_id()
     db = get_db()
 
     if candidato_id:
         # Caso 1: candidato già in DB (pipeline)
         c = db.execute(
-            "SELECT * FROM candidati WHERE id = ?", (candidato_id,)
+            "SELECT * FROM candidati WHERE id = ? AND organizzazione_id = ?", (candidato_id, org_id)
         ).fetchone()
         if not c:
             db.close()
@@ -1182,8 +1194,8 @@ def analizza_candidato():
             """UPDATE candidati SET
                punteggio=?, analisi=?, spunti=?, messaggio_outreach=?,
                stato='Da contattare', data_aggiornamento=CURRENT_TIMESTAMP
-               WHERE id=?""",
-            (punteggio, analisi_str, spunti_json, messaggio_str, candidato_id)
+               WHERE id=? AND organizzazione_id=?""",
+            (punteggio, analisi_str, spunti_json, messaggio_str, candidato_id, org_id)
         )
     else:
         # Crea nuovo candidato direttamente in pipeline come "Da contattare"
@@ -1192,19 +1204,19 @@ def analizza_candidato():
             """INSERT INTO candidati
                (nome, cognome, ruolo_attuale, azienda, profilo_linkedin,
                 tipo_profilo, stato, punteggio, analisi, spunti,
-                messaggio_outreach, ricerca_id, gestore)
-               VALUES (?, ?, ?, ?, ?, ?, 'Da contattare', ?, ?, ?, ?, ?, ?)""",
+                messaggio_outreach, ricerca_id, gestore, organizzazione_id)
+               VALUES (?, ?, ?, ?, ?, ?, 'Da contattare', ?, ?, ?, ?, ?, ?, ?)""",
             (nome, cognome, ruolo_ai, azienda_ai, linkedin,
              tipo_profilo, punteggio, analisi_str,
-             spunti_json, messaggio_str, ricerca_id, _gestore)
+             spunti_json, messaggio_str, ricerca_id, _gestore, org_id)
         )
         candidato_id = cur.lastrowid
 
     # Salva dati arricchiti se presenti (analisi SSE con EnrichLayer)
     if dati_arricchiti_json and candidato_id:
         db.execute(
-            "UPDATE candidati SET dati_arricchiti = ? WHERE id = ?",
-            (dati_arricchiti_json, candidato_id)
+            "UPDATE candidati SET dati_arricchiti = ? WHERE id = ? AND organizzazione_id = ?",
+            (dati_arricchiti_json, candidato_id, org_id)
         )
 
     # Fonte nella cronologia: "ricerca_[id]" se viene da una ricerca, "ricerca_manuale" altrimenti
@@ -1215,10 +1227,10 @@ def analizza_candidato():
         """INSERT INTO valutazioni
            (nome_contatto, ruolo_attuale, azienda, tipo_profilo,
             anteprima_testo, punteggio, analisi, spunti, messaggio_outreach,
-            candidato_id, fonte)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            candidato_id, fonte, organizzazione_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (nome_contatto, ruolo_ai, azienda_ai, tipo_profilo, anteprima,
-         punteggio, analisi_str, spunti_json, messaggio_str, candidato_id, fonte)
+         punteggio, analisi_str, spunti_json, messaggio_str, candidato_id, fonte, org_id)
     )
 
     # Incrementa profili_importati solo per nuovi candidati, non per ri-analisi
@@ -1388,12 +1400,13 @@ def importa():
         return jsonify({"errore": "Nome o cognome mancante"}), 400
 
     _gestore = "Admin" if tipo_profilo == "A" else ("Recruiter" if tipo_profilo == "B" else "Non assegnato")
+    org_id = get_org_id()
     db = get_db()
     cur = db.execute(
         """INSERT INTO candidati
-           (nome, cognome, ruolo_attuale, azienda, profilo_linkedin, tipo_profilo, note, gestore)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-        (nome, cognome, ruolo_attuale, azienda, linkedin, tipo_profilo, note, _gestore),
+           (nome, cognome, ruolo_attuale, azienda, profilo_linkedin, tipo_profilo, note, gestore, organizzazione_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (nome, cognome, ruolo_attuale, azienda, linkedin, tipo_profilo, note, _gestore, org_id),
     )
     db.commit()
     nuovo_id = cur.lastrowid

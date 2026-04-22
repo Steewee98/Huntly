@@ -7,6 +7,7 @@ Include i tab: Pipeline, Valutazione, Calendario, Cronologia.
 import json
 from flask import Blueprint, render_template, request, jsonify, redirect, url_for
 from database import get_db
+from routes.auth import get_org_id
 from ai_helpers import genera_messaggio_followup, rigenera_messaggio_followup
 
 # Blueprint per il modulo pipeline
@@ -29,9 +30,11 @@ def index():
     """Pagina principale della pipeline con tab: Pipeline, Valutazione, Calendario, Cronologia."""
     tab = request.args.get("tab", "pipeline")
 
+    org_id = get_org_id()
     db = get_db()
     candidati = db.execute(
-        "SELECT * FROM candidati ORDER BY data_aggiornamento DESC"
+        "SELECT * FROM candidati WHERE organizzazione_id = ? ORDER BY data_aggiornamento DESC",
+        (org_id,)
     ).fetchall()
 
     # Converti Row in dizionari per passarli al template
@@ -61,7 +64,8 @@ def index():
 
     # Cronologia valutazioni (tab Valutazione + tab Cronologia)
     cronologia = db.execute(
-        "SELECT * FROM valutazioni ORDER BY data_valutazione DESC"
+        "SELECT * FROM valutazioni WHERE organizzazione_id = ? ORDER BY data_valutazione DESC",
+        (org_id,)
     ).fetchall()
     cronologia = [dict(r) for r in cronologia]
 
@@ -71,8 +75,9 @@ def index():
                COALESCE(c.nome || ' ' || c.cognome, 'Candidato rimosso') AS candidato_nome
         FROM appuntamenti a
         LEFT JOIN candidati c ON a.candidato_id = c.id
+        WHERE a.organizzazione_id = ?
         ORDER BY a.data_ora ASC
-    """).fetchall()
+    """, (org_id,)).fetchall()
     appuntamenti = [dict(a) for a in appuntamenti]
 
     # Candidato pre-selezionato per tab Valutazione (param candidato_id)
@@ -80,7 +85,8 @@ def index():
     candidato_id_param = request.args.get("candidato_id")
     if candidato_id_param:
         row = db.execute(
-            "SELECT * FROM candidati WHERE id = ?", (candidato_id_param,)
+            "SELECT * FROM candidati WHERE id = ? AND organizzazione_id = ?",
+            (candidato_id_param, org_id)
         ).fetchone()
         if row:
             candidato_val = dict(row)
@@ -113,10 +119,11 @@ def aggiorna_stato():
     if nuovo_stato not in STATI_VALIDI:
         return jsonify({"errore": "Stato non valido"}), 400
 
+    org_id = get_org_id()
     db = get_db()
     db.execute(
-        "UPDATE candidati SET stato = ?, data_aggiornamento = CURRENT_TIMESTAMP WHERE id = ?",
-        (nuovo_stato, candidato_id),
+        "UPDATE candidati SET stato = ?, data_aggiornamento = CURRENT_TIMESTAMP WHERE id = ? AND organizzazione_id = ?",
+        (nuovo_stato, candidato_id, org_id),
     )
     db.commit()
     db.close()
@@ -134,10 +141,11 @@ def aggiorna_gestore():
     if nuovo_gestore not in GESTORI_VALIDI:
         return jsonify({"errore": "Gestore non valido"}), 400
 
+    org_id = get_org_id()
     db = get_db()
     db.execute(
-        "UPDATE candidati SET gestore = ?, data_aggiornamento = CURRENT_TIMESTAMP WHERE id = ?",
-        (nuovo_gestore, candidato_id),
+        "UPDATE candidati SET gestore = ?, data_aggiornamento = CURRENT_TIMESTAMP WHERE id = ? AND organizzazione_id = ?",
+        (nuovo_gestore, candidato_id, org_id),
     )
     db.commit()
     db.close()
@@ -148,9 +156,10 @@ def aggiorna_gestore():
 @pipeline_bp.route("/pipeline/followup/<int:candidato_id>", methods=["POST"])
 def genera_followup(candidato_id):
     """Endpoint AJAX per generare un messaggio di follow-up con AI."""
+    org_id = get_org_id()
     db = get_db()
     row = db.execute(
-        "SELECT * FROM candidati WHERE id = ?", (candidato_id,)
+        "SELECT * FROM candidati WHERE id = ? AND organizzazione_id = ?", (candidato_id, org_id)
     ).fetchone()
     db.close()
 
@@ -169,8 +178,11 @@ def rigenera_followup(candidato_id):
     messaggio_attuale = dati.get("messaggio_attuale", "").strip()
     istruzioni = dati.get("istruzioni", "").strip()
 
+    org_id = get_org_id()
     db = get_db()
-    row = db.execute("SELECT * FROM candidati WHERE id = ?", (candidato_id,)).fetchone()
+    row = db.execute(
+        "SELECT * FROM candidati WHERE id = ? AND organizzazione_id = ?", (candidato_id, org_id)
+    ).fetchone()
     db.close()
 
     if not row:
@@ -185,10 +197,11 @@ def aggiorna_note(candidato_id):
     """Endpoint AJAX per aggiornare le note di un candidato."""
     dati = request.get_json()
     note = dati.get("note", "")
+    org_id = get_org_id()
     db = get_db()
     db.execute(
-        "UPDATE candidati SET note = ?, data_aggiornamento = CURRENT_TIMESTAMP WHERE id = ?",
-        (note, candidato_id),
+        "UPDATE candidati SET note = ?, data_aggiornamento = CURRENT_TIMESTAMP WHERE id = ? AND organizzazione_id = ?",
+        (note, candidato_id, org_id),
     )
     db.commit()
     db.close()
@@ -198,8 +211,9 @@ def aggiorna_note(candidato_id):
 @pipeline_bp.route("/pipeline/elimina/<int:candidato_id>", methods=["DELETE"])
 def elimina_candidato(candidato_id):
     """Elimina un candidato dalla pipeline."""
+    org_id = get_org_id()
     db = get_db()
-    db.execute("DELETE FROM candidati WHERE id = ?", (candidato_id,))
+    db.execute("DELETE FROM candidati WHERE id = ? AND organizzazione_id = ?", (candidato_id, org_id))
     db.commit()
     db.close()
     return jsonify({"successo": True})
