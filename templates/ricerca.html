@@ -167,7 +167,10 @@
 <div id="risultati-section" class="hidden">
     <div class="card table-card">
         <div class="card-header">
-            <h3 id="risultati-titolo">Risultati</h3>
+            <div>
+                <h3 id="risultati-titolo">Risultati</h3>
+                <div id="source-summary-label" style="display:none;font-size:0.78rem;color:var(--grigio-testo);margin-top:0.2rem;"></div>
+            </div>
             <div style="display:flex;gap:0.5rem;align-items:center;">
                 <button id="btn-altri" class="btn btn-secondary btn-sm hidden" onclick="caricaAltri()">
                     Carica altri &#8594;
@@ -517,7 +520,7 @@ function cercaFigure() {
             document.getElementById('nessun-risultato').classList.remove('hidden');
             return;
         }
-        renderRisultati(data.persone, data.totale, data.tentativi_fatti || 1, data.messaggio || '');
+        renderRisultati(data.persone, data.totale, data.tentativi_fatti || 1, data.messaggio || '', data.source_summary || '');
     })
     .catch(function(err) {
         btn.disabled = false;
@@ -526,9 +529,24 @@ function cercaFigure() {
     });
 }
 
-function renderRisultati(persone, totale, tentativi, messaggio) {
-    tentativi = tentativi || 1;
-    messaggio = messaggio || '';
+var _SOURCE_BADGES = {
+    'linkedin': { label: 'LinkedIn', color: '#0A66C2' },
+    'indeed':   { label: 'Indeed',   color: '#2164F3' },
+    'infojobs': { label: 'Infojobs', color: '#FF6B35' },
+};
+
+function _sourceBadgeHtml(source) {
+    var src = (source || 'linkedin').toLowerCase();
+    var badge = _SOURCE_BADGES[src] || { label: src, color: '#888' };
+    return '<span style="display:inline-block;font-size:0.68rem;padding:1px 5px;' +
+        'border-radius:3px;background:' + badge.color + ';color:#fff;margin-top:2px;' +
+        'font-weight:600;letter-spacing:0.02em;">' + badge.label + '</span>';
+}
+
+function renderRisultati(persone, totale, tentativi, messaggio, sourceSummary) {
+    tentativi     = tentativi || 1;
+    messaggio     = messaggio || '';
+    sourceSummary = sourceSummary || '';
     const tbody = document.getElementById('risultati-tbody');
     tbody.innerHTML = '';
 
@@ -545,9 +563,12 @@ function renderRisultati(persone, totale, tentativi, messaggio) {
         const headline = p.headline
             ? '<div class="candidato-meta">' + escHtml(p.headline.substring(0, 70)) + (p.headline.length > 70 ? '...' : '') + '</div>'
             : '';
+        const sourceBadge = _sourceBadgeHtml(p.source);
 
         tbody.innerHTML += '<tr>' +
-            '<td><div class="candidato-nome">' + escHtml(nomeCompleto) + '</div>' + headline + '</td>' +
+            '<td><div class="candidato-nome">' + escHtml(nomeCompleto) + '</div>' +
+            headline +
+            '<div style="margin-top:2px;">' + sourceBadge + '</div></td>' +
             '<td>' + escHtml(p.ruolo || '—') + '</td>' +
             '<td>' + escHtml(p.azienda || '—') + '</td>' +
             '<td>' + escHtml(location) + '</td>' +
@@ -572,13 +593,24 @@ function renderRisultati(persone, totale, tentativi, messaggio) {
             );
         }
     } else {
-        // Messaggio sempre informativo dal backend (include fasi usate e per-ruolo)
         titoloEl.textContent = messaggio ||
             (nuovi.length + ' nuov' + (nuovi.length === 1 ? 'o profilo' : 'i profili') + ' trovati');
         if (giPresenti.length > 0) {
             titoloEl.textContent += ' (' + giPresenti.length + ' già in pipeline, esclus' + (giPresenti.length === 1 ? 'o' : 'i') + ')';
         }
     }
+
+    // Mostra source_summary sotto il titolo
+    var summaryEl = document.getElementById('source-summary-label');
+    if (summaryEl) {
+        if (sourceSummary) {
+            summaryEl.textContent = sourceSummary;
+            summaryEl.style.display = '';
+        } else {
+            summaryEl.style.display = 'none';
+        }
+    }
+
     document.getElementById('risultati-section').classList.remove('hidden');
 }
 

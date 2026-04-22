@@ -320,6 +320,10 @@ def init_db():
         # Gestore candidato
         "ALTER TABLE candidati ADD COLUMN IF NOT EXISTS gestore TEXT DEFAULT 'Non assegnato'",
 
+        # Multi-source: sorgente di provenienza del profilo
+        "ALTER TABLE profili_ricerca ADD COLUMN IF NOT EXISTS source VARCHAR(50) DEFAULT 'linkedin'",
+        "ALTER TABLE candidati       ADD COLUMN IF NOT EXISTS source VARCHAR(50) DEFAULT 'linkedin'",
+
         # Arricchimento Proxycurl
         "ALTER TABLE candidati   ADD COLUMN IF NOT EXISTS dati_proxycurl TEXT",
         "ALTER TABLE candidati   ADD COLUMN IF NOT EXISTS dati_arricchiti TEXT",

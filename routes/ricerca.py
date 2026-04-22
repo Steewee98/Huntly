@@ -17,6 +17,8 @@ from flask import Blueprint, render_template, request, jsonify, Response
 from database import get_db
 from ai_helpers import analizza_profilo_linkedin
 from dedup import is_duplicate
+from sources.multi_source import cerca_multi_source
+from sources.utils import normalizza_citta as _normalizza_citta, _CITTA_NORMALIZE
 
 log = logging.getLogger(__name__)
 
@@ -167,44 +169,7 @@ def _leggi_aggiorna_offset(db, tipo_profilo: str, ruoli: list) -> tuple:
     return start_page, ruolo_corrente, citta_corrente
 
 
-# Dizionario di normalizzazione città — Apify riconosce il formato completo "Città, Regione, Paese"
-_CITTA_NORMALIZE = {
-    'roma':     'Rome, Latium, Italy',
-    'rome':     'Rome, Latium, Italy',
-    'milano':   'Milan, Lombardy, Italy',
-    'milan':    'Milan, Lombardy, Italy',
-    'torino':   'Turin, Piedmont, Italy',
-    'turin':    'Turin, Piedmont, Italy',
-    'napoli':   'Naples, Campania, Italy',
-    'naples':   'Naples, Campania, Italy',
-    'firenze':  'Florence, Tuscany, Italy',
-    'florence': 'Florence, Tuscany, Italy',
-    'bologna':  'Bologna, Emilia-Romagna, Italy',
-    'genova':   'Genoa, Liguria, Italy',
-    'genoa':    'Genoa, Liguria, Italy',
-    'palermo':  'Palermo, Sicily, Italy',
-    'venezia':  'Venice, Veneto, Italy',
-    'venice':   'Venice, Veneto, Italy',
-    'verona':   'Verona, Veneto, Italy',
-    'bari':     'Bari, Apulia, Italy',
-}
-
-
-def _normalizza_citta(citta: str) -> str:
-    """
-    Normalizza il nome città per Apify.
-    - Se è nel dizionario → usa il nome completo
-    - Se non contiene già 'italy' → aggiunge ', Italy'
-    - Se vuota → restituisce 'Italy'
-    """
-    if not citta:
-        return "Italy"
-    key = citta.strip().lower()
-    if key in _CITTA_NORMALIZE:
-        return _CITTA_NORMALIZE[key]
-    if "italy" not in key:
-        return citta.strip() + ", Italy"
-    return citta.strip()
+# _CITTA_NORMALIZE e _normalizza_citta sono importati da sources.utils
 
 
 def cerca_apify(ruolo, citta="", paese="", azienda="", parole_chiave="", num_pagine=1,
@@ -545,13 +510,9 @@ def index():
 @ricerca_bp.route("/ricerca/cerca", methods=["POST"])
 def cerca():
     """
-    Esegue la ricerca su Apify con retry automatico se i nuovi profili sono < 3.
-    Fa fino a MAX_TENTATIVI chiamate ad Apify incrementando startPage ad ogni retry.
-    Salva UNA sola ricerca nella cronologia con i profili aggregati di tutti i tentativi.
+    Ricerca manuale multi-source: lancia LinkedIn, Indeed e InfoJobs in parallelo.
+    Aggrega i risultati, applica dedup e salva una sola ricerca in cronologia.
     """
-    _MIN_NUOVI      = 10  # obiettivo: almeno 10 profili nuovi
-    _MAX_TENTATIVI  = 5   # max tentativi con il ruolo originale, poi si passa ai correlati
-
     dati = request.get_json()
     ruolo         = dati.get("ruolo", "").strip()
     citta         = dati.get("citta", "").strip()
@@ -564,234 +525,90 @@ def cerca():
     if not ruolo and not parole_chiave:
         return jsonify({"errore": "Inserisci almeno il ruolo o delle parole chiave"}), 400
 
-    # Calcola startPage iniziale: ruota tra ricerche diverse per variare i risultati
+    # Calcola startPage iniziale: ruota tra pagine 1, 2, 3 per variare i risultati LinkedIn
     db_cnt = get_db()
     n_precedenti = db_cnt.execute(
         "SELECT COUNT(*) AS n FROM ricerche_automatiche WHERE fonte='manuale'",
     ).fetchone()["n"] or 0
     db_cnt.close()
-    # Ruota solo tra pagine 1, 2, 3 — niente pagine alte dove Apify non ha risultati
     start_page_iniziale = (n_precedenti % 3) + 1
 
-    log.info("Ricerca manuale: ruolo=%r citta=%r start_page_iniziale=%d",
+    log.info("Ricerca multi-source: ruolo=%r citta=%r start_page=%d",
              ruolo, citta, start_page_iniziale)
-    print(f"=== CERCA START: ruolo={ruolo} citta={citta} ===", flush=True)
+    print(f"=== CERCA MULTI-SOURCE: ruolo={ruolo} citta={citta} ===", flush=True)
 
-    # ── Retry loop ─────────────────────────────────────────────────────────────
-    db_check = get_db()
-    tutti_profili   = []   # tutti i profili unici trovati in tutti i tentativi
-    tutti_linkedin  = set()  # linkedin_url già visti in questo run (dedup cross-attempt)
-    tutti_nomi      = set()  # "nome cognome" già visti in questo run
-    tentativi_fatti = 0
-    primo_errore    = None
-    _sp_base        = start_page_iniziale  # base resettabile per il calcolo di startPage
-    nuovi_per_ruolo = {}  # {ruolo_usato: n_nuovi} per il messaggio riepilogo
+    # ── Lancia LinkedIn + Indeed + InfoJobs in parallelo ──────────────────────
+    ms_result      = cerca_multi_source(ruolo, citta, paese, azienda, parole_chiave,
+                                        num_pagine, start_page=start_page_iniziale)
+    items_raw      = ms_result['profili']
+    ms_errori      = ms_result['errori']
+    source_summary = ms_result['source_summary']
 
-    for tentativo in range(1, _MAX_TENTATIVI + 1):
-        start_page = min(_sp_base + (tentativo - 1), 5)  # cap assoluto a 5
-        tentativi_fatti = tentativo
+    if ms_errori:
+        for src, err in ms_errori.items():
+            log.warning("Sorgente %s errore: %s", src, err)
 
-        print(f"=== TENTATIVO {tentativo}: startPage={start_page} ===", flush=True)
-        log.info("Tentativo %d/%d: ruolo=%r citta=%r start_page=%d",
-                 tentativo, _MAX_TENTATIVI, ruolo, citta, start_page)
+    # Se nessuna sorgente ha restituito profili e tutte hanno fallito
+    if not items_raw and ms_errori:
+        primo_errore = next(iter(ms_errori.values()))
+        return jsonify({"errore": primo_errore}), 500
 
-        items, errore = cerca_apify(ruolo, citta, paese, azienda, parole_chiave, num_pagine,
-                                    start_page=start_page)
+    # ── Dedup cross-sorgente + check pipeline ─────────────────────────────────
+    db_check      = get_db()
+    tutti_profili = []
+    tutti_linkedin = set()
+    tutti_nomi    = set()
+    nuovi_per_fonte = {}   # {source: n_nuovi}
 
-        if errore:
-            log.warning("Tentativo %d fallito: %s", tentativo, errore)
-            if tentativo == 1:
-                primo_errore = errore  # salva per ritornarlo se anche gli altri falliscono
+    for p in items_raw:
+        if not isinstance(p, dict):
             continue
 
-        trovati_questo_tentativo = 0
-        nuovi_questo_tentativo   = 0
+        li = (p.get("linkedin") or "").strip().lower()
+        nk = f"{p.get('nome','').strip()} {p.get('cognome','').strip()}".strip().lower()
 
-        for item in items:
-            if not isinstance(item, dict):
-                continue
-            p = normalizza_profilo(item)
+        # Dedup intra-run per URL
+        if li and li in tutti_linkedin:
+            continue
+        # Dedup intra-run per nome (solo se senza URL LinkedIn)
+        if nk and nk in tutti_nomi and not li:
+            continue
 
-            # Dedup cross-attempt: salta se già visto in un tentativo precedente
-            li = (p.get("linkedin") or "").strip().lower()
-            nk = f"{p.get('nome','').strip()} {p.get('cognome','').strip()}".strip().lower()
+        if li:
+            tutti_linkedin.add(li)
+        if nk:
+            tutti_nomi.add(nk)
 
-            if li and li in tutti_linkedin:
-                continue
-            if nk and nk in tutti_nomi and not li:
-                continue
+        dup, motivo_dup, cand_id = is_duplicate(db_check, p)
+        p["gia_in_pipeline"]        = dup
+        p["candidato_id_esistente"] = cand_id
 
-            trovati_questo_tentativo += 1
-            if li:
-                tutti_linkedin.add(li)
-            if nk:
-                tutti_nomi.add(nk)
+        nome_log = f"{p.get('nome','')} {p.get('cognome','')}".strip() or "?"
+        log.info("  Profilo %s [%s]: già in DB: %s%s",
+                 nome_log, p.get('source', '?'),
+                 "SI" if dup else "NO",
+                 f" ({motivo_dup})" if dup else "")
 
-            dup, motivo_dup, cand_id = is_duplicate(db_check, p)
-            p["gia_in_pipeline"] = dup
-            p["candidato_id_esistente"] = cand_id
-
-            nome_log = f"{p.get('nome','')} {p.get('cognome','')}".strip() or "?"
-            log.info("  Profilo %s: linkedin=%s — già in DB: %s%s",
-                     nome_log, p.get("linkedin", "—"),
-                     "SI" if dup else "NO",
-                     f" ({motivo_dup})" if dup else "")
-            tutti_profili.append(p)
-            if not dup:
-                nuovi_questo_tentativo += 1
-                nuovi_per_ruolo[ruolo] = nuovi_per_ruolo.get(ruolo, 0) + 1
-
-        nuovi_totale = sum(1 for q in tutti_profili if not q["gia_in_pipeline"])
-        print(f"=== TENTATIVO {tentativo}: trovati={trovati_questo_tentativo} nuovi={nuovi_questo_tentativo} totale_nuovi={nuovi_totale} ===", flush=True)
-        log.info("Tentativo %d: trovati=%d nuovi=%d totale_nuovi=%d",
-                 tentativo, trovati_questo_tentativo, nuovi_questo_tentativo, nuovi_totale)
-
-        if nuovi_totale >= _MIN_NUOVI:
-            log.info("Raggiunta soglia %d nuovi — stop ai tentativi", _MIN_NUOVI)
-            break
-
-        # 0 profili trovati su pagina alta → reset a startPage=1 per il prossimo tentativo
-        if trovati_questo_tentativo == 0 and start_page >= 5 and tentativo < _MAX_TENTATIVI:
-            _sp_base = 1 - tentativo  # garantisce che il prossimo tentativo parta da page 1
-            print(f"=== TENTATIVO {tentativo}: 0 trovati su pagina alta ({start_page}), reset a startPage=1 ===", flush=True)
-            log.info("Tentativo %d: 0 trovati su pagina alta %d, reset startPage a 1", tentativo, start_page)
-
-        # 0 profili nuovi in questo tentativo: log esplicito e continua
-        if nuovi_questo_tentativo == 0 and tentativo < _MAX_TENTATIVI:
-            next_page = min(_sp_base + tentativo, 5)
-            print(f"Tentativo {tentativo}: 0 nuovi trovati, riprovo con startPage={next_page}", flush=True)
-            log.info("Tentativo %d: 0 nuovi trovati, riprovo con startPage=%d", tentativo, next_page)
+        tutti_profili.append(p)
+        if not dup:
+            src = p.get("source", "linkedin")
+            nuovi_per_fonte[src] = nuovi_per_fonte.get(src, 0) + 1
 
     db_check.close()
 
-    # Se tutti i tentativi hanno fallito con errore e non abbiamo nulla
-    if not tutti_profili and primo_errore:
-        return jsonify({"errore": primo_errore}), 500
-
-    # ── FASE 2: ruoli correlati — attivata se < _MIN_NUOVI dopo il loop principale ──
-    nuovi_totale_dopo_main = sum(1 for q in tutti_profili if not q["gia_in_pipeline"])
-    ruoli_correlati_usati  = []
-
-    if nuovi_totale_dopo_main < _MIN_NUOVI and ruolo:
-        correlati = RUOLI_CORRELATI.get(ruolo.lower().strip(), [])
-        print(f"=== FASE 2: {nuovi_totale_dopo_main} nuovi con '{ruolo}' (obiettivo {_MIN_NUOVI}), provo correlati: {correlati} ===", flush=True)
-        log.info("Fase 2: %d nuovi con ruolo=%r — provo correlati: %s", nuovi_totale_dopo_main, ruolo, correlati)
-
-        db_corr = get_db()
-        for ruolo_corr in correlati:
-            if nuovi_totale_dopo_main >= _MIN_NUOVI:
-                break
-            for sp in (1, 2):
-                if nuovi_totale_dopo_main >= _MIN_NUOVI:
-                    break
-                print(f"=== CORRELATO '{ruolo_corr}' startPage={sp} ===", flush=True)
-                log.info("Correlato '%s' startPage=%d", ruolo_corr, sp)
-                items_c, err_c = cerca_apify(ruolo_corr, citta, paese, azienda, parole_chiave,
-                                             num_pagine, start_page=sp)
-                if err_c:
-                    log.warning("Correlato '%s' pag %d errore: %s", ruolo_corr, sp, err_c)
-                    continue
-
-                nuovi_corr = 0
-                for item in (items_c or []):
-                    if not isinstance(item, dict):
-                        continue
-                    p = normalizza_profilo(item)
-                    li = (p.get("linkedin") or "").strip().lower()
-                    nk = f"{p.get('nome','').strip()} {p.get('cognome','').strip()}".strip().lower()
-                    if li and li in tutti_linkedin:
-                        continue
-                    if nk and nk in tutti_nomi and not li:
-                        continue
-                    if li:
-                        tutti_linkedin.add(li)
-                    if nk:
-                        tutti_nomi.add(nk)
-                    dup, _, cand_id = is_duplicate(db_corr, p)
-                    p["gia_in_pipeline"] = dup
-                    p["candidato_id_esistente"] = cand_id
-                    p["ruolo_ricerca"] = ruolo_corr
-                    tutti_profili.append(p)
-                    if not dup:
-                        nuovi_corr += 1
-                        nuovi_per_ruolo[ruolo_corr] = nuovi_per_ruolo.get(ruolo_corr, 0) + 1
-
-                nuovi_totale_dopo_main = sum(1 for q in tutti_profili if not q["gia_in_pipeline"])
-                print(f"=== CORRELATO '{ruolo_corr}' pag {sp}: nuovi_questo={nuovi_corr} totale_nuovi={nuovi_totale_dopo_main} ===", flush=True)
-
-                if ruolo_corr not in ruoli_correlati_usati:
-                    ruoli_correlati_usati.append(ruolo_corr)
-
-        db_corr.close()
-
-    # ── FASE 3: fallback keyword generiche ─────────────────────────────────────
-    nuovi_totale_dopo_fase2 = sum(1 for q in tutti_profili if not q["gia_in_pipeline"])
-    keywords_generiche_usate = []
-
-    if nuovi_totale_dopo_fase2 < _MIN_NUOVI:
-        print(f"=== FASE 3: {nuovi_totale_dopo_fase2} nuovi, provo keyword generiche ===", flush=True)
-        log.info("Fase 3: %d nuovi — provo keyword generiche", nuovi_totale_dopo_fase2)
-
-        db_kw = get_db()
-        for kw in _KW_GENERICHE_FALLBACK:
-            if nuovi_totale_dopo_fase2 >= _MIN_NUOVI:
-                break
-            for sp in (1, 2):
-                if nuovi_totale_dopo_fase2 >= _MIN_NUOVI:
-                    break
-                print(f"=== KW_GENERICA '{kw}' startPage={sp} ===", flush=True)
-                log.info("KW generica '%s' startPage=%d", kw, sp)
-                items_k, err_k = cerca_apify("", citta, paese, "", kw, num_pagine, start_page=sp)
-                if err_k:
-                    log.warning("KW generica '%s' pag %d errore: %s", kw, sp, err_k)
-                    continue
-
-                nuovi_kw = 0
-                for item in (items_k or []):
-                    if not isinstance(item, dict):
-                        continue
-                    p = normalizza_profilo(item)
-                    li = (p.get("linkedin") or "").strip().lower()
-                    nk = f"{p.get('nome','').strip()} {p.get('cognome','').strip()}".strip().lower()
-                    if li and li in tutti_linkedin:
-                        continue
-                    if nk and nk in tutti_nomi and not li:
-                        continue
-                    if li:
-                        tutti_linkedin.add(li)
-                    if nk:
-                        tutti_nomi.add(nk)
-                    dup, _, cand_id = is_duplicate(db_kw, p)
-                    p["gia_in_pipeline"] = dup
-                    p["candidato_id_esistente"] = cand_id
-                    p["ruolo_ricerca"] = kw
-                    tutti_profili.append(p)
-                    if not dup:
-                        nuovi_kw += 1
-                        nuovi_per_ruolo[kw] = nuovi_per_ruolo.get(kw, 0) + 1
-
-                nuovi_totale_dopo_fase2 = sum(1 for q in tutti_profili if not q["gia_in_pipeline"])
-                print(f"=== KW '{kw}' pag {sp}: nuovi_questo={nuovi_kw} totale_nuovi={nuovi_totale_dopo_fase2} ===", flush=True)
-
-                if kw not in keywords_generiche_usate and nuovi_kw > 0:
-                    keywords_generiche_usate.append(kw)
-
-        db_kw.close()
-
-    # ── Calcola statistiche finali ─────────────────────────────────────────────
     gia_presenti = sum(1 for p in tutti_profili if p["gia_in_pipeline"])
     nuovi        = len(tutti_profili) - gia_presenti
 
-    log.info("Ricerca manuale completata: tentativi=%d trovati=%d gia_presenti=%d nuovi=%d correlati=%s",
-             tentativi_fatti, len(tutti_profili), gia_presenti, nuovi, ruoli_correlati_usati)
-    print(f"=== RISULTATO FINALE: tentativi={tentativi_fatti} trovati={len(tutti_profili)} "
-          f"nuovi={nuovi} gia_presenti={gia_presenti} correlati={ruoli_correlati_usati} ===")
+    log.info("Multi-source completato: trovati=%d gia_presenti=%d nuovi=%d errori=%s summary=%s",
+             len(tutti_profili), gia_presenti, nuovi, list(ms_errori.keys()), source_summary)
+    print(f"=== RISULTATO: trovati={len(tutti_profili)} nuovi={nuovi} "
+          f"gia_presenti={gia_presenti} summary={source_summary} ===", flush=True)
 
-    # ── Salva in DB (una sola ricerca per tutti i tentativi) ───────────────────
+    # ── Salva in DB ───────────────────────────────────────────────────────────
     parametri_str = json.dumps({
         'ruolo': ruolo, 'citta': citta, 'azienda': azienda,
         'parole_chiave': parole_chiave, 'start_page': start_page_iniziale,
-        'tentativi': tentativi_fatti,
+        'source_summary': source_summary,
     }, ensure_ascii=False)
     db = get_db()
     cur = db.execute(
@@ -806,48 +623,37 @@ def cerca():
         testo = _costruisci_testo_profilo(p)
         cur_p = db.execute(
             """INSERT INTO profili_ricerca
-               (ricerca_id, nome, cognome, ruolo, azienda, location, linkedin_url, testo_profilo)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+               (ricerca_id, nome, cognome, ruolo, azienda, location, linkedin_url, testo_profilo, source)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (ricerca_id, p["nome"], p["cognome"], p["ruolo"], p["azienda"],
-             p["location"], p["linkedin"], testo)
+             p["location"], p["linkedin"], testo, p.get("source", "linkedin"))
         )
         p["profilo_ricerca_id"] = cur_p.lastrowid
 
     db.commit()
     db.close()
 
-    # ── Messaggio finale sempre informativo ────────────────────────────────────
-    fasi_usate = []
-    if ruoli_correlati_usati:
-        fasi_usate.append("correlati")
-    if keywords_generiche_usate:
-        fasi_usate.append("ricerca generica")
-
+    # ── Messaggio finale ──────────────────────────────────────────────────────
     if nuovi == 0:
-        messaggio = "Nessun profilo disponibile. Prova a cambiare città."
-        print(f"=== ATTENZIONE: 0 nuovi dopo tutte le fasi (correlati={ruoli_correlati_usati} kw={keywords_generiche_usate}) ===", flush=True)
-        log.warning("0 nuovi dopo tutte le fasi — correlati: %s, kw: %s", ruoli_correlati_usati, keywords_generiche_usate)
+        messaggio = "Nessun profilo disponibile. Prova a cambiare città o ruolo."
+        log.warning("0 nuovi dopo multi-source — errori: %s", ms_errori)
     else:
-        # Riepilogo sempre: "X nuovi profili trovati: N da 'ruolo', M da 'correlato'..."
-        parti = [f"{n} da '{r}'" for r, n in nuovi_per_ruolo.items() if n > 0]
+        parti = [f"{n} da {src}" for src, n in nuovi_per_fonte.items() if n > 0]
         if len(parti) > 1:
             messaggio = f"{nuovi} nuovi profili trovati: {', '.join(parti)}"
         else:
             messaggio = f"{nuovi} nuov{'o profilo' if nuovi == 1 else 'i profili'} trovat{'o' if nuovi == 1 else 'i'}"
-        if fasi_usate:
-            messaggio += f" (usando anche {' e '.join(fasi_usate)})"
 
     return jsonify({
-        "persone":                  tutti_profili,
-        "totale":                   len(tutti_profili),
-        "gia_presenti":             gia_presenti,
-        "nuovi":                    nuovi,
-        "start_page":               start_page_iniziale,
-        "ricerca_id":               ricerca_id,
-        "tentativi_fatti":          tentativi_fatti,
-        "messaggio":                messaggio,
-        "ruoli_correlati_usati":    ruoli_correlati_usati,
-        "keywords_generiche_usate": keywords_generiche_usate,
+        "persone":        tutti_profili,
+        "totale":         len(tutti_profili),
+        "gia_presenti":   gia_presenti,
+        "nuovi":          nuovi,
+        "start_page":     start_page_iniziale,
+        "ricerca_id":     ricerca_id,
+        "tentativi_fatti": 1,
+        "messaggio":      messaggio,
+        "source_summary": source_summary,
     })
 
 
