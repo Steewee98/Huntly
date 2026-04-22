@@ -1,5 +1,5 @@
 /**
- * SABIA Recruiting Tool — Script JavaScript condiviso
+ * Huntly — Script JavaScript condiviso
  * Funzioni di utilità usate da tutti i moduli
  */
 

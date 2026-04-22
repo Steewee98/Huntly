@@ -24,7 +24,7 @@ load_dotenv()
 
 # Crea l'applicazione Flask
 app = Flask(__name__)
-app.secret_key = os.environ.get("SECRET_KEY", "recruiter-assistant-secret-2024")
+app.secret_key = os.environ.get("SECRET_KEY", "huntly-secret-2024")
 
 # Registra i blueprint
 app.register_blueprint(auth_bp)

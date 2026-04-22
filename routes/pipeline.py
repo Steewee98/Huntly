@@ -16,11 +16,11 @@ pipeline_bp = Blueprint("pipeline", __name__)
 STATI_VALIDI = ["Da valutare", "Da contattare", "Richiesta Inviata", "Messaggio Inviato", "Risposto", "In valutazione", "Chiuso"]
 
 # Gestori disponibili
-GESTORI_VALIDI = ["Salvatore Sabia", "Firdaous Filahi", "Non assegnato"]
+GESTORI_VALIDI = ["Admin", "Recruiter", "Non assegnato"]
 
 # Costanti tab Calendario
 TIPI_APPUNTAMENTO = ['Chiamata', 'Video call', 'Incontro di persona']
-GESTORI_CAL = ['Salvatore Sabia', 'Firdaous Filahi']
+GESTORI_CAL = ['Admin', 'Recruiter']
 STATI_APPUNTAMENTO = ['Da fare', 'Completato', 'Annullato']
 
 

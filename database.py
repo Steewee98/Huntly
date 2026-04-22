@@ -1,5 +1,5 @@
 """
-Gestione del database PostgreSQL per SABIA Recruiting Tool.
+Gestione del database PostgreSQL per Huntly.
 Usa psycopg2 con DATABASE_URL fornita da Railway.
 
 Il wrapper _PgConnection / _PgCursor mantiene la stessa interfaccia
@@ -378,7 +378,7 @@ def init_db():
     ]
 
     for i, sql in enumerate(statements):
-        sp = f"sabia_init_{i}"
+        sp = f"huntly_init_{i}"
         cur.execute(f"SAVEPOINT {sp}")
         try:
             cur.execute(sql)

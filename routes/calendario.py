@@ -8,7 +8,7 @@ from database import get_db
 calendario_bp = Blueprint('calendario', __name__)
 
 TIPI_APPUNTAMENTO = ['Chiamata', 'Video call', 'Incontro di persona']
-GESTORI = ['Salvatore Sabia', 'Firdaous Filahi']
+GESTORI = ['Admin', 'Recruiter']
 STATI_APPUNTAMENTO = ['Da fare', 'Completato', 'Annullato']
 
 

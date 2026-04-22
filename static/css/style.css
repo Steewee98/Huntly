@@ -1,5 +1,5 @@
 /* =============================================
-   SABIA Recruiting Tool — Stili principali
+   Huntly — Stili principali
    Colori: blu scuro #1A2E4A, azzurro #2E7CF6
    ============================================= */
 
@@ -628,8 +628,8 @@ body {
     font-weight: 600;
     white-space: nowrap;
 }
-.badge-gestore-sabia    { background: #1A2E4A; color: #fff; }
-.badge-gestore-filahi   { background: #B8860B; color: #fff; }
+.badge-gestore-primary  { background: #1A2E4A; color: #fff; }
+.badge-gestore-secondary{ background: #B8860B; color: #fff; }
 .badge-gestore-nessuno  { background: #E5E7EB; color: #6B7280; }
 
 /* Filtri gestore */

@@ -1,5 +1,5 @@
 """
-Deduplicazione centralizzata profili — SABIA Recruiting Tool.
+Deduplicazione centralizzata profili — Huntly.
 
 is_duplicate(db, profilo) è l'unico punto di verifica usato in tutto
 il codebase: ricerca automatica, ricerca manuale, inserimento form.

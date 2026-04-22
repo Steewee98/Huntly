@@ -856,7 +856,7 @@ def _esegui_ricerca_background(job_id, tipo_profilo, max_profili, imp):
 
         for p in items_da_importare:
             testo = _costruisci_testo_profilo(p)
-            _gestore = "Salvatore Sabia" if tipo_profilo == "A" else ("Firdaous Filahi" if tipo_profilo == "B" else "Non assegnato")
+            _gestore = "Admin" if tipo_profilo == "A" else ("Recruiter" if tipo_profilo == "B" else "Non assegnato")
             cur = db.execute(
                 "INSERT INTO candidati (nome, cognome, ruolo_attuale, azienda, profilo_linkedin, tipo_profilo, stato, note, ricerca_id, gestore) VALUES (?, ?, ?, ?, ?, ?, 'Da valutare', ?, ?, ?)",
                 (p["nome"], p["cognome"], p["ruolo"], p["azienda"], p["linkedin"], tipo_profilo, p["headline"], ricerca_id, _gestore)
@@ -1179,7 +1179,7 @@ def analizza_candidato():
         )
     else:
         # Crea nuovo candidato direttamente in pipeline come "Da contattare"
-        _gestore = "Salvatore Sabia" if tipo_profilo == "A" else ("Firdaous Filahi" if tipo_profilo == "B" else "Non assegnato")
+        _gestore = "Admin" if tipo_profilo == "A" else ("Recruiter" if tipo_profilo == "B" else "Non assegnato")
         cur = db.execute(
             """INSERT INTO candidati
                (nome, cognome, ruolo_attuale, azienda, profilo_linkedin,
@@ -1379,7 +1379,7 @@ def importa():
     if not nome and not cognome:
         return jsonify({"errore": "Nome o cognome mancante"}), 400
 
-    _gestore = "Salvatore Sabia" if tipo_profilo == "A" else ("Firdaous Filahi" if tipo_profilo == "B" else "Non assegnato")
+    _gestore = "Admin" if tipo_profilo == "A" else ("Recruiter" if tipo_profilo == "B" else "Non assegnato")
     db = get_db()
     cur = db.execute(
         """INSERT INTO candidati

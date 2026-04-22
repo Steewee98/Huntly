@@ -55,7 +55,7 @@ def inserisci():
         return redirect(url_for("candidati.index"))
 
     # Gestore di default in base al profilo
-    gestore_default = "Salvatore Sabia" if tipo_profilo == "A" else ("Firdaous Filahi" if tipo_profilo == "B" else "Non assegnato")
+    gestore_default = "Admin" if tipo_profilo == "A" else ("Recruiter" if tipo_profilo == "B" else "Non assegnato")
 
     # Snapshot dei parametri usati per questa inserzione manuale
     parametri_str = json.dumps({
@@ -111,7 +111,7 @@ def da_cronologia():
         return jsonify({"errore": "Nome e cognome sono obbligatori"}), 400
 
     # Gestore di default in base al profilo
-    gestore_default = "Salvatore Sabia" if tipo_profilo == "A" else ("Firdaous Filahi" if tipo_profilo == "B" else "Non assegnato")
+    gestore_default = "Admin" if tipo_profilo == "A" else ("Recruiter" if tipo_profilo == "B" else "Non assegnato")
 
     db = get_db()
 

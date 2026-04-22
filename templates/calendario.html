@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Calendario — SABIA{% endblock %}
+{% block title %}Calendario — Huntly{% endblock %}
 
 {% block content %}
 <div class="page-header">
@@ -83,10 +83,10 @@
                     </td>
                     <td>{{ a.candidato_nome or '—' }}</td>
                     <td>
-                        {% if a.gestore == 'Salvatore Sabia' %}
-                            <span class="badge-gestore badge-gestore-sabia">{{ a.gestore }}</span>
+                        {% if a.gestore == 'Admin' %}
+                            <span class="badge-gestore badge-gestore-primary">{{ a.gestore }}</span>
                         {% else %}
-                            <span class="badge-gestore badge-gestore-filahi">{{ a.gestore }}</span>
+                            <span class="badge-gestore badge-gestore-secondary">{{ a.gestore }}</span>
                         {% endif %}
                     </td>
                     <td style="font-size:0.82rem;color:var(--grigio-testo);max-width:200px;">{{ a.note or '—' }}</td>
@@ -334,7 +334,7 @@ function apriModalNuovo(candidatoIdPre) {
     document.getElementById('app-data-ora').value = '';
     document.getElementById('app-tipo').value = 'Chiamata';
     document.getElementById('app-candidato').value = candidatoIdPre || '';
-    document.getElementById('app-gestore').value = 'Salvatore Sabia';
+    document.getElementById('app-gestore').value = 'Admin';
     document.getElementById('app-stato').value = 'Da fare';
     document.getElementById('app-note').value = '';
     nascondi('app-errore');
@@ -351,7 +351,7 @@ function apriModalModifica(id) {
     document.getElementById('app-data-ora').value = ev.data_ora ? ev.data_ora.substr(0,16).replace(' ','T') : '';
     document.getElementById('app-tipo').value = ev.tipo || 'Chiamata';
     document.getElementById('app-candidato').value = ev.candidato_id || '';
-    document.getElementById('app-gestore').value = ev.gestore || 'Salvatore Sabia';
+    document.getElementById('app-gestore').value = ev.gestore || 'Admin';
     document.getElementById('app-stato').value = ev.stato || 'Da fare';
     document.getElementById('app-note').value = ev.note || '';
     nascondi('app-errore');

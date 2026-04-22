@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Dashboard — SABIA{% endblock %}
+{% block title %}Dashboard — Huntly{% endblock %}
 
 {% block content %}
 
@@ -434,8 +434,8 @@ function apriStato(card) {
         const gestore = c.gestore || "\u2014";
         const data_ins = (c.data_inserimento || "").slice(0, 10);
         const pBadge  = "<span class='badge badge-profilo" + profilo + "'>" + profilo + "</span>";
-        const gShort  = gestore === "Salvatore Sabia" ? "Sabia"
-                      : gestore === "Firdaous Filahi" ? "Firdaous" : gestore;
+        const gShort  = gestore === "Admin" ? "Admin"
+                      : gestore === "Recruiter" ? "Recruiter" : gestore;
         return "<tr>"
           + "<td><div class='candidato-nome'>" + nome + "</div></td>"
           + "<td><div>" + ruolo + "</div><div class='candidato-meta'>" + azienda + "</div></td>"

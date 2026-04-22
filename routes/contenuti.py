@@ -32,7 +32,7 @@ def genera():
     dati = request.get_json()
     tema = dati.get("tema", "").strip()
     tono = dati.get("tono", "professionale")
-    profilo = dati.get("profilo", "Salvatore Sabia")
+    profilo = dati.get("profilo", "Admin")
 
     if not tema:
         return jsonify({"errore": "Inserire il tema del post"}), 400

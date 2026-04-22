@@ -22,7 +22,7 @@ STATI = [
     "Chiuso",
 ]
 
-GESTORI = ["Salvatore Sabia", "Firdaous Filahi", "Non assegnato"]
+GESTORI = ["Admin", "Recruiter", "Non assegnato"]
 
 
 # ─────────────────────────────────────────────
@@ -212,7 +212,7 @@ def report_pdf():
         canvas.rect(0, A4[1] - 1.4*cm, A4[0], 1.4*cm, fill=1, stroke=0)
         canvas.setFillColor(BIANCO)
         canvas.setFont("Helvetica-Bold", 11)
-        canvas.drawString(1.5*cm, A4[1] - 0.9*cm, "SABIA Recruiting Tool")
+        canvas.drawString(1.5*cm, A4[1] - 0.9*cm, "Huntly")
         canvas.setFont("Helvetica", 9)
         canvas.drawRightString(A4[0] - 1.5*cm, A4[1] - 0.9*cm, f"Report del {oggi}")
         # Footer
@@ -220,7 +220,7 @@ def report_pdf():
         canvas.rect(0, 0, A4[0], 1*cm, fill=1, stroke=0)
         canvas.setFillColor(colors.HexColor("#6B7A99"))
         canvas.setFont("Helvetica", 8)
-        canvas.drawString(1.5*cm, 0.35*cm, "SABIA — Uso riservato")
+        canvas.drawString(1.5*cm, 0.35*cm, "Huntly — Uso riservato")
         canvas.drawRightString(A4[0] - 1.5*cm, 0.35*cm, f"Pag. {doc.page}")
         canvas.restoreState()
 
@@ -230,7 +230,7 @@ def report_pdf():
         buf, pagesize=A4,
         leftMargin=1.8*cm, rightMargin=1.8*cm,
         topMargin=2.2*cm, bottomMargin=1.8*cm,
-        title="SABIA Report", author="SABIA Recruiting Tool",
+        title="Huntly Report", author="Huntly",
     )
 
     story = []
@@ -339,7 +339,7 @@ def report_pdf():
     doc.build(story, onFirstPage=_on_page, onLaterPages=_on_page)
     buf.seek(0)
 
-    filename = f"sabia_report_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
+    filename = f"huntly_report_{datetime.now().strftime('%Y%m%d_%H%M')}.pdf"
     return Response(
         buf.read(),
         mimetype="application/pdf",
@@ -348,7 +348,7 @@ def report_pdf():
 
 
 def _table(data, header_bg, row_bg, text_color, col_widths=None, font_size=9, header=True):
-    """Helper: crea una Table ReportLab con stile SABIA."""
+    """Helper: crea una Table ReportLab."""
     from reportlab.platypus import Table, TableStyle
     from reportlab.lib import colors
     from reportlab.lib.units import cm

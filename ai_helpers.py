@@ -564,13 +564,13 @@ def genera_contenuti_linkedin(tema: str, tono: str, profilo: str) -> dict:
         "educativo":     "informativo, chiaro, che insegna qualcosa di valore al lettore",
     }
     descrizioni_profilo = {
-        "Salvatore Sabia": (
-            "Salvatore Sabia, imprenditore nel settore della consulenza finanziaria, "
-            "con anni di esperienza nella selezione di professionisti del mondo bancario."
+        "Admin": (
+            "Professionista nel settore del recruiting, con esperienza nella selezione "
+            "di figure qualificate in ambito aziendale e finanziario."
         ),
-        "Assistente Recrutatrice": (
-            "Assistente recrutatrice specializzata nel settore bancario-finanziario, "
-            "che aiuta professionisti a trovare nuove opportunita di crescita."
+        "Recruiter": (
+            "Recruiter specializzato nella ricerca e selezione di professionisti, "
+            "che supporta i candidati nel trovare nuove opportunità di crescita."
         ),
     }
 
