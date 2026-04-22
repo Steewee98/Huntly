@@ -7,6 +7,18 @@
     <p class="page-subtitle">Configura i criteri di valutazione per ogni profilo. I parametri vengono usati dall'AI durante l'analisi.</p>
 </div>
 
+<!-- Banner Profili Target -->
+<div style="margin-bottom:1.5rem;padding:0.9rem 1.1rem;background:#eff6ff;border:1px solid #bfdbfe;border-radius:var(--radius);display:flex;align-items:center;gap:0.75rem;">
+    <span style="font-size:1.2rem;">&#127919;</span>
+    <div style="flex:1;">
+        <strong>I profili di ricerca si gestiscono ora in Profili Target.</strong>
+        <span style="color:var(--grigio-testo);font-size:0.88rem;margin-left:0.5rem;">
+            I parametri qui sotto sono usati come fallback per la ricerca automatica legacy.
+        </span>
+    </div>
+    <a href="{{ url_for('profili.index') }}" class="btn btn-primary btn-sm">Vai a Profili Target</a>
+</div>
+
 <!-- Tab toggle -->
 <div class="tab-bar" style="margin-bottom:1.5rem;">
     <button class="tab-btn active" id="tab-a-btn" onclick="switchTab('A')">

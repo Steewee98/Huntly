@@ -65,6 +65,11 @@
             <span class="nav-icon">&#9998;</span>
             <span>Contenuti LinkedIn</span>
         </a>
+        <a href="{{ url_for('profili.index') }}"
+           class="nav-item {% if request.blueprint == 'profili' %}active{% endif %}">
+            <span class="nav-icon">&#127919;</span>
+            <span>Profili Target</span>
+        </a>
         <a href="{{ url_for('impostazioni.index') }}"
            class="nav-item {% if request.blueprint == 'impostazioni' %}active{% endif %}">
             <span class="nav-icon">&#9881;</span>

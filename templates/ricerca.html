@@ -20,20 +20,19 @@
                 <input type="number" id="max-profili" class="form-input" value="20" min="1" max="100">
             </div>
         </div>
-        <div style="display:flex;gap:1rem;flex-wrap:wrap;align-items:center;">
-            <button class="btn btn-primary btn-lg" id="btn-auto-a"
-                    onclick="ricercaAutomatica('A')"
-                    {% if not imp_a_configurato %}disabled title="Configura prima il Profilo A in Impostazioni"{% endif %}>
-                &#128100; Ricerca Automatica Profilo A
-            </button>
-            <button class="btn btn-primary btn-lg" id="btn-auto-b"
-                    onclick="ricercaAutomatica('B')"
-                    {% if not imp_b_configurato %}disabled title="Configura prima il Profilo B in Impostazioni"{% endif %}>
-                &#128100; Ricerca Automatica Profilo B
-            </button>
-            {% if not imp_a_configurato or not imp_b_configurato %}
-            <a href="{{ url_for('impostazioni.index') }}" class="btn btn-outline btn-sm">
-                &#9881; Configura Impostazioni
+        <div id="auto-profili-buttons" style="display:flex;gap:1rem;flex-wrap:wrap;align-items:center;">
+            {% if profili_target %}
+                {% for p in profili_target %}
+                <button class="btn btn-primary btn-lg btn-auto-profilo"
+                        data-profilo-id="{{ p.id }}"
+                        style="border-left:4px solid {{ p.colore }};"
+                        onclick="ricercaAutomatica({{ p.id }}, this)">
+                    &#128100; {{ p.nome }}
+                </button>
+                {% endfor %}
+            {% else %}
+            <a href="{{ url_for('profili.index') }}" class="btn btn-outline btn-sm">
+                &#127919; Configura Profili Target
             </a>
             {% endif %}
         </div>
@@ -142,17 +141,15 @@
                 </select>
             </div>
             <div class="form-group">
-                <label class="form-label">Tipo profilo da cercare</label>
-                <div class="profilo-toggle" style="margin-top:0.25rem;">
-                    <label class="toggle-option selected" id="toggle-cerca-a" onclick="selezionaTipoCerca('A')">
-                        <input type="radio" name="tipo_profilo_cerca" value="A" checked>
-                        <span class="toggle-badge">Profilo A</span>
-                    </label>
-                    <label class="toggle-option" id="toggle-cerca-b" onclick="selezionaTipoCerca('B')">
-                        <input type="radio" name="tipo_profilo_cerca" value="B">
-                        <span class="toggle-badge">Profilo B</span>
-                    </label>
-                </div>
+                <label class="form-label">Profilo target</label>
+                <select id="profilo_id_cerca" class="form-input form-select" style="margin-top:0.25rem;">
+                    {% for p in profili_target %}
+                    <option value="{{ p.id }}">{{ p.nome }}</option>
+                    {% endfor %}
+                    {% if not profili_target %}
+                    <option value="">— Nessun profilo configurato —</option>
+                    {% endif %}
+                </select>
             </div>
         </div>
         <div class="form-actions">
@@ -325,7 +322,6 @@
 /* Stato globale                                                        */
 /* ------------------------------------------------------------------ */
 let tipoProfiloSelezionato = 'A';   // per modal importa
-let tipoCercaSelezionato   = 'A';   // per form ricerca manuale
 let tipoAnalisiSelezionato = 'A';   // per modal analisi AI
 let ricercaIdCorrente      = null;  // id del record ricerche_automatiche corrente
 let personaInAnalisi       = null;  // candidato che sta per essere analizzato
@@ -333,17 +329,15 @@ let personaInAnalisi       = null;  // candidato che sta per essere analizzato
 /* ------------------------------------------------------------------ */
 /* Ricerca Automatica (asincrona con polling)                          */
 /* ------------------------------------------------------------------ */
-var _pollingTimer  = null;
-var _jobTipoCorrente = null;
+var _pollingTimer    = null;
+var _btnInCorso      = null;  // riferimento al bottone attivo durante il polling
+var _btnLabelInCorso = null;  // label originale del bottone
 
-function ricercaAutomatica(tipo) {
+function ricercaAutomatica(profiloId, btn) {
     var maxProfili = parseInt(document.getElementById('max-profili').value, 10) || 20;
-    var btnA = document.getElementById('btn-auto-a');
-    var btnB = document.getElementById('btn-auto-b');
-    var btn  = tipo === 'A' ? btnA : btnB;
-
-    btnA.disabled = true;
-    btnB.disabled = true;
+    document.querySelectorAll('.btn-auto-profilo').forEach(function(b) { b.disabled = true; });
+    _btnInCorso = btn;
+    _btnLabelInCorso = btn.innerHTML;
     btn.innerHTML = '<span class="spinner"></span> Avvio ricerca...';
     document.getElementById('auto-risultato').classList.add('hidden');
     document.getElementById('auto-progresso').classList.remove('hidden');
@@ -353,41 +347,37 @@ function ricercaAutomatica(tipo) {
     document.getElementById('auto-progress-bar').style.background = 'var(--azzurro)';
     document.getElementById('auto-pct-label').textContent = '0%';
     document.getElementById('auto-pct-label').style.color = 'var(--azzurro)';
-    _jobTipoCorrente = tipo;
 
     fetch('/ricerca/automatica', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tipo_profilo: tipo, max_profili: maxProfili })
+        body: JSON.stringify({ profilo_id: profiloId, max_profili: maxProfili })
     })
     .then(function(r) {
         if (!r.ok) return r.text().then(function(t) { throw new Error('Errore server ' + r.status + ': ' + t.substring(0, 200)); });
         return jsonSicuro(r);
     })
     .then(function(data) {
-        btn.innerHTML = '&#128100; Ricerca Automatica Profilo ' + tipo;
         if (data.errore) {
-            _ripristinaBtn(tipo);
+            _ripristinaBtn();
             alert('Errore: ' + data.errore);
             return;
         }
-        _avviaPolling(data.job_id, tipo);
+        _avviaPolling(data.job_id);
     })
     .catch(function(err) {
-        _ripristinaBtn(tipo);
+        _ripristinaBtn();
         alert('Errore di connessione: ' + err);
     });
 }
 
-function _avviaPolling(jobId, tipo) {
+function _avviaPolling(jobId) {
     if (_pollingTimer) clearInterval(_pollingTimer);
     _pollingTimer = setInterval(function() {
         fetch('/ricerca/stato/' + jobId)
         .then(function(r) { return jsonSicuro(r); })
         .then(function(data) {
-            // Aggiorna messaggio step
             document.getElementById('auto-step-msg').textContent = data.step || '...';
-            // Aggiorna barra deterministica
             var pct = data.percentuale || 0;
             document.getElementById('auto-progress-bar').style.width = pct + '%';
             document.getElementById('auto-pct-label').textContent = pct + '%';
@@ -395,14 +385,13 @@ function _avviaPolling(jobId, tipo) {
             if (data.status === 'completato') {
                 clearInterval(_pollingTimer);
                 _pollingTimer = null;
-                _ripristinaBtn(tipo);
+                _ripristinaBtn();
                 document.getElementById('auto-progresso').classList.add('hidden');
                 _mostraRiepilogo(data.risultati || {});
             } else if (data.status === 'errore') {
                 clearInterval(_pollingTimer);
                 _pollingTimer = null;
-                _ripristinaBtn(tipo);
-                // Mostra barra rossa e messaggio errore
+                _ripristinaBtn();
                 document.getElementById('auto-progress-bar').style.background = '#dc2626';
                 document.getElementById('auto-pct-label').style.color = '#dc2626';
                 document.getElementById('auto-step-msg').style.color = '#dc2626';
@@ -416,9 +405,13 @@ function _avviaPolling(jobId, tipo) {
     }, 2000);
 }
 
-function _ripristinaBtn(tipo) {
-    {% if imp_a_configurato %}document.getElementById('btn-auto-a').disabled = false;{% endif %}
-    {% if imp_b_configurato %}document.getElementById('btn-auto-b').disabled = false;{% endif %}
+function _ripristinaBtn() {
+    document.querySelectorAll('.btn-auto-profilo').forEach(function(b) { b.disabled = false; });
+    if (_btnInCorso && _btnLabelInCorso) {
+        _btnInCorso.innerHTML = _btnLabelInCorso;
+    }
+    _btnInCorso = null;
+    _btnLabelInCorso = null;
 }
 
 function _mostraRiepilogo(data) {
@@ -461,15 +454,6 @@ function _mostraRiepilogo(data) {
 
 
 /* ------------------------------------------------------------------ */
-/* Tipo profilo form ricerca                                            */
-/* ------------------------------------------------------------------ */
-function selezionaTipoCerca(tipo) {
-    tipoCercaSelezionato = tipo;
-    document.getElementById('toggle-cerca-a').classList.toggle('selected', tipo === 'A');
-    document.getElementById('toggle-cerca-b').classList.toggle('selected', tipo === 'B');
-}
-
-/* ------------------------------------------------------------------ */
 /* Ricerca manuale                                                      */
 /* ------------------------------------------------------------------ */
 function cercaFigure() {
@@ -501,7 +485,7 @@ function cercaFigure() {
             paese:         '',
             azienda:       document.getElementById('azienda').value.trim(),
             num_pagine:    parseInt(document.getElementById('num_pagine').value),
-            tipo_profilo:  tipoCercaSelezionato,
+            tipo_profilo:  (document.getElementById('profilo_id_cerca') ? document.getElementById('profilo_id_cerca').value : 'A'),
         })
     })
     .then(function(r) {

@@ -363,6 +363,30 @@ def init_db():
 )""",
         "CREATE INDEX IF NOT EXISTS idx_profili_scartati_linkedin ON profili_scartati(linkedin_url) WHERE linkedin_url IS NOT NULL AND linkedin_url <> ''",
 
+        # ── Tabella profili target configurabili ───────────────────────────
+        """CREATE TABLE IF NOT EXISTS profili_target (
+    id                    SERIAL PRIMARY KEY,
+    nome                  TEXT NOT NULL,
+    descrizione           TEXT DEFAULT '',
+    ruoli_target          TEXT DEFAULT '',
+    settori               TEXT DEFAULT '',
+    eta_min               INTEGER DEFAULT 0,
+    eta_max               INTEGER DEFAULT 99,
+    anni_esperienza_min   INTEGER DEFAULT 0,
+    keyword_positive      TEXT DEFAULT '',
+    keyword_negative      TEXT DEFAULT '',
+    colore                VARCHAR(20) DEFAULT '#6366f1',
+    attivo                BOOLEAN DEFAULT TRUE,
+    creato_il             TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)""",
+        # Seed: 2 profili generici se la tabella è vuota
+        """INSERT INTO profili_target (nome, descrizione, ruoli_target, settori, eta_min, eta_max, anni_esperienza_min, keyword_positive, colore)
+SELECT 'Profilo Senior', 'Figure manageriali con almeno 10 anni di esperienza', '', '', 40, 65, 10, '', '#6366f1'
+WHERE NOT EXISTS (SELECT 1 FROM profili_target)""",
+        """INSERT INTO profili_target (nome, descrizione, ruoli_target, settori, eta_min, eta_max, anni_esperienza_min, keyword_positive, colore)
+SELECT 'Profilo Junior', 'Profili emergenti under 35 con forte potenziale', '', '', 22, 35, 0, '', '#16a34a'
+WHERE NOT EXISTS (SELECT 1 FROM profili_target WHERE nome = 'Profilo Junior')""",
+
         # ── Indici per performance query ───────────────────────────────────
         "CREATE INDEX IF NOT EXISTS idx_candidati_tipo_profilo  ON candidati(tipo_profilo)",
         "CREATE INDEX IF NOT EXISTS idx_candidati_stato          ON candidati(stato)",

@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+{% block title %}Profili Target — Huntly{% endblock %}
+
+{% block content %}
+<div class="page-header" style="display:flex;align-items:center;justify-content:space-between;">
+    <div>
+        <h1 class="page-title">&#127919; Profili Target</h1>
+        <p class="page-subtitle">Configura i profili di ricerca usati nelle ricerche automatiche e manuali.</p>
+    </div>
+    <button class="btn btn-primary" onclick="aprireModale()">&#43; Nuovo Profilo</button>
+</div>
+
+{% if profili %}
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:1.25rem;">
+    {% for p in profili %}
+    <div class="card" style="border-top:4px solid {{ p.colore }};position:relative;">
+        <div class="card-body" style="padding-bottom:3.5rem;">
+            <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.75rem;">
+                <div style="width:14px;height:14px;border-radius:50%;background:{{ p.colore }};flex-shrink:0;"></div>
+                <h3 style="margin:0;font-size:1rem;">{{ p.nome }}</h3>
+            </div>
+            {% if p.descrizione %}
+            <p style="font-size:0.85rem;color:var(--grigio-testo);margin-bottom:0.75rem;">{{ p.descrizione }}</p>
+            {% endif %}
+            <div style="font-size:0.8rem;color:var(--grigio-testo);display:flex;flex-direction:column;gap:0.3rem;">
+                {% if p.eta_min or p.eta_max != 99 %}
+                <div>&#128100; Età: {{ p.eta_min }}–{{ p.eta_max }} anni</div>
+                {% endif %}
+                {% if p.anni_esperienza_min %}
+                <div>&#9201; Esperienza min: {{ p.anni_esperienza_min }} anni</div>
+                {% endif %}
+                {% if p.ruoli_target %}
+                <div>&#128084; Ruoli: {{ p.ruoli_target[:80] }}{% if p.ruoli_target|length > 80 %}…{% endif %}</div>
+                {% endif %}
+                {% if p.keyword_positive %}
+                <div>&#128269; Keyword: {{ p.keyword_positive[:60] }}{% if p.keyword_positive|length > 60 %}…{% endif %}</div>
+                {% endif %}
+            </div>
+        </div>
+        <div style="position:absolute;bottom:1rem;right:1rem;display:flex;gap:0.5rem;">
+            <button class="btn btn-outline btn-sm" onclick="modificaProfilo({{ p.id }})">&#9998; Modifica</button>
+            <button class="btn btn-sm" style="background:#fee2e2;color:#dc2626;border:1px solid #fecaca;"
+                    onclick="eliminaProfilo({{ p.id }}, '{{ p.nome }}')">&#10005;</button>
+        </div>
+    </div>
+    {% endfor %}
+</div>
+{% else %}
+<div class="card">
+    <div class="card-body">
+        <div class="empty-state" style="padding:3rem;">
+            <div class="empty-icon">&#127919;</div>
+            <h3>Nessun profilo configurato</h3>
+            <p>Crea il tuo primo profilo target per personalizzare le ricerche.</p>
+            <button class="btn btn-primary" onclick="aprireModale()">&#43; Crea Profilo</button>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Modal crea/modifica profilo -->
+<div id="modal-profilo" class="modal-overlay hidden">
+    <div class="modal" style="max-width:540px;">
+        <div class="modal-header">
+            <h3 id="modal-titolo">Nuovo Profilo Target</h3>
+            <button class="modal-close" onclick="chiudiModale()">&#215;</button>
+        </div>
+        <div class="modal-body">
+            <input type="hidden" id="edit-id">
+
+            <div class="form-group" style="margin-bottom:1rem;">
+                <label class="form-label">Nome profilo *</label>
+                <input type="text" id="edit-nome" class="form-input" placeholder="es. Senior Finance, Tech Junior...">
+            </div>
+
+            <div class="form-group" style="margin-bottom:1rem;">
+                <label class="form-label">Descrizione</label>
+                <input type="text" id="edit-descrizione" class="form-input" placeholder="Breve descrizione del profilo target">
+            </div>
+
+            <div class="form-row" style="margin-bottom:1rem;">
+                <div class="form-group">
+                    <label class="form-label">Età min</label>
+                    <input type="number" id="edit-eta-min" class="form-input" value="0" min="0" max="99">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Età max</label>
+                    <input type="number" id="edit-eta-max" class="form-input" value="99" min="0" max="99">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Esp. min (anni)</label>
+                    <input type="number" id="edit-esp-min" class="form-input" value="0" min="0" max="50">
+                </div>
+            </div>
+
+            <div class="form-group" style="margin-bottom:1rem;">
+                <label class="form-label">Ruoli target <span class="form-hint">(separati da virgola)</span></label>
+                <input type="text" id="edit-ruoli" class="form-input" placeholder="es. Sales Manager, Private Banker...">
+            </div>
+
+            <div class="form-group" style="margin-bottom:1rem;">
+                <label class="form-label">Settori <span class="form-hint">(separati da virgola)</span></label>
+                <input type="text" id="edit-settori" class="form-input" placeholder="es. Finance, Banking, Insurance...">
+            </div>
+
+            <div class="form-group" style="margin-bottom:1rem;">
+                <label class="form-label">Keyword positive <span class="form-hint">(separati da virgola)</span></label>
+                <input type="text" id="edit-kw-pos" class="form-input" placeholder="es. SaaS, B2B, startup...">
+            </div>
+
+            <div class="form-group" style="margin-bottom:1rem;">
+                <label class="form-label">Keyword negative <span class="form-hint">(separati da virgola)</span></label>
+                <input type="text" id="edit-kw-neg" class="form-input" placeholder="es. stage, tirocinio, intern...">
+            </div>
+
+            <div class="form-group" style="margin-bottom:1.5rem;">
+                <label class="form-label">Colore</label>
+                <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-top:0.4rem;">
+                    {% for c in colori %}
+                    <button type="button" class="color-chip" data-color="{{ c }}"
+                            style="width:28px;height:28px;border-radius:50%;background:{{ c }};
+                                   border:2px solid transparent;cursor:pointer;transition:transform 0.15s;"
+                            onclick="selezionaColore('{{ c }}', this)"></button>
+                    {% endfor %}
+                </div>
+                <input type="hidden" id="edit-colore" value="#6366f1">
+            </div>
+
+            <div class="form-actions">
+                <button class="btn btn-primary" onclick="salvaProfilo()">&#10003; Salva</button>
+                <button class="btn btn-secondary" onclick="chiudiModale()">Annulla</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+function aprireModale(dati) {
+    document.getElementById('modal-titolo').textContent = dati ? 'Modifica Profilo' : 'Nuovo Profilo Target';
+    document.getElementById('edit-id').value        = dati ? dati.id : '';
+    document.getElementById('edit-nome').value      = dati ? (dati.nome || '') : '';
+    document.getElementById('edit-descrizione').value = dati ? (dati.descrizione || '') : '';
+    document.getElementById('edit-eta-min').value   = dati ? (dati.eta_min ?? 0) : 0;
+    document.getElementById('edit-eta-max').value   = dati ? (dati.eta_max ?? 99) : 99;
+    document.getElementById('edit-esp-min').value   = dati ? (dati.anni_esperienza_min ?? 0) : 0;
+    document.getElementById('edit-ruoli').value     = dati ? (dati.ruoli_target || '') : '';
+    document.getElementById('edit-settori').value   = dati ? (dati.settori || '') : '';
+    document.getElementById('edit-kw-pos').value    = dati ? (dati.keyword_positive || '') : '';
+    document.getElementById('edit-kw-neg').value    = dati ? (dati.keyword_negative || '') : '';
+    var colore = dati ? (dati.colore || '#6366f1') : '#6366f1';
+    document.getElementById('edit-colore').value = colore;
+    document.querySelectorAll('.color-chip').forEach(function(btn) {
+        btn.style.border = btn.dataset.color === colore ? '2px solid #1e293b' : '2px solid transparent';
+        btn.style.transform = btn.dataset.color === colore ? 'scale(1.2)' : 'scale(1)';
+    });
+    document.getElementById('modal-profilo').classList.remove('hidden');
+}
+
+function chiudiModale() {
+    document.getElementById('modal-profilo').classList.add('hidden');
+}
+
+function selezionaColore(colore, btn) {
+    document.getElementById('edit-colore').value = colore;
+    document.querySelectorAll('.color-chip').forEach(function(b) {
+        b.style.border = '2px solid transparent';
+        b.style.transform = 'scale(1)';
+    });
+    btn.style.border = '2px solid #1e293b';
+    btn.style.transform = 'scale(1.2)';
+}
+
+function modificaProfilo(id) {
+    fetch('/profili/' + id)
+        .then(function(r) { return r.json(); })
+        .then(function(dati) { aprireModale(dati); })
+        .catch(function(e) { alert('Errore caricamento: ' + e); });
+}
+
+function salvaProfilo() {
+    var id = document.getElementById('edit-id').value;
+    var nome = document.getElementById('edit-nome').value.trim();
+    if (!nome) { alert('Il nome è obbligatorio.'); return; }
+    var payload = {
+        nome: nome,
+        descrizione: document.getElementById('edit-descrizione').value.trim(),
+        eta_min: parseInt(document.getElementById('edit-eta-min').value) || 0,
+        eta_max: parseInt(document.getElementById('edit-eta-max').value) || 99,
+        anni_esperienza_min: parseInt(document.getElementById('edit-esp-min').value) || 0,
+        ruoli_target: document.getElementById('edit-ruoli').value.trim(),
+        settori: document.getElementById('edit-settori').value.trim(),
+        keyword_positive: document.getElementById('edit-kw-pos').value.trim(),
+        keyword_negative: document.getElementById('edit-kw-neg').value.trim(),
+        colore: document.getElementById('edit-colore').value
+    };
+    var url    = id ? ('/profili/' + id) : '/profili';
+    var method = id ? 'PUT' : 'POST';
+    fetch(url, { method: method, headers: {'Content-Type':'application/json'}, body: JSON.stringify(payload) })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            if (d.ok) { window.location.reload(); }
+            else { alert('Errore: ' + (d.errore || 'sconosciuto')); }
+        })
+        .catch(function(e) { alert('Errore: ' + e); });
+}
+
+function eliminaProfilo(id, nome) {
+    if (!confirm('Eliminare il profilo "' + nome + '"?')) return;
+    fetch('/profili/' + id, { method: 'DELETE' })
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            if (d.ok) { window.location.reload(); }
+            else { alert('Errore: ' + (d.errore || 'sconosciuto')); }
+        })
+        .catch(function(e) { alert('Errore: ' + e); });
+}
+</script>
+{% endblock %}

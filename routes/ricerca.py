@@ -494,16 +494,16 @@ def scarta():
 def index():
     """Pagina di ricerca automatica figure con Apify/LinkedIn."""
     db = get_db()
-    imp_a = db.execute("SELECT id FROM impostazioni_profilo WHERE profilo='A'").fetchone()
-    imp_b = db.execute("SELECT id FROM impostazioni_profilo WHERE profilo='B'").fetchone()
+    profili_target = db.execute(
+        "SELECT id, nome, descrizione, colore FROM profili_target WHERE attivo = TRUE ORDER BY creato_il"
+    ).fetchall()
     cronologia = db.execute(
         "SELECT * FROM ricerche_automatiche ORDER BY data_ricerca DESC"
     ).fetchall()
     db.close()
     cronologia = [dict(r) for r in cronologia]
     return render_template("ricerca.html",
-                           imp_a_configurato=imp_a is not None,
-                           imp_b_configurato=imp_b is not None,
+                           profili_target=[dict(p) for p in profili_target],
                            cronologia=cronologia)
 
 
@@ -946,21 +946,29 @@ def _esegui_ricerca_background(job_id, tipo_profilo, max_profili, imp):
 @ricerca_bp.route("/ricerca/automatica", methods=["POST"])
 def automatica():
     """Avvia la ricerca automatica in background e restituisce subito un job_id."""
-    dati         = request.get_json()
-    tipo_profilo = dati.get("tipo_profilo", "A")
-    max_profili  = max(1, min(int(dati.get("max_profili", 20)), 100))
+    dati        = request.get_json()
+    profilo_id  = dati.get("profilo_id")
+    max_profili = max(1, min(int(dati.get("max_profili", 20)), 100))
+
+    if not profilo_id:
+        return jsonify({"errore": "Nessun profilo selezionato. "
+                                  "Vai in Profili Target e crea almeno un profilo."}), 400
 
     db = get_db()
     imp_row = db.execute(
-        "SELECT * FROM impostazioni_profilo WHERE profilo = ?", (tipo_profilo,)
+        "SELECT * FROM profili_target WHERE id = ? AND attivo = TRUE", (profilo_id,)
     ).fetchone()
     db.close()
 
     if not imp_row:
-        return jsonify({"errore": f"Impostazioni Profilo {tipo_profilo} non configurate. "
-                                  f"Vai in Impostazioni e salva i parametri."}), 400
+        return jsonify({"errore": f"Profilo {profilo_id} non trovato o non attivo. "
+                                  f"Vai in Profili Target e verifica la configurazione."}), 400
 
-    imp    = dict(imp_row)
+    imp = dict(imp_row)
+    # Compatibilità con _esegui_ricerca_background che usa imp.get('istituti') per profilo != A
+    imp.setdefault('istituti', imp.get('settori', ''))
+
+    tipo_profilo = f"pt_{profilo_id}"   # chiave univoca per search_offset
     job_id = str(uuid.uuid4())
 
     db2 = get_db()
