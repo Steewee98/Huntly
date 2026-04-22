@@ -241,6 +241,22 @@ def init_db():
             data_creazione          TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )""",
 
+        # ── Tabella profili voce autore (contenuti LinkedIn) ───────────────
+        """CREATE TABLE IF NOT EXISTS profili_voce (
+    id                SERIAL PRIMARY KEY,
+    nome              VARCHAR(100) NOT NULL,
+    linkedin_url      TEXT,
+    linkedin_summary  TEXT,
+    settore           TEXT,
+    tono_prevalente   TEXT,
+    bio_breve         TEXT,
+    creato_il         TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)""",
+        # Nuovi campi per storico contenuti con profilo voce
+        "ALTER TABLE contenuti_linkedin ADD COLUMN IF NOT EXISTS obiettivo TEXT",
+        "ALTER TABLE contenuti_linkedin ADD COLUMN IF NOT EXISTS contesto TEXT",
+        "ALTER TABLE contenuti_linkedin ADD COLUMN IF NOT EXISTS profilo_voce_id INTEGER",
+
         # ── Tabella impostazioni profili A e B ─────────────────────────────
         """CREATE TABLE IF NOT EXISTS impostazioni_profilo (
             id                  SERIAL PRIMARY KEY,

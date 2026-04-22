@@ -1,148 +1,222 @@
 {% extends "base.html" %}
-{% block title %}Contenuti LinkedIn — Recruiter Assistant{% endblock %}
+{% block title %}Contenuti LinkedIn — Huntly{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h1 class="page-title">Creazione Contenuti LinkedIn</h1>
-    <p class="page-subtitle">Genera 3 varianti di post con intelligenza artificiale</p>
+    <h1 class="page-title">&#9998; Contenuti LinkedIn</h1>
+    <p class="page-subtitle">Genera post LinkedIn personalizzati con la tua voce</p>
 </div>
 
-<div class="contenuti-layout">
+<div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;align-items:start;">
 
-    <!-- Form generazione -->
-    <div class="card">
-        <div class="card-body">
+<!-- ===== COLONNA SINISTRA: form ===== -->
+<div>
 
-            <!-- Tema -->
-            <div class="form-group">
-                <label class="form-label" for="tema">Tema del Post <span class="required">*</span></label>
-                <input type="text" id="tema" class="form-input"
-                       placeholder="Es. L'importanza della consulenza finanziaria indipendente">
-            </div>
+<!-- Sezione 1: Chi pubblica -->
+<div class="card" style="margin-bottom:1.25rem;">
+    <div class="card-header"><h3>&#128100; Chi pubblica</h3></div>
+    <div class="card-body">
+        <div id="profilo-voce-wrapper">
+            {% if profili_voce %}
+            <select id="profilo-voce-id" class="form-input form-select" onchange="onProfiloChange()">
+                <option value="">— Seleziona profilo —</option>
+                {% for p in profili_voce %}
+                <option value="{{ p.id }}"
+                        data-nome="{{ p.nome }}"
+                        data-bio="{{ p.bio_breve or '' }}"
+                        data-settore="{{ p.settore or '' }}"
+                        data-tono="{{ p.tono_prevalente or '' }}">
+                    {{ p.nome }}{% if p.settore %} · {{ p.settore }}{% endif %}
+                </option>
+                {% endfor %}
+            </select>
+            {% else %}
+            <p style="font-size:0.88rem;color:var(--grigio-testo);margin-bottom:0.75rem;">
+                Nessun profilo configurato. Aggiungine uno per personalizzare i post.
+            </p>
+            {% endif %}
+        </div>
 
-            <!-- Tono -->
-            <div class="form-group">
-                <label class="form-label">Tono del Contenuto</label>
-                <div class="tono-grid">
-                    <label class="toggle-option selected" id="tono-professionale">
-                        <input type="radio" name="tono" value="professionale" checked>
-                        <div class="toggle-content">
-                            <span class="toggle-badge">Professionale</span>
-                            <span class="toggle-desc">Formale, dati e risultati</span>
-                        </div>
-                    </label>
-                    <label class="toggle-option" id="tono-ispirazionale">
-                        <input type="radio" name="tono" value="ispirazionale">
-                        <div class="toggle-content">
-                            <span class="toggle-badge">Ispirazionale</span>
-                            <span class="toggle-desc">Motivante, storie ed emozioni</span>
-                        </div>
-                    </label>
-                    <label class="toggle-option" id="tono-educativo">
-                        <input type="radio" name="tono" value="educativo">
-                        <div class="toggle-content">
-                            <span class="toggle-badge">Educativo</span>
-                            <span class="toggle-desc">Informativo, valore pratico</span>
-                        </div>
-                    </label>
+        <!-- Bottone aggiungi -->
+        <button class="btn btn-outline btn-sm" style="margin-top:0.75rem;"
+                onclick="toggleFormProfilo()">&#43; Aggiungi profilo</button>
+
+        <!-- Form inline -->
+        <div id="form-nuovo-profilo" class="hidden"
+             style="margin-top:1rem;padding:1rem;background:#f8fafc;border-radius:var(--radius);border:1px solid var(--grigio-bordo);">
+            <div class="form-row" style="margin-bottom:0.75rem;">
+                <div class="form-group">
+                    <label class="form-label">Nome *</label>
+                    <input type="text" id="np-nome" class="form-input" placeholder="es. Mario Rossi">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">URL LinkedIn</label>
+                    <input type="text" id="np-url" class="form-input" placeholder="https://linkedin.com/in/...">
                 </div>
             </div>
-
-            <!-- Profilo destinazione -->
-            <div class="form-group">
-                <label class="form-label">Scritto da</label>
-                <div class="profilo-toggle">
-                    <label class="toggle-option selected" id="profilo-salvatore">
-                        <input type="radio" name="profilo" value="Admin" checked>
-                        <div class="toggle-content">
-                            <span class="toggle-badge">Admin</span>
-                            <span class="toggle-desc">Profilo principale</span>
-                        </div>
-                    </label>
-                    <label class="toggle-option" id="profilo-assistente">
-                        <input type="radio" name="profilo" value="Recruiter">
-                        <div class="toggle-content">
-                            <span class="toggle-badge">Recruiter</span>
-                            <span class="toggle-desc">Profilo recruiting</span>
-                        </div>
-                    </label>
-                </div>
+            <div style="display:flex;gap:0.5rem;flex-wrap:wrap;align-items:center;">
+                <button class="btn btn-primary btn-sm" id="btn-analizza"
+                        onclick="analizzaProfilo()">
+                    <span id="analizza-testo">&#128269; Analizza e Salva</span>
+                    <span id="analizza-loading" class="hidden"><span class="spinner"></span> Analisi...</span>
+                </button>
+                <span id="analizza-esito" style="font-size:0.82rem;"></span>
+                <button class="btn btn-outline btn-sm" onclick="toggleFormProfilo()">Annulla</button>
             </div>
+        </div>
 
-            <button id="btn-genera" class="btn btn-primary btn-lg" onclick="generaContenuti()">
-                <span id="btn-genera-testo">&#9998; Genera 3 Varianti</span>
-                <span id="btn-genera-loading" class="hidden">
-                    <span class="spinner"></span> Generazione in corso...
-                </span>
-            </button>
+        <!-- Info profilo selezionato -->
+        <div id="profilo-info" class="hidden"
+             style="margin-top:0.75rem;padding:0.75rem;background:#f0f9ff;border-radius:var(--radius);
+                    font-size:0.84rem;color:var(--grigio-testo);border:1px solid #bae6fd;">
+            <strong id="profilo-info-nome"></strong>
+            <div id="profilo-info-bio" style="margin-top:0.3rem;"></div>
         </div>
     </div>
+</div>
 
-    <!-- Risultati varianti -->
-    <div id="varianti-container" class="hidden">
-        <div class="varianti-grid">
-            {% for i in range(1, 4) %}
-            <div class="card variante-card">
-                <div class="card-header">
-                    <h3>Variante {{ i }}</h3>
-                    <div style="display:flex;gap:0.4rem;">
-                        <button class="btn btn-outline btn-sm"
-                                onclick="copiaVariante({{ i }})">Copia testo</button>
-                        <button class="btn btn-secondary btn-sm" id="btn-visual-{{ i }}"
-                                onclick="generaImmagine({{ i }})">
-                            <span id="visual-testo-{{ i }}">&#128444; Genera Visual</span>
-                            <span id="visual-loading-{{ i }}" class="hidden"><span class="spinner" style="border-top-color:var(--azzurro);border-color:rgba(46,124,246,0.3)"></span></span>
+<!-- Sezione 2: Il post -->
+<div class="card" style="margin-bottom:1.25rem;">
+    <div class="card-header"><h3>&#128203; Il post</h3></div>
+    <div class="card-body">
+
+        <!-- Obiettivo -->
+        <div class="form-group" style="margin-bottom:1.25rem;">
+            <label class="form-label">Obiettivo del post</label>
+            <div id="obiettivi-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;margin-top:0.5rem;">
+                <label class="obiettivo-card selected" data-val="candidati" onclick="selObiettivo('candidati', this)">
+                    <span class="obiettivo-icon">&#127919;</span>
+                    <span class="obiettivo-label">Attirare candidati</span>
+                </label>
+                <label class="obiettivo-card" data-val="insight" onclick="selObiettivo('insight', this)">
+                    <span class="obiettivo-icon">&#128161;</span>
+                    <span class="obiettivo-label">Condividere un insight</span>
+                </label>
+                <label class="obiettivo-card" data-val="successo" onclick="selObiettivo('successo', this)">
+                    <span class="obiettivo-icon">&#127942;</span>
+                    <span class="obiettivo-label">Caso di successo</span>
+                </label>
+                <label class="obiettivo-card" data-val="educare" onclick="selObiettivo('educare', this)">
+                    <span class="obiettivo-icon">&#128218;</span>
+                    <span class="obiettivo-label">Educare il pubblico</span>
+                </label>
+                <label class="obiettivo-card" data-val="autorita" onclick="selObiettivo('autorita', this)" style="grid-column:1/-1;">
+                    <span class="obiettivo-icon">&#129309;</span>
+                    <span class="obiettivo-label">Costruire autorevolezza</span>
+                </label>
+            </div>
+            <input type="hidden" id="obiettivo-sel" value="candidati">
+        </div>
+
+        <!-- Tema -->
+        <div class="form-group" style="margin-bottom:1rem;">
+            <label class="form-label" for="tema">Di cosa vuoi parlare? <span class="required">*</span></label>
+            <input type="text" id="tema" class="form-input"
+                   placeholder="es. Come ho trovato un CFO in 3 settimane, Il mercato del recruiting nel 2025...">
+        </div>
+
+        <!-- Contesto -->
+        <div class="form-group" style="margin-bottom:1.25rem;">
+            <label class="form-label">Contesto aggiuntivo <span class="form-hint">(opzionale)</span></label>
+            <textarea id="contesto" class="form-input" rows="2"
+                      placeholder="es. Ho appena chiuso una selezione importante, volevo condividere il metodo usato..."
+                      style="resize:vertical;min-height:60px;"></textarea>
+        </div>
+
+        <button id="btn-genera" class="btn btn-primary btn-lg" onclick="generaContenuti()">
+            <span id="btn-genera-testo">&#9998; Genera 3 Varianti</span>
+            <span id="btn-genera-loading" class="hidden">
+                <span class="spinner"></span> Generazione in corso...
+            </span>
+        </button>
+    </div>
+</div>
+
+<!-- Errore -->
+<div id="errore-contenuti" class="hidden alert alert-errore"></div>
+
+</div><!-- fine colonna sinistra -->
+
+<!-- ===== COLONNA DESTRA: anteprime LinkedIn ===== -->
+<div id="varianti-container" class="hidden">
+    <div style="display:flex;flex-direction:column;gap:1.25rem;">
+        {% for i in range(1, 4) %}
+        <div class="card">
+            <div class="card-header">
+                <h3 style="font-size:0.9rem;color:var(--grigio-testo);">Variante {{ i }}</h3>
+                <div style="display:flex;gap:0.4rem;">
+                    <button class="btn btn-outline btn-sm" onclick="copiaVariante({{ i }})">&#128203; Copia</button>
+                    <button class="btn btn-secondary btn-sm" id="btn-visual-{{ i }}"
+                            onclick="generaImmagine({{ i }})">
+                        <span id="visual-testo-{{ i }}">&#128444; Visual</span>
+                        <span id="visual-loading-{{ i }}" class="hidden"><span class="spinner" style="border-top-color:var(--azzurro);border-color:rgba(46,124,246,0.3)"></span></span>
+                    </button>
+                </div>
+            </div>
+            <div class="card-body" style="padding-top:0.75rem;">
+                <!-- Anteprima stile LinkedIn -->
+                <div style="border:1px solid #e2e8f0;border-radius:8px;overflow:hidden;">
+                    <!-- Header autore -->
+                    <div style="padding:0.75rem;display:flex;align-items:center;gap:0.6rem;border-bottom:1px solid #f1f5f9;">
+                        <div id="li-avatar-{{ i }}"
+                             style="width:36px;height:36px;border-radius:50%;background:var(--azzurro);
+                                    color:#fff;display:flex;align-items:center;justify-content:center;
+                                    font-weight:700;font-size:0.85rem;flex-shrink:0;">?</div>
+                        <div>
+                            <div id="li-nome-{{ i }}" style="font-size:0.85rem;font-weight:600;color:#1e293b;">—</div>
+                            <div id="li-bio-{{ i }}" style="font-size:0.75rem;color:var(--grigio-testo);"></div>
+                        </div>
+                    </div>
+                    <!-- Testo post -->
+                    <div style="padding:0.75rem;">
+                        <div id="variante-{{ i }}" class="li-post-text"
+                             style="font-size:0.84rem;line-height:1.55;color:#1e293b;
+                                    white-space:pre-wrap;word-break:break-word;"></div>
+                    </div>
+                </div>
+
+                <!-- Area immagine generata -->
+                <div id="visual-container-{{ i }}" class="hidden" style="margin-top:0.75rem;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+                        <span style="font-size:0.78rem;font-weight:600;color:var(--grigio-testo);text-transform:uppercase;letter-spacing:0.05em;">Visual LinkedIn</span>
+                        <a id="visual-download-{{ i }}" class="btn btn-outline btn-xs" download="visual-variante-{{ i }}.jpg" target="_blank">&#8595; Scarica</a>
+                    </div>
+                    <img id="visual-img-{{ i }}" src="" alt="Visual LinkedIn"
+                         style="width:100%;border-radius:6px;box-shadow:var(--shadow);display:block;">
+                    <p id="visual-prompt-{{ i }}" style="font-size:0.72rem;color:var(--grigio-testo);margin-top:0.4rem;font-style:italic;"></p>
+                    <div style="display:flex;gap:0.5rem;margin-top:0.5rem;align-items:flex-end;">
+                        <div class="form-group" style="flex:1;margin-bottom:0;">
+                            <input type="text" id="prompt-custom-{{ i }}" class="form-input"
+                                   placeholder="Stile custom: più minimalista, tonalità calde...">
+                        </div>
+                        <button class="btn btn-secondary btn-sm" onclick="generaImmagine({{ i }})">
+                            &#8635; Rigenera
                         </button>
                     </div>
                 </div>
-                <div class="card-body">
-                    <div id="variante-{{ i }}" class="post-preview"></div>
-                    <!-- Area immagine generata -->
-                    <div id="visual-container-{{ i }}" class="hidden" style="margin-top:1.25rem;">
-                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
-                            <span style="font-size:0.8rem;font-weight:600;color:var(--grigio-testo);text-transform:uppercase;letter-spacing:0.05em;">Visual LinkedIn</span>
-                            <a id="visual-download-{{ i }}" class="btn btn-outline btn-xs" download="visual-variante-{{ i }}.jpg" target="_blank">&#8595; Scarica</a>
-                        </div>
-                        <!-- Immagine generata -->
-                        <img id="visual-img-{{ i }}" src="" alt="Visual LinkedIn"
-                             style="width:100%;border-radius:8px;box-shadow:var(--shadow);display:block;">
-                        <!-- Prompt usato -->
-                        <p id="visual-prompt-{{ i }}" style="font-size:0.75rem;color:var(--grigio-testo);margin-top:0.5rem;font-style:italic;"></p>
-                        <!-- Barra modifica prompt -->
-                        <div style="display:flex;gap:0.5rem;margin-top:0.75rem;align-items:flex-end;">
-                            <div class="form-group" style="flex:1;margin-bottom:0;">
-                                <input type="text" id="prompt-custom-{{ i }}" class="form-input"
-                                       placeholder="Es: più minimalista, tonalità calde, stile corporate...">
-                            </div>
-                            <button class="btn btn-secondary btn-sm" onclick="generaImmagine({{ i }})">
-                                &#8635; Rigenera
-                            </button>
-                        </div>
-                    </div>
-                </div>
             </div>
-            {% endfor %}
         </div>
+        {% endfor %}
     </div>
+</div><!-- fine colonna destra -->
 
-    <!-- Errore -->
-    <div id="errore-contenuti" class="hidden alert alert-errore"></div>
-
-</div>
+</div><!-- fine grid -->
 
 <!-- Storico contenuti generati -->
 {% if storico %}
-<div class="card" style="margin-top: 2rem;">
-    <div class="card-header">
-        <h3>Ultimi Contenuti Generati</h3>
-    </div>
+<div class="card" style="margin-top:2rem;">
+    <div class="card-header"><h3>Ultimi Contenuti Generati</h3></div>
     <div class="card-body">
         <div class="storico-lista">
             {% for s in storico %}
             <div class="storico-item">
                 <div class="storico-meta">
-                    <span class="badge">{{ s.tono }}</span>
-                    <span class="badge badge-outline">{{ s.profilo_destinazione }}</span>
+                    {% if s.obiettivo %}
+                    <span class="badge badge-outline">{{ s.obiettivo }}</span>
+                    {% endif %}
+                    {% if s.profilo_destinazione %}
+                    <span class="badge">{{ s.profilo_destinazione }}</span>
+                    {% endif %}
                     <span class="text-muted">{{ s.data_creazione[:10] }}</span>
                 </div>
                 <div class="storico-tema">{{ s.tema }}</div>
@@ -152,33 +226,145 @@
     </div>
 </div>
 {% endif %}
+
 {% endblock %}
 
 {% block scripts %}
+<style>
+.obiettivo-card {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 0.75rem;
+    border: 1.5px solid var(--grigio-bordo);
+    border-radius: var(--radius);
+    cursor: pointer;
+    transition: all 0.15s;
+    font-size: 0.84rem;
+    background: #fff;
+}
+.obiettivo-card:hover { border-color: var(--azzurro); background: #f0f7ff; }
+.obiettivo-card.selected { border-color: var(--azzurro); background: #eff6ff; font-weight: 600; }
+.obiettivo-icon { font-size: 1rem; flex-shrink: 0; }
+@media (max-width: 900px) {
+    .contenuti-grid { grid-template-columns: 1fr !important; }
+}
+</style>
 <script>
-// Gestione toggle tono
-document.querySelectorAll('input[name="tono"]').forEach(radio => {
-    radio.addEventListener('change', function() {
-        document.querySelectorAll('#tono-professionale, #tono-ispirazionale, #tono-educativo')
-            .forEach(el => el.classList.remove('selected'));
-        this.closest('.toggle-option').classList.add('selected');
-    });
-});
+var _obiettivo = 'candidati';
+var _profiloVoceId = null;
+var _profiloNome = '';
+var _profiloBio  = '';
 
-// Gestione toggle profilo
-document.querySelectorAll('input[name="profilo"]').forEach(radio => {
-    radio.addEventListener('change', function() {
-        document.querySelectorAll('#profilo-salvatore, #profilo-assistente')
-            .forEach(el => el.classList.remove('selected'));
-        this.closest('.toggle-option').classList.add('selected');
+function selObiettivo(val, el) {
+    _obiettivo = val;
+    document.getElementById('obiettivo-sel').value = val;
+    document.querySelectorAll('.obiettivo-card').forEach(function(c) {
+        c.classList.toggle('selected', c === el);
     });
-});
+}
+
+function onProfiloChange() {
+    var sel = document.getElementById('profilo-voce-id');
+    var opt = sel.options[sel.selectedIndex];
+    _profiloVoceId = sel.value || null;
+    _profiloNome   = opt.dataset.nome || '';
+    _profiloBio    = opt.dataset.bio  || '';
+    var settore    = opt.dataset.settore || '';
+    var tono       = opt.dataset.tono  || '';
+
+    var infoEl = document.getElementById('profilo-info');
+    if (_profiloNome) {
+        document.getElementById('profilo-info-nome').textContent = _profiloNome;
+        var dettagli = [];
+        if (settore) dettagli.push(settore);
+        if (tono)    dettagli.push('Tono: ' + tono);
+        document.getElementById('profilo-info-bio').textContent = dettagli.join(' · ');
+        infoEl.classList.remove('hidden');
+    } else {
+        infoEl.classList.add('hidden');
+    }
+    _aggiornaAvatarPreview();
+}
+
+function _aggiornaAvatarPreview() {
+    var iniziali = _profiloNome
+        ? _profiloNome.split(' ').map(function(w) { return w[0]; }).join('').substring(0,2).toUpperCase()
+        : '?';
+    for (var i = 1; i <= 3; i++) {
+        var av = document.getElementById('li-avatar-' + i);
+        if (av) av.textContent = iniziali;
+        var nm = document.getElementById('li-nome-' + i);
+        if (nm) nm.textContent = _profiloNome || '—';
+        var bio = document.getElementById('li-bio-' + i);
+        if (bio) bio.textContent = _profiloBio ? _profiloBio.substring(0, 60) + (_profiloBio.length > 60 ? '…' : '') : '';
+    }
+}
+
+function toggleFormProfilo() {
+    var f = document.getElementById('form-nuovo-profilo');
+    f.classList.toggle('hidden');
+    document.getElementById('np-nome').value = '';
+    document.getElementById('np-url').value  = '';
+    document.getElementById('analizza-esito').textContent = '';
+}
+
+async function analizzaProfilo() {
+    var nome = document.getElementById('np-nome').value.trim();
+    var url  = document.getElementById('np-url').value.trim();
+    if (!nome) { alert('Inserisci il nome.'); return; }
+
+    var btn = document.getElementById('btn-analizza');
+    btn.disabled = true;
+    nascondi('analizza-testo');
+    mostra('analizza-loading');
+    document.getElementById('analizza-esito').textContent = '';
+
+    try {
+        var resp = await fetch('/contenuti/analizza-profilo', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ nome: nome, linkedin_url: url })
+        });
+        var dati = await jsonSicuro(resp);
+        if (dati.errore) throw new Error(dati.errore);
+
+        var p = dati.profilo;
+        // Aggiungi al dropdown
+        var sel = document.getElementById('profilo-voce-id');
+        if (!sel) {
+            // Crea il select se non esisteva
+            var wrapper = document.getElementById('profilo-voce-wrapper');
+            wrapper.innerHTML = '<select id="profilo-voce-id" class="form-input form-select" onchange="onProfiloChange()"><option value="">— Seleziona profilo —</option></select>';
+            sel = document.getElementById('profilo-voce-id');
+        }
+        var opt = document.createElement('option');
+        opt.value          = p.id;
+        opt.dataset.nome   = p.nome;
+        opt.dataset.bio    = p.bio_breve || '';
+        opt.dataset.settore = p.settore || '';
+        opt.dataset.tono   = p.tono_prevalente || '';
+        opt.textContent    = p.nome + (p.settore ? ' · ' + p.settore : '');
+        sel.appendChild(opt);
+        sel.value = p.id;
+        onProfiloChange();
+
+        document.getElementById('analizza-esito').textContent = '✓ Profilo salvato';
+        document.getElementById('analizza-esito').style.color = '#16a34a';
+        setTimeout(function() { toggleFormProfilo(); }, 1200);
+
+    } catch(e) {
+        document.getElementById('analizza-esito').textContent = 'Errore: ' + e.message;
+        document.getElementById('analizza-esito').style.color = '#dc2626';
+    } finally {
+        btn.disabled = false;
+        mostra('analizza-testo');
+        nascondi('analizza-loading');
+    }
+}
 
 async function generaContenuti() {
     const tema = document.getElementById('tema').value.trim();
-    const tono = document.querySelector('input[name="tono"]:checked').value;
-    const profilo = document.querySelector('input[name="profilo"]:checked').value;
-
     if (!tema) {
         document.getElementById('errore-contenuti').textContent = 'Inserire il tema del post.';
         mostra('errore-contenuti');
@@ -193,24 +379,37 @@ async function generaContenuti() {
         const risposta = await fetch('/contenuti/genera', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ tema, tono, profilo })
+            body: JSON.stringify({
+                tema: tema,
+                obiettivo: _obiettivo,
+                contesto: document.getElementById('contesto').value.trim(),
+                profilo_voce_id: _profiloVoceId ? parseInt(_profiloVoceId) : null,
+            })
         });
 
         const dati = await jsonSicuro(risposta);
-
         if (!risposta.ok) throw new Error(dati.errore || 'Errore nella generazione');
 
-        // Mostra le 3 varianti
+        // Aggiorna info autore nelle anteprime
+        var nomeAutore = dati.profilo_nome || '';
+        var bioAutore  = dati.profilo_bio  || '';
+        var iniziali = nomeAutore
+            ? nomeAutore.split(' ').map(function(w){return w[0];}).join('').substring(0,2).toUpperCase()
+            : '✍';
+
         for (let i = 1; i <= 3; i++) {
             const testo = dati[`variante_${i}`] || '';
             const el = document.getElementById(`variante-${i}`);
-            // Converti \n in <br> per la visualizzazione
-            el.innerHTML = testo.replace(/\n/g, '<br>');
-            el.dataset.testo = testo; // salva testo originale per la copia
+            el.textContent = testo;
+            el.dataset.testo = testo;
+
+            document.getElementById(`li-avatar-${i}`).textContent = iniziali;
+            document.getElementById(`li-nome-${i}`).textContent   = nomeAutore || '—';
+            document.getElementById(`li-bio-${i}`).textContent    = bioAutore.substring(0,60) + (bioAutore.length>60?'…':'');
         }
 
         mostra('varianti-container');
-        document.getElementById('varianti-container').scrollIntoView({ behavior: 'smooth' });
+        document.getElementById('varianti-container').scrollIntoView({ behavior: 'smooth', block: 'start' });
 
     } catch (err) {
         document.getElementById('errore-contenuti').textContent = 'Errore: ' + err.message;
@@ -224,9 +423,11 @@ function copiaVariante(num) {
     const el = document.getElementById(`variante-${num}`);
     const testo = el.dataset.testo || el.textContent;
     navigator.clipboard.writeText(testo).then(() => {
-        const btn = event.target;
-        btn.textContent = 'Copiato!';
-        setTimeout(() => btn.textContent = 'Copia', 2000);
+        const btns = document.querySelectorAll(`[onclick="copiaVariante(${num})"]`);
+        btns.forEach(function(btn) {
+            btn.textContent = '✓ Copiato!';
+            setTimeout(() => btn.textContent = '📋 Copia', 2000);
+        });
     });
 }
 
@@ -239,8 +440,6 @@ async function generaImmagine(num) {
     btn.disabled = true;
     document.getElementById(`visual-testo-${num}`).classList.add('hidden');
     document.getElementById(`visual-loading-${num}`).classList.remove('hidden');
-
-    // Nascondi immagine precedente durante il caricamento
     document.getElementById(`visual-img-${num}`).style.opacity = '0.3';
 
     try {
@@ -250,30 +449,21 @@ async function generaImmagine(num) {
             body: JSON.stringify({
                 testo_post: testo,
                 tema: document.getElementById('tema').value.trim(),
-                tono: document.querySelector('input[name="tono"]:checked').value,
-                profilo: document.querySelector('input[name="profilo"]:checked').value,
+                obiettivo: _obiettivo,
                 prompt_custom: document.getElementById(`prompt-custom-${num}`).value.trim(),
             })
         });
         const dati = await jsonSicuro(resp);
         if (dati.errore) { alert('Errore: ' + dati.errore); return; }
 
-        // Imposta l'immagine — Pollinations la genera al caricamento
         const img = document.getElementById(`visual-img-${num}`);
         img.style.opacity = '0.3';
         img.onload = function() { this.style.opacity = '1'; };
         img.onerror = function() { this.style.opacity = '1'; };
         img.src = dati.url;
-
-        // Link download
         document.getElementById(`visual-download-${num}`).href = dati.url;
-
-        // Mostra prompt usato
         document.getElementById(`visual-prompt-${num}`).textContent = '🎨 Prompt: ' + dati.prompt;
-
         document.getElementById(`visual-container-${num}`).classList.remove('hidden');
-        document.getElementById(`visual-testo-${num}`).textContent = '&#128444; Rigenera';
-        // Svuota il campo prompt custom dopo la rigenerazione
         document.getElementById(`prompt-custom-${num}`).value = '';
 
     } catch(e) {
@@ -292,5 +482,9 @@ function impostaCaricamentoContenuti(attivo) {
     document.getElementById('btn-genera-testo').classList.toggle('hidden', attivo);
     document.getElementById('btn-genera-loading').classList.toggle('hidden', !attivo);
 }
+
+// Helpers
+function mostra(id) { document.getElementById(id).classList.remove('hidden'); }
+function nascondi(id) { document.getElementById(id).classList.add('hidden'); }
 </script>
 {% endblock %}

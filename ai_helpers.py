@@ -556,45 +556,65 @@ def genera_prompt_immagine(testo_post: str, tema: str, tono: str, prompt_custom:
     return risposta.content[0].text.strip()
 
 
-def genera_contenuti_linkedin(tema: str, tono: str, profilo: str) -> dict:
-    """Genera 3 varianti di post LinkedIn."""
-    descrizioni_tono = {
-        "professionale": "formale, autorevole, basato su dati e risultati concreti",
-        "ispirazionale": "motivante, emotivo, con storie e metafore, che spinge all'azione",
-        "educativo":     "informativo, chiaro, che insegna qualcosa di valore al lettore",
-    }
-    descrizioni_profilo = {
-        "Admin": (
-            "Professionista nel settore del recruiting, con esperienza nella selezione "
-            "di figure qualificate in ambito aziendale e finanziario."
-        ),
-        "Recruiter": (
-            "Recruiter specializzato nella ricerca e selezione di professionisti, "
-            "che supporta i candidati nel trovare nuove opportunità di crescita."
-        ),
-    }
+_OBIETTIVI_LINKEDIN = {
+    "candidati": "Attirare candidati qualificati verso nuove opportunità di carriera",
+    "insight":   "Condividere un insight professionale originale che stimoli la riflessione",
+    "successo":  "Raccontare un caso di successo concreto con dettagli e risultati misurabili",
+    "educare":   "Educare il pubblico su un tema rilevante con valore pratico immediato",
+    "autorita":  "Costruire autorevolezza nel settore con una posizione chiara e distintiva",
+}
 
-    prompt = (
-        "Sei un esperto di content marketing LinkedIn nel settore finanziario.\n\n"
-        "Scrivi 3 varianti di post LinkedIn con queste caratteristiche:\n"
-        f"- Tema: {tema}\n"
-        f"- Tono: {descrizioni_tono.get(tono, tono)}\n"
-        f"- Scritto in prima persona da: {descrizioni_profilo.get(profilo, profilo)}\n\n"
-        "Ogni post deve avere:\n"
-        "1. Un HOOK d'apertura forte (prima riga che cattura l'attenzione)\n"
-        "2. Un CORPO con il messaggio principale\n"
-        "3. Una CALL TO ACTION finale\n\n"
-        "Fornisci il risultato ESCLUSIVAMENTE in questo formato JSON valido:\n"
-        "{\n"
-        '  "variante_1": "<testo completo del post 1, con a capo come \\n>",\n'
-        '  "variante_2": "<testo completo del post 2, con a capo come \\n>",\n'
-        '  "variante_3": "<testo completo del post 3, con a capo come \\n>"\n'
-        "}"
-    )
 
+def genera_contenuti_linkedin(
+    tema: str,
+    obiettivo: str,
+    contesto: str,
+    profilo_voce: dict,
+) -> dict:
+    """
+    Genera 3 varianti di post LinkedIn in base al profilo voce dell'autore.
+
+    profilo_voce: dict con chiavi nome, bio_breve, tono_prevalente, settore
+    obiettivo: una delle chiavi in _OBIETTIVI_LINKEDIN
+    """
+    nome    = (profilo_voce or {}).get("nome") or "Professionista"
+    bio     = (profilo_voce or {}).get("bio_breve") or ""
+    tono    = (profilo_voce or {}).get("tono_prevalente") or "professionale e diretto"
+    settore = (profilo_voce or {}).get("settore") or ""
+
+    desc_obiettivo = _OBIETTIVI_LINKEDIN.get(obiettivo, obiettivo or "condividere valore")
+
+    parti = [f"Sei {nome}."]
+    if bio:
+        parti.append(bio)
+    if settore:
+        parti.append(f"Lavori nel settore: {settore}.")
+    parti.append(f"Il tuo tono di scrittura su LinkedIn è: {tono}.")
+    parti.append("")
+    parti.append(f"Obiettivo del post: {desc_obiettivo}.")
+    parti.append(f"Tema: {tema}.")
+    if contesto:
+        parti.append(f"Contesto aggiuntivo: {contesto}.")
+    parti.append("")
+    parti.append("Scrivi 3 varianti di post LinkedIn, ognuna diversa per angolazione e struttura.")
+    parti.append("Ogni post deve:")
+    parti.append("- Aprire con un hook forte che ferma lo scroll (prima riga)")
+    parti.append("- Essere tra 150 e 300 parole")
+    parti.append("- Usare emoji con moderazione (max 3-4)")
+    parti.append("- Terminare con 3-5 hashtag pertinenti")
+    parti.append("- Essere scritto in prima persona, nello stesso tono e voce dell'autore")
+    parti.append("")
+    parti.append("Rispondi ESCLUSIVAMENTE con questo JSON valido (senza markdown, senza backtick):")
+    parti.append("{")
+    parti.append('  "variante_1": "<testo completo, a capo come \\n>",')
+    parti.append('  "variante_2": "<testo completo, a capo come \\n>",')
+    parti.append('  "variante_3": "<testo completo, a capo come \\n>"')
+    parti.append("}")
+
+    prompt = "\n".join(parti)
     payload = {
         "model":      CLAUDE_MODEL,
-        "max_tokens": 2000,
+        "max_tokens": 2500,
         "messages":   [{"role": "user", "content": clean_text(prompt)}],
     }
     try:
@@ -608,3 +628,45 @@ def genera_contenuti_linkedin(tema: str, tono: str, profilo: str) -> dict:
     except Exception as e:
         logger.error("[AI] genera_contenuti_linkedin fallita: %s", e)
         raise
+
+
+def analizza_profilo_voce(dati_proxycurl: dict, nome: str) -> dict:
+    """
+    Dato un profilo Proxycurl, chiede a Claude di estrarre:
+    - tono_prevalente (come scrive questa persona)
+    - settore di riferimento
+    - bio_breve (2-3 righe in prima persona)
+    Restituisce un dict con queste 3 chiavi.
+    """
+    from proxycurl_helpers import estrai_testo_proxycurl
+    testo_profilo = estrai_testo_proxycurl(dati_proxycurl)
+    if not testo_profilo:
+        return {"tono_prevalente": "", "settore": "", "bio_breve": ""}
+
+    prompt = (
+        f"Analizza il seguente profilo LinkedIn di {nome} e rispondi in JSON.\n\n"
+        f"PROFILO:\n{testo_profilo[:2000]}\n\n"
+        "Restituisci ESCLUSIVAMENTE questo JSON (no markdown, no backtick):\n"
+        "{\n"
+        '  "tono_prevalente": "<3-6 aggettivi che descrivono il suo stile di comunicazione>",\n'
+        '  "settore": "<settore professionale principale in 3-5 parole>",\n'
+        '  "bio_breve": "<2-3 frasi in prima persona che descrivono chi è e cosa fa>"\n'
+        "}"
+    )
+
+    payload = {
+        "model":      CLAUDE_MODEL,
+        "max_tokens": 500,
+        "messages":   [{"role": "user", "content": clean_text(prompt)}],
+    }
+    try:
+        risposta = _chiama_api("analizza_profilo_voce", payload)
+        testo = risposta.content[0].text.strip()
+        if testo.startswith("```"):
+            testo = testo.split("```")[1]
+            if testo.startswith("json"):
+                testo = testo[4:]
+        return json.loads(testo)
+    except Exception as e:
+        logger.error("[AI] analizza_profilo_voce fallita: %s", e)
+        return {"tono_prevalente": "", "settore": "", "bio_breve": ""}
