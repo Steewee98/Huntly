@@ -1,346 +1,445 @@
 {% extends "base.html" %}
-{% block title %}Impostazioni — Recruiter Assistant{% endblock %}
+{% block title %}Impostazioni — Huntly{% endblock %}
 
 {% block content %}
+<style>
+.imp-layout   { display:grid;grid-template-columns:200px 1fr;gap:2rem;align-items:start; }
+.imp-nav      { position:sticky;top:1.5rem; }
+.imp-nav a    { display:block;padding:.5rem .75rem;border-radius:6px;color:var(--grigio-testo);
+                font-size:.875rem;font-weight:500;text-decoration:none;margin-bottom:.25rem; }
+.imp-nav a:hover,.imp-nav a.active { background:var(--grigio-bg);color:var(--blu-scuro); }
+.imp-nav a.active { font-weight:600; }
+.imp-section  { margin-bottom:2.5rem;scroll-margin-top:1.5rem; }
+.imp-section h2 { font-size:1.05rem;font-weight:700;color:var(--blu-scuro);margin-bottom:1.25rem;
+                   padding-bottom:.5rem;border-bottom:1px solid var(--grigio-bordo); }
+
+.piano-card   { border:2px solid var(--grigio-bordo);border-radius:var(--radius);padding:1.25rem 1.5rem;
+                display:flex;gap:1.5rem;align-items:flex-start;flex-wrap:wrap; }
+.piano-badge  { display:inline-flex;align-items:center;gap:.4rem;padding:.25rem .75rem;
+                border-radius:999px;font-size:.78rem;font-weight:700;color:#fff; }
+.piano-prezzo { font-size:1.3rem;font-weight:700;color:var(--blu-scuro);margin:.3rem 0; }
+.piano-nome   { font-size:.85rem;color:var(--grigio-testo); }
+
+.uso-bar-wrap { margin:.6rem 0; }
+.uso-bar-label{ display:flex;justify-content:space-between;font-size:.82rem;color:var(--grigio-testo);margin-bottom:.25rem; }
+.uso-bar      { height:8px;background:var(--grigio-bg);border-radius:4px;overflow:hidden; }
+.uso-bar-fill { height:100%;border-radius:4px;background:var(--azzurro);transition:width .4s; }
+.uso-bar-fill.critico { background:#ef4444; }
+.uso-bar-fill.attenzione { background:#f59e0b; }
+
+.team-row     { display:flex;align-items:center;gap:.75rem;padding:.6rem 0;border-bottom:1px solid var(--grigio-bg); }
+.team-row:last-child { border-bottom:none; }
+.team-avatar  { width:36px;height:36px;border-radius:50%;background:var(--azzurro);
+                color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:.9rem;flex-shrink:0; }
+.team-info    { flex:1;min-width:0; }
+.team-nome    { font-weight:600;font-size:.9rem;color:var(--blu-scuro); }
+.team-email   { font-size:.8rem;color:var(--grigio-testo); }
+.team-ruolo   { font-size:.75rem;padding:.15rem .5rem;border-radius:4px;background:var(--grigio-bg);color:var(--grigio-testo);font-weight:600; }
+
+.invito-link  { font-family:monospace;font-size:.78rem;background:var(--grigio-bg);padding:.3rem .6rem;
+                border-radius:4px;word-break:break-all;cursor:pointer;border:1px dashed var(--grigio-bordo); }
+
+.danger-zone  { border:1px solid #fecaca;border-radius:var(--radius);padding:1.25rem 1.5rem;background:#fff8f8; }
+.danger-zone p { font-size:.875rem;color:#6b7280;margin:0 0 1rem; }
+
+.piano-limitato { text-align:center;padding:1.5rem;color:var(--grigio-testo);font-size:.875rem; }
+.piano-limitato .lock { font-size:2rem;display:block;margin-bottom:.5rem; }
+
+@media(max-width:700px){
+  .imp-layout { grid-template-columns:1fr; }
+  .imp-nav    { display:none; }
+}
+</style>
+
 <div class="page-header">
-    <h1 class="page-title">&#9881; Impostazioni Profili</h1>
-    <p class="page-subtitle">Configura i criteri di valutazione per ogni profilo. I parametri vengono usati dall'AI durante l'analisi.</p>
+    <h1 class="page-title">&#9881; Account &amp; Impostazioni</h1>
+    <p class="page-subtitle">Gestisci il tuo account, l'organizzazione, il piano e il team.</p>
 </div>
 
-<!-- Banner Profili Target -->
-<div style="margin-bottom:1.5rem;padding:0.9rem 1.1rem;background:#eff6ff;border:1px solid #bfdbfe;border-radius:var(--radius);display:flex;align-items:center;gap:0.75rem;">
-    <span style="font-size:1.2rem;">&#127919;</span>
-    <div style="flex:1;">
-        <strong>I profili di ricerca si gestiscono ora in Profili Target.</strong>
-        <span style="color:var(--grigio-testo);font-size:0.88rem;margin-left:0.5rem;">
-            I parametri qui sotto sono usati come fallback per la ricerca automatica legacy.
-        </span>
+<div class="imp-layout">
+
+<!-- ── NAVIGAZIONE LATERALE ────────────────────── -->
+<nav class="imp-nav">
+    <a href="#account" class="active">Il mio account</a>
+    <a href="#organizzazione">Organizzazione</a>
+    <a href="#piano">Piano &amp; utilizzo</a>
+    <a href="#team">Team</a>
+    <a href="#danger">Danger zone</a>
+</nav>
+
+<!-- ── CONTENUTO ──────────────────────────────── -->
+<div>
+
+<!-- ═══════════════ SEZIONE 1 — ACCOUNT ═══════════════ -->
+<section class="imp-section" id="account">
+    <h2>Il mio account</h2>
+
+    <div class="card" style="margin-bottom:1.25rem;">
+        <div class="card-body">
+            <p style="font-size:.85rem;color:var(--grigio-testo);margin-bottom:1.1rem;">Aggiorna nome e indirizzo email del tuo account.</p>
+            <div class="form-group" style="margin-bottom:1rem;">
+                <label class="form-label">Nome completo</label>
+                <input type="text" id="acc-nome" class="form-input" value="{{ utente.get('nome','') }}" placeholder="Mario Rossi">
+            </div>
+            <div class="form-group" style="margin-bottom:1.25rem;">
+                <label class="form-label">Email</label>
+                <input type="email" id="acc-email" class="form-input" value="{{ utente.get('email','') }}" placeholder="mario@azienda.it">
+            </div>
+            <button class="btn btn-primary" onclick="salvaProfilo()">Salva modifiche</button>
+            <span id="acc-msg" style="margin-left:.75rem;font-size:.85rem;display:none;"></span>
+        </div>
     </div>
-    <a href="{{ url_for('profili.index') }}" class="btn btn-primary btn-sm">Vai a Profili Target</a>
-</div>
 
-<!-- Tab toggle -->
-<div class="tab-bar" style="margin-bottom:1.5rem;">
-    <button class="tab-btn active" id="tab-a-btn" onclick="switchTab('A')">
-        Profilo A &mdash; Senior (40-65 anni)
-    </button>
-    <button class="tab-btn" id="tab-b-btn" onclick="switchTab('B')">
-        Profilo B &mdash; Under 35
-    </button>
-</div>
-
-<!-- ===== PROFILO A ===== -->
-<div id="panel-A">
-    <form id="form-A" onsubmit="salvaImpostazioni(event,'A')">
-
-        <div class="card" style="margin-bottom:1.25rem;">
-            <div class="card-header"><h3>Dati anagrafici e di esperienza</h3></div>
-            <div class="card-body">
-                <div class="form-row">
-                    <div class="form-group">
-                        <label class="form-label">Età minima</label>
-                        <input type="number" name="eta_min" class="form-input"
-                               value="{{ imp_a.get('eta_min', 40) }}" min="18" max="99">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Età massima</label>
-                        <input type="number" name="eta_max" class="form-input"
-                               value="{{ imp_a.get('eta_max', 65) }}" min="18" max="99">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Anni minimi di esperienza nel settore</label>
-                        <input type="number" name="anni_esperienza_min" class="form-input"
-                               value="{{ imp_a.get('anni_esperienza_min', 5) }}" min="0" max="50">
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Settori di provenienza accettati <span class="form-hint">(separati da virgola)</span></label>
-                    <input type="text" name="settori" class="form-input"
-                           placeholder="es. consulenza finanziaria, bancario, assicurativo, P.IVA..."
-                           value="{{ imp_a.get('settori', '') }}">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Ruoli target <span class="form-hint">(separati da virgola)</span></label>
-                    <input type="text" name="ruoli_target" class="form-input"
-                           placeholder="es. Consulente finanziario, Private Banker, Promotore finanziario..."
-                           value="{{ imp_a.get('ruoli_target', '') }}">
-                </div>
-            </div>
-        </div>
-
-        <div class="card" style="margin-bottom:1.25rem;">
-            <div class="card-header"><h3>Parole chiave</h3></div>
-            <div class="card-body">
-                <div class="form-group">
-                    <label class="form-label">&#10003; Parole chiave positive <span class="form-hint">— segnali di apertura al cambiamento (separati da virgola)</span></label>
-                    <input type="text" name="keyword_positive" class="form-input kw-positive"
-                           placeholder="es. libero professionista, P.IVA, autonomia, gestione clienti..."
-                           value="{{ imp_a.get('keyword_positive', '') }}">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">&#10007; Parole chiave negative <span class="form-hint">— segnali di disinteresse (separati da virgola)</span></label>
-                    <input type="text" name="keyword_negative" class="form-input kw-negative"
-                           placeholder="es. dipendente pubblico, pensionato, startup..."
-                           value="{{ imp_a.get('keyword_negative', '') }}">
-                </div>
-            </div>
-        </div>
-
-        <div class="card" style="margin-bottom:1.5rem;">
-            <div class="card-header"><h3>Pesi per la valutazione AI</h3></div>
-            <div class="card-body">
-                <p style="color:var(--grigio-testo);font-size:0.875rem;margin-bottom:1.25rem;">
-                    Definisci quanto conta ogni criterio nel punteggio finale (0 = non considerato, 10 = determinante).
-                </p>
-                {% set sliders_a = [
-                    ('peso_eta',         'Peso età nel range target',          imp_a.get('peso_eta', 5)),
-                    ('peso_esperienza',  'Peso anni di esperienza',            imp_a.get('peso_esperienza', 5)),
-                    ('peso_settore',     'Peso settore di provenienza',        imp_a.get('peso_settore', 5)),
-                    ('peso_ruolo',       'Peso corrispondenza ruolo target',   imp_a.get('peso_ruolo', 5)),
-                    ('peso_keyword',     'Peso parole chiave pos/neg',         imp_a.get('peso_keyword', 5)),
-                ] %}
-                {% for name, label, val in sliders_a %}
-                <div class="slider-row">
-                    <label class="slider-label">{{ label }}</label>
-                    <div class="slider-wrap">
-                        <input type="range" name="{{ name }}" min="0" max="10" value="{{ val }}"
-                               class="slider" oninput="this.nextElementSibling.textContent=this.value">
-                        <span class="slider-val">{{ val }}</span>
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-        </div>
-
-        <div class="form-actions">
-            <button type="submit" class="btn btn-primary btn-lg" id="btn-salva-A">
-                &#10003; Salva Profilo A
-            </button>
-            <span id="msg-A" class="save-msg hidden">Impostazioni salvate!</span>
-        </div>
-    </form>
-</div>
-
-<!-- ===== PROFILO B ===== -->
-<div id="panel-B" class="hidden">
-    <form id="form-B" onsubmit="salvaImpostazioni(event,'B')">
-
-        <div class="card" style="margin-bottom:1.25rem;">
-            <div class="card-header"><h3>Dati anagrafici e di esperienza</h3></div>
-            <div class="card-body">
-                <div class="form-row">
-                    <div class="form-group">
-                        <label class="form-label">Età minima</label>
-                        <input type="number" name="eta_min" class="form-input"
-                               value="{{ imp_b.get('eta_min', 22) }}" min="18" max="99">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Età massima</label>
-                        <input type="number" name="eta_max" class="form-input"
-                               value="{{ imp_b.get('eta_max', 35) }}" min="18" max="99">
-                    </div>
-                    <div class="form-group">
-                        <label class="form-label">Anni minimi di esperienza bancaria</label>
-                        <input type="number" name="anni_esperienza_min" class="form-input"
-                               value="{{ imp_b.get('anni_esperienza_min', 2) }}" min="0" max="50">
-                    </div>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Istituti bancari di provenienza preferiti <span class="form-hint">(separati da virgola)</span></label>
-                    <input type="text" name="istituti" class="form-input"
-                           placeholder="es. Intesa Sanpaolo, Unicredit, Mediobanca, BNL..."
-                           value="{{ imp_b.get('istituti', '') }}">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Ruoli target <span class="form-hint">(separati da virgola)</span></label>
-                    <input type="text" name="ruoli_target" class="form-input"
-                           placeholder="es. Analista finanziario, Relationship Manager, Credit Analyst..."
-                           value="{{ imp_b.get('ruoli_target', '') }}">
-                </div>
-            </div>
-        </div>
-
-        <div class="card" style="margin-bottom:1.25rem;">
-            <div class="card-header"><h3>Parole chiave</h3></div>
-            <div class="card-body">
-                <div class="form-group">
-                    <label class="form-label">&#10003; Parole chiave positive <span class="form-hint">— segnali di apertura al cambiamento (separati da virgola)</span></label>
-                    <input type="text" name="keyword_positive" class="form-input kw-positive"
-                           placeholder="es. crescita professionale, open to work, banking, fintech..."
-                           value="{{ imp_b.get('keyword_positive', '') }}">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">&#10007; Parole chiave negative <span class="form-hint">— segnali di disinteresse (separati da virgola)</span></label>
-                    <input type="text" name="keyword_negative" class="form-input kw-negative"
-                           placeholder="es. CEO, founder, senior manager, direttore..."
-                           value="{{ imp_b.get('keyword_negative', '') }}">
-                </div>
-            </div>
-        </div>
-
-        <div class="card" style="margin-bottom:1.5rem;">
-            <div class="card-header"><h3>Pesi per la valutazione AI</h3></div>
-            <div class="card-body">
-                <p style="color:var(--grigio-testo);font-size:0.875rem;margin-bottom:1.25rem;">
-                    Definisci quanto conta ogni criterio nel punteggio finale (0 = non considerato, 10 = determinante).
-                </p>
-                {% set sliders_b = [
-                    ('peso_eta',         'Peso età nel range target',         imp_b.get('peso_eta', 5)),
-                    ('peso_esperienza',  'Peso anni di esperienza bancaria',  imp_b.get('peso_esperienza', 5)),
-                    ('peso_settore',     'Peso istituto di provenienza',      imp_b.get('peso_settore', 5)),
-                    ('peso_ruolo',       'Peso corrispondenza ruolo target',  imp_b.get('peso_ruolo', 5)),
-                    ('peso_keyword',     'Peso parole chiave pos/neg',        imp_b.get('peso_keyword', 5)),
-                ] %}
-                {% for name, label, val in sliders_b %}
-                <div class="slider-row">
-                    <label class="slider-label">{{ label }}</label>
-                    <div class="slider-wrap">
-                        <input type="range" name="{{ name }}" min="0" max="10" value="{{ val }}"
-                               class="slider" oninput="this.nextElementSibling.textContent=this.value">
-                        <span class="slider-val">{{ val }}</span>
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-        </div>
-
-        <div class="form-actions">
-            <button type="submit" class="btn btn-primary btn-lg" id="btn-salva-B">
-                &#10003; Salva Profilo B
-            </button>
-            <span id="msg-B" class="save-msg hidden">Impostazioni salvate!</span>
-        </div>
-    </form>
-</div>
-
-<!-- ===== PROFILI SCARTATI ===== -->
-<div style="margin-top:2.5rem;">
-    <h2 style="font-size:1.15rem;font-weight:700;color:#1A2E4A;margin-bottom:0.75rem;">
-        &#128683; Profili Scartati
-    </h2>
-    <p style="color:#666;font-size:0.875rem;margin-bottom:1rem;">
-        Questi profili non verranno mai più proposti nelle ricerche.
-        Clicca "Ripristina" per riammetterli.
-    </p>
-
-    {% if scartati %}
     <div class="card">
-        <div class="card-body" style="padding:0;">
-            <table class="table" style="margin:0;">
-                <thead>
-                    <tr>
-                        <th>Nome</th>
-                        <th>Ruolo</th>
-                        <th>Azienda</th>
-                        <th>LinkedIn</th>
-                        <th>Scartato il</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody id="scartati-tbody">
-                {% for s in scartati %}
-                <tr id="scartato-{{ s.id }}">
-                    <td>{{ s.nome or '—' }} {{ s.cognome or '' }}</td>
-                    <td>{{ s.ruolo or '—' }}</td>
-                    <td>{{ s.azienda or '—' }}</td>
-                    <td>
-                        {% if s.linkedin_url %}
-                        <a href="{{ s.linkedin_url }}" target="_blank" class="btn btn-outline btn-xs">LinkedIn</a>
-                        {% else %}—{% endif %}
-                    </td>
-                    <td style="white-space:nowrap;">{{ (s.data_scarto or '')[:10] }}</td>
-                    <td>
-                        <button class="btn btn-outline btn-xs"
-                                onclick="ripristina({{ s.id }}, this)"
-                                style="color:#27ae60;border-color:#27ae60;">
-                            &#8635; Ripristina
-                        </button>
-                    </td>
-                </tr>
-                {% endfor %}
-                </tbody>
-            </table>
+        <div class="card-body">
+            <p style="font-size:.85rem;color:var(--grigio-testo);margin-bottom:1.1rem;">Cambia la password del tuo account.</p>
+            <div class="form-group" style="margin-bottom:1rem;">
+                <label class="form-label">Password attuale</label>
+                <input type="password" id="pw-attuale" class="form-input" placeholder="••••••••" autocomplete="current-password">
+            </div>
+            <div class="form-row" style="margin-bottom:1.25rem;">
+                <div class="form-group" style="margin-bottom:0;">
+                    <label class="form-label">Nuova password</label>
+                    <input type="password" id="pw-nuova" class="form-input" placeholder="Min. 8 caratteri" autocomplete="new-password">
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                    <label class="form-label">Conferma password</label>
+                    <input type="password" id="pw-conferma" class="form-input" placeholder="Ripeti" autocomplete="new-password">
+                </div>
+            </div>
+            <button class="btn btn-secondary" onclick="cambiaPassword()">Cambia password</button>
+            <span id="pw-msg" style="margin-left:.75rem;font-size:.85rem;display:none;"></span>
+        </div>
+    </div>
+</section>
+
+<!-- ═══════════════ SEZIONE 2 — ORGANIZZAZIONE ═══════════════ -->
+<section class="imp-section" id="organizzazione">
+    <h2>Organizzazione</h2>
+    <div class="card">
+        <div class="card-body">
+            <div class="form-group" style="margin-bottom:1rem;">
+                <label class="form-label">Nome azienda</label>
+                <input type="text" id="org-nome" class="form-input" value="{{ org.get('nome','') }}" placeholder="Acme Srl">
+            </div>
+            <div class="form-group" style="margin-bottom:1.25rem;">
+                <label class="form-label">Slug organizzazione <span class="form-hint">(non modificabile)</span></label>
+                <input type="text" class="form-input" value="{{ org.get('slug','') }}" readonly style="background:var(--grigio-bg);cursor:default;">
+            </div>
+            <button class="btn btn-primary" onclick="salvaOrg()">Salva</button>
+            <span id="org-msg" style="margin-left:.75rem;font-size:.85rem;display:none;"></span>
+        </div>
+    </div>
+</section>
+
+<!-- ═══════════════ SEZIONE 3 — PIANO ═══════════════ -->
+<section class="imp-section" id="piano">
+    <h2>Piano &amp; utilizzo</h2>
+    <div class="piano-card" style="margin-bottom:1.5rem;">
+        <div style="flex:1;min-width:200px;">
+            <div>
+                <span class="piano-badge" style="background:{{ piano_info.colore }};">
+                    {{ piano_info.nome }}
+                </span>
+            </div>
+            <div class="piano-prezzo">{{ piano_info.prezzo }}</div>
+            <div class="piano-nome">Piano attivo dell'organizzazione</div>
+        </div>
+        <div style="flex:1;min-width:220px;">
+            {% macro barra(label, usato, massimo) %}
+            {% set pct = (usato / massimo * 100)|int if massimo > 0 else 0 %}
+            {% set classe = 'critico' if pct >= 90 else ('attenzione' if pct >= 70 else '') %}
+            <div class="uso-bar-wrap">
+                <div class="uso-bar-label">
+                    <span>{{ label }}</span>
+                    <span>{{ usato }} / {{ massimo }}</span>
+                </div>
+                <div class="uso-bar">
+                    <div class="uso-bar-fill {{ classe }}" style="width:{{ [pct,100]|min }}%;"></div>
+                </div>
+            </div>
+            {% endmacro %}
+
+            {% set cand_max = piano_info.candidati_max %}
+            {% set ric_max  = piano_info.ricerche_max %}
+            {% set ai_max   = piano_info.analisi_max %}
+            {% set pt_max   = piano_info.profili_target_max %}
+
+            {% if cand_max != -1 %}
+            {{ barra('Candidati', conteggi.candidati, cand_max) }}
+            {% else %}
+            <div class="uso-bar-wrap">
+                <div class="uso-bar-label"><span>Candidati</span><span>{{ conteggi.candidati }} / ∞</span></div>
+            </div>
+            {% endif %}
+
+            {% if ric_max != -1 %}
+            {{ barra('Ricerche (mese)', utilizzo.ricerche, ric_max) }}
+            {% else %}
+            <div class="uso-bar-wrap">
+                <div class="uso-bar-label"><span>Ricerche</span><span>{{ utilizzo.ricerche }} / ∞</span></div>
+            </div>
+            {% endif %}
+
+            {% if ai_max != -1 %}
+            {{ barra('Analisi AI (mese)', utilizzo.analisi_ai, ai_max) }}
+            {% else %}
+            <div class="uso-bar-wrap">
+                <div class="uso-bar-label"><span>Analisi AI</span><span>{{ utilizzo.analisi_ai }} / ∞</span></div>
+            </div>
+            {% endif %}
+
+            {% if pt_max != -1 %}
+            {{ barra('Profili Target', conteggi.profili_target, pt_max) }}
+            {% else %}
+            <div class="uso-bar-wrap">
+                <div class="uso-bar-label"><span>Profili Target</span><span>{{ conteggi.profili_target }} / ∞</span></div>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if piano_chiave == 'free' %}
+    <a href="/upgrade/pro" class="btn btn-primary">&#11014; Passa a Pro — €49/mese</a>
+    {% elif piano_chiave == 'pro' %}
+    <a href="/upgrade/business" class="btn btn-primary" style="background:#059669;border-color:#059669;">&#11014; Passa a Business — €149/mese</a>
+    {% else %}
+    <span style="color:#059669;font-weight:600;">&#10003; Piano massimo attivo</span>
+    {% endif %}
+</section>
+
+<!-- ═══════════════ SEZIONE 4 — TEAM ═══════════════ -->
+<section class="imp-section" id="team">
+    <h2>Team</h2>
+
+    {% if piano_info.utenti_max == 1 %}
+    <div class="card">
+        <div class="card-body piano-limitato">
+            <span class="lock">&#128274;</span>
+            La gestione del team è disponibile dal piano <strong>Pro</strong>.
+            <br><br>
+            <a href="/upgrade/pro" class="btn btn-primary btn-sm">Passa a Pro</a>
         </div>
     </div>
     {% else %}
-    <p style="color:#999;font-size:0.875rem;">Nessun profilo scartato.</p>
+
+    <!-- Membri attuali -->
+    <div class="card" style="margin-bottom:1.25rem;">
+        <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;">
+            <h3>Membri ({{ membri|length }})</h3>
+        </div>
+        <div class="card-body" style="padding-top:0;">
+            {% for m in membri %}
+            <div class="team-row">
+                <div class="team-avatar">{{ (m.nome or m.email or '?')[0]|upper }}</div>
+                <div class="team-info">
+                    <div class="team-nome">{{ m.nome or '—' }}</div>
+                    <div class="team-email">{{ m.email }}</div>
+                </div>
+                <span class="team-ruolo">{{ m.ruolo or 'admin' }}</span>
+                {% if m.id != session.get('user_id') %}
+                <button class="btn btn-ghost btn-sm" style="color:#ef4444;"
+                        onclick="rimuoviMembro({{ m.id }}, '{{ m.nome or m.email }}')">Rimuovi</button>
+                {% else %}
+                <span style="font-size:.78rem;color:var(--grigio-testo);">Tu</span>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+
+    <!-- Invita nuovo membro -->
+    <div class="card" style="margin-bottom:1.25rem;">
+        <div class="card-body">
+            <p style="font-size:.85rem;color:var(--grigio-testo);margin-bottom:1rem;">
+                Invita un nuovo membro. Riceverà un link per creare il proprio account.
+            </p>
+            <div style="display:flex;gap:.75rem;align-items:flex-end;">
+                <div class="form-group" style="flex:1;margin-bottom:0;">
+                    <label class="form-label">Email del nuovo membro</label>
+                    <input type="email" id="invito-email" class="form-input" placeholder="collega@azienda.it">
+                </div>
+                <button class="btn btn-primary" onclick="invitaMembro()">Invia invito</button>
+            </div>
+            <span id="invito-msg" style="display:none;margin-top:.75rem;font-size:.85rem;"></span>
+        </div>
+    </div>
+
+    <!-- Inviti pendenti -->
+    {% if inviti %}
+    <div class="card">
+        <div class="card-header"><h3>Inviti pendenti ({{ inviti|length }})</h3></div>
+        <div class="card-body" style="padding-top:0;">
+            {% for inv in inviti %}
+            <div class="team-row">
+                <div class="team-info">
+                    <div class="team-nome">{{ inv.email }}</div>
+                    <div class="invito-link" onclick="copiaLink('{{ request.host_url }}impostazioni/accetta-invito/{{ inv.token }}')"
+                         title="Clicca per copiare">
+                        {{ request.host_url }}impostazioni/accetta-invito/{{ inv.token[:20] }}…
+                    </div>
+                </div>
+                <button class="btn btn-ghost btn-sm" style="color:#ef4444;"
+                        onclick="rimuoviInvito({{ inv.id }})">✕</button>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
     {% endif %}
+
+    {% endif %}
+</section>
+
+<!-- ═══════════════ SEZIONE 5 — DANGER ZONE ═══════════════ -->
+<section class="imp-section" id="danger">
+    <h2>Danger zone</h2>
+    <div class="danger-zone">
+        <p>L'eliminazione dell'account è permanente e rimuove tutti i dati dell'organizzazione. Questa operazione non può essere annullata.</p>
+        <button class="btn" style="background:#ef4444;color:#fff;border-color:#ef4444;"
+                onclick="confermaEliminazione()">
+            &#9888; Elimina account
+        </button>
+    </div>
+</section>
+
+</div><!-- fine contenuto -->
+</div><!-- fine layout -->
+
+<!-- ── MODALE CONFERMA ELIMINAZIONE ─────────────── -->
+<div id="modale-elimina" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:500;display:none;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:var(--radius);padding:2rem;max-width:420px;width:90%;box-shadow:var(--shadow-lg);">
+        <h3 style="color:#ef4444;margin-bottom:.75rem;">Elimina account</h3>
+        <p style="font-size:.875rem;color:var(--grigio-testo);margin-bottom:1rem;">
+            Digita <strong>ELIMINA</strong> per confermare l'eliminazione permanente dell'account e di tutti i dati.
+        </p>
+        <input type="text" id="elimina-input" class="form-input" placeholder="ELIMINA" style="margin-bottom:1rem;">
+        <div style="display:flex;gap:.75rem;justify-content:flex-end;">
+            <button class="btn btn-ghost" onclick="chiudiModale()">Annulla</button>
+            <button class="btn" style="background:#ef4444;color:#fff;border-color:#ef4444;" onclick="eseguiEliminazione()">Elimina definitivamente</button>
+        </div>
+    </div>
 </div>
-{% endblock %}
 
-{% block scripts %}
 <script>
-function switchTab(p) {
-    document.getElementById('panel-A').classList.toggle('hidden', p !== 'A');
-    document.getElementById('panel-B').classList.toggle('hidden', p !== 'B');
-    document.getElementById('tab-a-btn').classList.toggle('active', p === 'A');
-    document.getElementById('tab-b-btn').classList.toggle('active', p === 'B');
-}
-
-function salvaImpostazioni(e, profilo) {
-    e.preventDefault();
-    const form = document.getElementById('form-' + profilo);
-    const btn  = document.getElementById('btn-salva-' + profilo);
-    const msg  = document.getElementById('msg-' + profilo);
-
-    const dati = { profilo: profilo };
-    form.querySelectorAll('[name]').forEach(function(el) {
-        dati[el.name] = el.type === 'range' || el.type === 'number'
-            ? parseInt(el.value, 10)
-            : el.value;
+// ── Navigazione attiva ────────────────────────
+const sections = document.querySelectorAll('.imp-section');
+const navLinks  = document.querySelectorAll('.imp-nav a');
+const observer  = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+        if (e.isIntersecting) {
+            navLinks.forEach(a => a.classList.remove('active'));
+            const link = document.querySelector(`.imp-nav a[href="#${e.target.id}"]`);
+            if (link) link.classList.add('active');
+        }
     });
+}, { threshold: 0.4 });
+sections.forEach(s => observer.observe(s));
 
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner"></span> Salvo...';
-    msg.classList.add('hidden');
-
-    fetch('/impostazioni/salva', {
+// ── Helper fetch JSON ────────────────────────
+async function postJSON(url, body) {
+    const r = await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(dati)
-    })
-    .then(function(r) {
-        if (!r.ok) return r.text().then(function(t) { throw new Error('Errore server ' + r.status + ': ' + t.substring(0, 200)); });
-        return r.json();
-    })
-    .then(function(data) {
-        btn.disabled = false;
-        btn.innerHTML = '&#10003; Salva Profilo ' + profilo;
-        if (data.successo) {
-            msg.classList.remove('hidden');
-            setTimeout(function() { msg.classList.add('hidden'); }, 3000);
-        } else {
-            alert('Errore: ' + (data.errore || 'sconosciuto'));
-        }
-    })
-    .catch(function(err) {
-        btn.disabled = false;
-        btn.innerHTML = '&#10003; Salva Profilo ' + profilo;
-        alert('Errore di connessione: ' + err);
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body),
     });
+    return r.json();
 }
 
-function ripristina(id, btn) {
-    btn.disabled = true;
-    fetch('/impostazioni/ripristina/' + id, { method: 'POST' })
-    .then(function(r) { return r.json(); })
-    .then(function(data) {
-        if (data.successo) {
-            var riga = document.getElementById('scartato-' + id);
-            if (riga) {
-                riga.style.transition = 'opacity 0.3s';
-                riga.style.opacity = '0';
-                setTimeout(function() { riga.remove(); }, 300);
-            }
-        } else {
-            btn.disabled = false;
-            alert('Errore durante il ripristino.');
-        }
-    })
-    .catch(function(err) {
-        btn.disabled = false;
-        alert('Errore di connessione: ' + err);
+function mostraMsg(id, testo, ok=true) {
+    const el = document.getElementById(id);
+    el.textContent = testo;
+    el.style.color = ok ? '#16a34a' : '#ef4444';
+    el.style.display = 'inline';
+    setTimeout(() => el.style.display = 'none', 4000);
+}
+
+// ── Salva profilo utente ─────────────────────
+async function salvaProfilo() {
+    const res = await postJSON('/impostazioni/aggiorna-profilo', {
+        nome:  document.getElementById('acc-nome').value,
+        email: document.getElementById('acc-email').value,
     });
+    mostraMsg('acc-msg', res.ok ? 'Salvato ✓' : (res.errore || 'Errore'), !!res.ok);
+}
+
+// ── Cambia password ──────────────────────────
+async function cambiaPassword() {
+    const res = await postJSON('/impostazioni/cambia-password', {
+        password_attuale: document.getElementById('pw-attuale').value,
+        nuova_password:   document.getElementById('pw-nuova').value,
+        conferma:         document.getElementById('pw-conferma').value,
+    });
+    if (res.ok) {
+        ['pw-attuale','pw-nuova','pw-conferma'].forEach(id => document.getElementById(id).value = '');
+    }
+    mostraMsg('pw-msg', res.ok ? 'Password aggiornata ✓' : (res.errore || 'Errore'), !!res.ok);
+}
+
+// ── Salva organizzazione ─────────────────────
+async function salvaOrg() {
+    const res = await postJSON('/impostazioni/aggiorna-organizzazione', {
+        nome: document.getElementById('org-nome').value,
+    });
+    mostraMsg('org-msg', res.ok ? 'Salvato ✓' : (res.errore || 'Errore'), !!res.ok);
+}
+
+// ── Invita membro ────────────────────────────
+async function invitaMembro() {
+    const email = document.getElementById('invito-email').value.trim();
+    if (!email) return;
+    const res = await postJSON('/impostazioni/invita-membro', { email });
+    const el  = document.getElementById('invito-msg');
+    el.style.display = 'block';
+    if (res.ok) {
+        const link = `${location.origin}/impostazioni/accetta-invito/${res.token}`;
+        el.innerHTML = `Invito creato per <strong>${res.email}</strong>.<br>
+            <span class="invito-link" onclick="copiaLink('${link}')" title="Clicca per copiare">${link}</span>`;
+        el.style.color = '#16a34a';
+        document.getElementById('invito-email').value = '';
+        setTimeout(() => location.reload(), 3000);
+    } else {
+        el.textContent = res.errore || 'Errore';
+        el.style.color = '#ef4444';
+    }
+}
+
+// ── Rimuovi membro ───────────────────────────
+async function rimuoviMembro(uid, nome) {
+    if (!confirm(`Rimuovere ${nome} dal team?`)) return;
+    const res = await postJSON(`/impostazioni/rimuovi-membro/${uid}`, {});
+    if (res.ok) location.reload();
+    else alert(res.errore || 'Errore');
+}
+
+// ── Rimuovi invito ───────────────────────────
+async function rimuoviInvito(id) {
+    const res = await postJSON(`/impostazioni/rimuovi-invito/${id}`, {});
+    if (res.ok) location.reload();
+    else alert(res.errore || 'Errore');
+}
+
+// ── Copia link negli appunti ─────────────────
+function copiaLink(url) {
+    navigator.clipboard.writeText(url)
+        .then(() => alert('Link copiato negli appunti!'))
+        .catch(() => prompt('Copia questo link:', url));
+}
+
+// ── Danger zone ──────────────────────────────
+function confermaEliminazione() {
+    document.getElementById('modale-elimina').style.display = 'flex';
+}
+function chiudiModale() {
+    document.getElementById('modale-elimina').style.display = 'none';
+    document.getElementById('elimina-input').value = '';
+}
+function eseguiEliminazione() {
+    if (document.getElementById('elimina-input').value !== 'ELIMINA') {
+        alert('Digita esattamente ELIMINA per confermare.');
+        return;
+    }
+    alert('Funzionalità di eliminazione in arrivo. Contatta il supporto per procedere.');
+    chiudiModale();
 }
 </script>
 {% endblock %}

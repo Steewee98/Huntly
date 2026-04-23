@@ -13,11 +13,13 @@ import time
 import threading
 import uuid
 import requests
+from datetime import datetime
 from flask import Blueprint, render_template, request, jsonify, Response
 from database import get_db
 from ai_helpers import analizza_profilo_linkedin
 from dedup import is_duplicate
 from routes.auth import get_org_id
+from config import PIANI
 from sources.multi_source import cerca_multi_source
 from sources.utils import normalizza_citta as _normalizza_citta, _CITTA_NORMALIZE
 
@@ -25,6 +27,76 @@ log = logging.getLogger(__name__)
 
 # Blueprint per il modulo ricerca
 ricerca_bp = Blueprint("ricerca", __name__)
+
+
+def _check_limite_ricerche(db, org_id: int):
+    """
+    Controlla se l'organizzazione ha raggiunto il limite ricerche mensili.
+    Restituisce None se ok, oppure una risposta jsonify con status 403.
+    """
+    org = db.execute("SELECT piano FROM organizzazioni WHERE id = ?", (org_id,)).fetchone()
+    piano = PIANI.get((org['piano'] if org else 'free') or 'free', PIANI['free'])
+    if piano['ricerche_max'] == -1:
+        return None  # illimitato
+    mese = datetime.now().strftime('%Y-%m')
+    row = db.execute(
+        "SELECT ricerche FROM utilizzo_mensile WHERE organizzazione_id = ? AND mese = ?",
+        (org_id, mese)
+    ).fetchone()
+    n = row['ricerche'] if row else 0
+    if n >= piano['ricerche_max']:
+        return jsonify({
+            "errore": f"Hai raggiunto il limite di {piano['ricerche_max']} ricerche mensili del piano {piano['nome']}. Upgrada per continuare."
+        }), 403
+    return None
+
+
+def _incrementa_ricerche(db, org_id: int):
+    """Incrementa il contatore ricerche nel mese corrente."""
+    mese = datetime.now().strftime('%Y-%m')
+    db.execute(
+        """INSERT INTO utilizzo_mensile (organizzazione_id, mese, ricerche)
+           VALUES (?, ?, 1)
+           ON CONFLICT (organizzazione_id, mese)
+           DO UPDATE SET ricerche = utilizzo_mensile.ricerche + 1""",
+        (org_id, mese)
+    )
+    db.commit()
+
+
+def _check_limite_analisi(db, org_id: int):
+    """
+    Controlla se l'organizzazione ha raggiunto il limite analisi AI mensili.
+    Restituisce None se ok, oppure una risposta jsonify con status 403.
+    """
+    org = db.execute("SELECT piano FROM organizzazioni WHERE id = ?", (org_id,)).fetchone()
+    piano = PIANI.get((org['piano'] if org else 'free') or 'free', PIANI['free'])
+    if piano['analisi_max'] == -1:
+        return None
+    mese = datetime.now().strftime('%Y-%m')
+    row = db.execute(
+        "SELECT analisi_ai FROM utilizzo_mensile WHERE organizzazione_id = ? AND mese = ?",
+        (org_id, mese)
+    ).fetchone()
+    n = row['analisi_ai'] if row else 0
+    if n >= piano['analisi_max']:
+        return jsonify({
+            "errore": f"Hai raggiunto il limite di {piano['analisi_max']} analisi AI mensili del piano {piano['nome']}. Upgrada per continuare."
+        }), 403
+    return None
+
+
+def _incrementa_analisi(db, org_id: int):
+    """Incrementa il contatore analisi AI nel mese corrente."""
+    mese = datetime.now().strftime('%Y-%m')
+    db.execute(
+        """INSERT INTO utilizzo_mensile (organizzazione_id, mese, analisi_ai)
+           VALUES (?, ?, 1)
+           ON CONFLICT (organizzazione_id, mese)
+           DO UPDATE SET analisi_ai = utilizzo_mensile.analisi_ai + 1""",
+        (org_id, mese)
+    )
+    db.commit()
 
 # Actor Apify per la ricerca persone su LinkedIn (no cookies richiesti)
 APIFY_ACTOR = "harvestapi~linkedin-profile-search"
@@ -531,6 +603,14 @@ def cerca():
 
     # Calcola startPage iniziale: ruota tra pagine 1, 2, 3 per variare i risultati LinkedIn
     org_id = get_org_id()
+
+    # Feature gating — limite ricerche mensili
+    _db_gate = get_db()
+    _limite = _check_limite_ricerche(_db_gate, org_id)
+    _db_gate.close()
+    if _limite is not None:
+        return _limite
+
     db_cnt = get_db()
     n_precedenti = db_cnt.execute(
         "SELECT COUNT(*) AS n FROM ricerche_automatiche WHERE fonte='manuale' AND organizzazione_id = ?",
@@ -624,6 +704,7 @@ def cerca():
         (tipo_profilo, parametri_str, len(tutti_profili), org_id)
     )
     ricerca_id = cur.lastrowid
+    _incrementa_ricerche(db, org_id)
 
     for p in tutti_profili:
         testo = _costruisci_testo_profilo(p)
@@ -859,6 +940,7 @@ def _esegui_ricerca_background(job_id, tipo_profilo, max_profili, imp, org_id=1)
         )
         ricerca_id = cur_r.lastrowid
         db.commit()
+        _incrementa_ricerche(db, org_id)
 
         for p in items_da_importare:
             testo = _costruisci_testo_profilo(p)
@@ -961,6 +1043,14 @@ def automatica():
                                   "Vai in Profili Target e crea almeno un profilo."}), 400
 
     org_id = get_org_id()
+
+    # Feature gating — limite ricerche mensili
+    _db_gate = get_db()
+    _limite = _check_limite_ricerche(_db_gate, org_id)
+    _db_gate.close()
+    if _limite is not None:
+        return _limite
+
     db = get_db()
     imp_row = db.execute(
         "SELECT * FROM profili_target WHERE id = ? AND attivo = TRUE AND organizzazione_id = ?",
@@ -1070,6 +1160,14 @@ def analizza_candidato():
     dati_arricchiti_json  = dati.get("dati_arricchiti")        # JSON string con campi arricchiti
 
     org_id = get_org_id()
+
+    # Feature gating — limite analisi AI mensili
+    _db_gate = get_db()
+    _limite = _check_limite_analisi(_db_gate, org_id)
+    _db_gate.close()
+    if _limite is not None:
+        return _limite
+
     db = get_db()
 
     if candidato_id:
@@ -1257,6 +1355,7 @@ def analizza_candidato():
             (candidato_id, ricerca_id, nome, cognome)
         )
 
+    _incrementa_analisi(db, org_id)
     db.commit()
     db.close()
 

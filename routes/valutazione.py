@@ -13,6 +13,7 @@ from flask import Blueprint, render_template, request, jsonify, redirect, url_fo
 from ai_helpers import analizza_profilo_linkedin, rigenera_messaggio_outreach, analizza_profilo_linkedin_stream
 from database import get_db
 from routes.auth import get_org_id
+from routes.ricerca import _check_limite_analisi, _incrementa_analisi
 
 APIFY_BASE  = "https://api.apify.com/v2"
 APIFY_CERCA_NOME = "harvestapi~linkedin-profile-search-by-name"
@@ -40,6 +41,15 @@ def analizza():
     if not testo_profilo:
         return jsonify({"errore": "Inserire il testo del profilo LinkedIn"}), 400
 
+    org_id = get_org_id()
+
+    # Feature gating — limite analisi AI mensili
+    _db_gate = get_db()
+    _limite = _check_limite_analisi(_db_gate, org_id)
+    _db_gate.close()
+    if _limite is not None:
+        return _limite
+
     # Chiama Claude per l'analisi
     risultato = analizza_profilo_linkedin(testo_profilo, tipo_profilo)
 
@@ -47,7 +57,6 @@ def analizza():
     # Anteprima: prime 120 caratteri del testo profilo
     anteprima = testo_profilo[:120].replace("\n", " ").strip()
 
-    org_id = get_org_id()
     db = get_db()
 
     # Dati estratti da Claude — forzati al tipo corretto per PostgreSQL
@@ -113,6 +122,7 @@ def analizza():
             ),
         )
 
+    _incrementa_analisi(db, org_id)
     db.commit()
     db.close()
 
@@ -259,6 +269,15 @@ def salva_analisi():
         dati_arricchiti_json = None
 
     org_id = get_org_id()
+
+    # Feature gating — limite analisi AI mensili (solo per analisi nuove, non ri-salvataggi)
+    if not candidato_id:
+        _db_gate = get_db()
+        _limite = _check_limite_analisi(_db_gate, org_id)
+        _db_gate.close()
+        if _limite is not None:
+            return _limite
+
     db = get_db()
 
     if not nome_contatto and candidato_id:
@@ -313,6 +332,7 @@ def salva_analisi():
              tipo_profilo, dati_prx_json, dati_arricchiti_json, candidato_id, org_id),
         )
 
+    _incrementa_analisi(db, org_id)
     db.commit()
     db.close()
     return jsonify({"successo": True, "candidato_id_usato": candidato_id})

@@ -466,6 +466,27 @@ WHERE NOT EXISTS (SELECT 1 FROM profili_target)""",
 SELECT 'Profilo Junior', 'Profili emergenti under 35 con forte potenziale', '', '', 22, 35, 0, '', '#16a34a'
 WHERE NOT EXISTS (SELECT 1 FROM profili_target WHERE nome = 'Profilo Junior')""",
 
+        # ── Utilizzo mensile per feature gating ───────────────────────────
+        """CREATE TABLE IF NOT EXISTS utilizzo_mensile (
+    id                SERIAL PRIMARY KEY,
+    organizzazione_id INTEGER REFERENCES organizzazioni(id),
+    mese              VARCHAR(7) NOT NULL,
+    ricerche          INTEGER DEFAULT 0,
+    analisi_ai        INTEGER DEFAULT 0,
+    creato_il         TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(organizzazione_id, mese)
+)""",
+
+        # ── Inviti team ────────────────────────────────────────────────────
+        """CREATE TABLE IF NOT EXISTS inviti_team (
+    id                SERIAL PRIMARY KEY,
+    organizzazione_id INTEGER REFERENCES organizzazioni(id),
+    email             VARCHAR(120) NOT NULL,
+    token             VARCHAR(100) UNIQUE NOT NULL,
+    accettato         BOOLEAN DEFAULT FALSE,
+    creato_il         TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)""",
+
         # ── Indici per performance query ───────────────────────────────────
         "CREATE INDEX IF NOT EXISTS idx_candidati_tipo_profilo  ON candidati(tipo_profilo)",
         "CREATE INDEX IF NOT EXISTS idx_candidati_stato          ON candidati(stato)",
