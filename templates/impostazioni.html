@@ -45,6 +45,24 @@
 .piano-limitato { text-align:center;padding:1.5rem;color:var(--grigio-testo);font-size:.875rem; }
 .piano-limitato .lock { font-size:2rem;display:block;margin-bottom:.5rem; }
 
+.piani-grid { display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-top:1.5rem; }
+.pc          { border:2px solid var(--grigio-bordo);border-radius:var(--radius);padding:1.25rem;
+               display:flex;flex-direction:column;position:relative; }
+.pc.attivo   { border-color:var(--azzurro);box-shadow:0 0 0 3px rgba(99,102,241,.15); }
+.pc-badge-attivo { position:absolute;top:-11px;left:50%;transform:translateX(-50%);
+                   background:var(--azzurro);color:#fff;font-size:.7rem;font-weight:700;
+                   padding:.2rem .65rem;border-radius:999px;white-space:nowrap; }
+.pc-nome     { font-size:1rem;font-weight:700;color:var(--blu-scuro);margin-bottom:.15rem; }
+.pc-prezzo   { font-size:1.4rem;font-weight:800;color:var(--blu-scuro); }
+.pc-periodo  { font-size:.78rem;color:var(--grigio-testo);margin-bottom:1rem; }
+.pc-divider  { border:none;border-top:1px solid var(--grigio-bordo);margin:.75rem 0; }
+.pc-features { list-style:none;padding:0;margin:0 0 1.25rem;flex:1; }
+.pc-features li { font-size:.82rem;padding:.3rem 0;display:flex;align-items:baseline;gap:.5rem;color:var(--grigio-testo); }
+.pc-features li .ck { flex-shrink:0;width:1rem;text-align:center; }
+.pc-features li strong { color:var(--blu-scuro); }
+
+@media(max-width:900px){ .piani-grid { grid-template-columns:1fr; } }
+
 @media(max-width:700px){
   .imp-layout { grid-template-columns:1fr; }
   .imp-nav    { display:none; }
@@ -135,6 +153,8 @@
 <!-- ═══════════════ SEZIONE 3 — PIANO ═══════════════ -->
 <section class="imp-section" id="piano">
     <h2>Piano &amp; utilizzo</h2>
+
+    <!-- Piano attivo + barre utilizzo -->
     <div class="piano-card" style="margin-bottom:1.5rem;">
         <div style="flex:1;min-width:200px;">
             <div>
@@ -145,7 +165,7 @@
             <div class="piano-prezzo">{{ piano_info.prezzo }}</div>
             <div class="piano-nome">Piano attivo dell'organizzazione</div>
         </div>
-        <div style="flex:1;min-width:220px;">
+        <div style="flex:1;min-width:260px;">
             {% macro barra(label, usato, massimo) %}
             {% set pct = (usato / massimo * 100)|int if massimo > 0 else 0 %}
             {% set classe = 'critico' if pct >= 90 else ('attenzione' if pct >= 70 else '') %}
@@ -166,46 +186,125 @@
             {% set pt_max   = piano_info.profili_target_max %}
 
             {% if cand_max != -1 %}
-            {{ barra('Candidati', conteggi.candidati, cand_max) }}
+            {{ barra('Candidati in pipeline', conteggi.candidati, cand_max) }}
             {% else %}
             <div class="uso-bar-wrap">
-                <div class="uso-bar-label"><span>Candidati</span><span>{{ conteggi.candidati }} / ∞</span></div>
+                <div class="uso-bar-label"><span>Candidati in pipeline</span><span>{{ conteggi.candidati }} / ∞</span></div>
             </div>
             {% endif %}
 
             {% if ric_max != -1 %}
-            {{ barra('Ricerche (mese)', utilizzo.ricerche, ric_max) }}
+            {{ barra('Ricerche effettuate questo mese', utilizzo.ricerche, ric_max) }}
             {% else %}
             <div class="uso-bar-wrap">
-                <div class="uso-bar-label"><span>Ricerche</span><span>{{ utilizzo.ricerche }} / ∞</span></div>
+                <div class="uso-bar-label"><span>Ricerche effettuate questo mese</span><span>{{ utilizzo.ricerche }} / ∞</span></div>
             </div>
             {% endif %}
 
             {% if ai_max != -1 %}
-            {{ barra('Analisi AI (mese)', utilizzo.analisi_ai, ai_max) }}
+            {{ barra('Analisi AI questo mese', utilizzo.analisi_ai, ai_max) }}
             {% else %}
             <div class="uso-bar-wrap">
-                <div class="uso-bar-label"><span>Analisi AI</span><span>{{ utilizzo.analisi_ai }} / ∞</span></div>
+                <div class="uso-bar-label"><span>Analisi AI questo mese</span><span>{{ utilizzo.analisi_ai }} / ∞</span></div>
             </div>
             {% endif %}
 
             {% if pt_max != -1 %}
-            {{ barra('Profili Target', conteggi.profili_target, pt_max) }}
+            {{ barra('Profili target creati', conteggi.profili_target, pt_max) }}
             {% else %}
             <div class="uso-bar-wrap">
-                <div class="uso-bar-label"><span>Profili Target</span><span>{{ conteggi.profili_target }} / ∞</span></div>
+                <div class="uso-bar-label"><span>Profili target creati</span><span>{{ conteggi.profili_target }} / ∞</span></div>
             </div>
             {% endif %}
         </div>
     </div>
 
-    {% if piano_chiave == 'free' %}
-    <a href="/upgrade/pro" class="btn btn-primary">&#11014; Passa a Pro — €49/mese</a>
-    {% elif piano_chiave == 'pro' %}
-    <a href="/upgrade/business" class="btn btn-primary" style="background:#059669;border-color:#059669;">&#11014; Passa a Business — €149/mese</a>
-    {% else %}
-    <span style="color:#059669;font-weight:600;">&#10003; Piano massimo attivo</span>
-    {% endif %}
+    <!-- Tutti i piani -->
+    <h3 style="font-size:.95rem;font-weight:700;color:var(--blu-scuro);margin-bottom:.25rem;">Tutti i piani</h3>
+    <p style="font-size:.82rem;color:var(--grigio-testo);margin-bottom:.25rem;">Confronta i piani e fai l'upgrade quando sei pronto.</p>
+
+    <div class="piani-grid">
+    {% for chiave, p in piani.items() %}
+    {% set is_attivo = (chiave == piano_chiave) %}
+    <div class="pc {% if is_attivo %}attivo{% endif %}">
+        {% if is_attivo %}<span class="pc-badge-attivo">Piano attuale</span>{% endif %}
+        <div class="pc-nome">{{ p.nome }}</div>
+        <div>
+            <span class="pc-prezzo">{{ p.prezzo.split('/')[0] }}</span>
+            <span style="font-size:.78rem;color:var(--grigio-testo);">/mese</span>
+        </div>
+        <hr class="pc-divider">
+        <ul class="pc-features">
+            <li>
+                <span class="ck">📋</span>
+                <span>
+                    <strong>
+                        {% if p.candidati_max == -1 %}Candidati illimitati
+                        {% else %}Fino a {{ p.candidati_max }} candidati{% endif %}
+                    </strong>
+                </span>
+            </li>
+            <li>
+                <span class="ck">🔍</span>
+                <span><strong>{{ p.ricerche_max }} ricerche/mese</strong></span>
+            </li>
+            <li>
+                <span class="ck">🤖</span>
+                <span><strong>{{ p.analisi_max }} analisi AI/mese</strong></span>
+            </li>
+            <li>
+                <span class="ck">🎯</span>
+                <span>
+                    <strong>
+                        {% if p.profili_target_max == -1 %}Profili target illimitati
+                        {% else %}{{ p.profili_target_max }} profil{{ 'o' if p.profili_target_max == 1 else 'i' }} target{% endif %}
+                    </strong>
+                </span>
+            </li>
+            <li>
+                <span class="ck">👥</span>
+                <span>
+                    <strong>
+                        {% if p.utenti_max == 1 %}Solo tu (1 utente)
+                        {% elif p.utenti_max == -1 %}Utenti illimitati
+                        {% else %}Fino a {{ p.utenti_max }} utenti{% endif %}
+                    </strong>
+                </span>
+            </li>
+            <li>
+                <span class="ck">{% if p.export_csv %}✅{% else %}❌{% endif %}</span>
+                <span>Export CSV candidati</span>
+            </li>
+            <li>
+                <span class="ck">{% if chiave != 'free' %}✅{% else %}❌{% endif %}</span>
+                <span>Ricerca multi-source <small style="color:var(--grigio-testo);">(LinkedIn, Indeed, Infojobs)</small></span>
+            </li>
+            <li>
+                <span class="ck">{% if chiave != 'free' %}✅{% else %}❌{% endif %}</span>
+                <span>Analisi profilo personale</span>
+            </li>
+            <li>
+                <span class="ck">{% if chiave != 'free' %}✅{% else %}❌{% endif %}</span>
+                <span>Creazione contenuti LinkedIn</span>
+            </li>
+            <li>
+                <span class="ck">{% if chiave == 'business' %}✅{% else %}❌{% endif %}</span>
+                <span>Supporto prioritario</span>
+            </li>
+        </ul>
+        {% if is_attivo %}
+        <button class="btn btn-ghost" disabled style="opacity:.5;cursor:default;width:100%;">Piano attuale</button>
+        {% elif chiave == 'free' %}
+        {# Non si fa downgrade — bottone disabilitato #}
+        <button class="btn btn-ghost" disabled style="opacity:.4;cursor:default;width:100%;">Piano base</button>
+        {% else %}
+        <a href="/upgrade/{{ chiave }}" class="btn btn-primary" style="width:100%;text-align:center;background:{{ p.colore }};border-color:{{ p.colore }};">
+            &#11014; Upgrada a {{ p.nome }}
+        </a>
+        {% endif %}
+    </div>
+    {% endfor %}
+    </div>
 </section>
 
 <!-- ═══════════════ SEZIONE 4 — TEAM ═══════════════ -->
