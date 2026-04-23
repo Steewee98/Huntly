@@ -122,9 +122,9 @@ def analizza():
             ),
         )
 
-    _incrementa_analisi(db, org_id)
     db.commit()
     db.close()
+    _incrementa_analisi(org_id)
 
     return jsonify(risultato)
 
@@ -332,9 +332,9 @@ def salva_analisi():
              tipo_profilo, dati_prx_json, dati_arricchiti_json, candidato_id, org_id),
         )
 
-    _incrementa_analisi(db, org_id)
     db.commit()
     db.close()
+    _incrementa_analisi(org_id)
     return jsonify({"successo": True, "candidato_id_usato": candidato_id})
 
 

@@ -51,17 +51,22 @@ def _check_limite_ricerche(db, org_id: int):
     return None
 
 
-def _incrementa_ricerche(db, org_id: int):
-    """Incrementa il contatore ricerche nel mese corrente."""
-    mese = datetime.now().strftime('%Y-%m')
-    db.execute(
-        """INSERT INTO utilizzo_mensile (organizzazione_id, mese, ricerche)
-           VALUES (?, ?, 1)
-           ON CONFLICT (organizzazione_id, mese)
-           DO UPDATE SET ricerche = utilizzo_mensile.ricerche + 1""",
-        (org_id, mese)
-    )
-    db.commit()
+def _incrementa_ricerche(org_id: int):
+    """Incrementa il contatore ricerche nel mese corrente (connessione autonoma)."""
+    try:
+        mese = datetime.now().strftime('%Y-%m')
+        _db = get_db()
+        _db.execute(
+            """INSERT INTO utilizzo_mensile (organizzazione_id, mese, ricerche)
+               VALUES (?, ?, 1)
+               ON CONFLICT (organizzazione_id, mese)
+               DO UPDATE SET ricerche = utilizzo_mensile.ricerche + 1""",
+            (org_id, mese)
+        )
+        _db.commit()
+        _db.close()
+    except Exception as _e:
+        log.error("Errore incremento ricerche org=%s: %s", org_id, _e)
 
 
 def _check_limite_analisi(db, org_id: int):
@@ -86,17 +91,22 @@ def _check_limite_analisi(db, org_id: int):
     return None
 
 
-def _incrementa_analisi(db, org_id: int):
-    """Incrementa il contatore analisi AI nel mese corrente."""
-    mese = datetime.now().strftime('%Y-%m')
-    db.execute(
-        """INSERT INTO utilizzo_mensile (organizzazione_id, mese, analisi_ai)
-           VALUES (?, ?, 1)
-           ON CONFLICT (organizzazione_id, mese)
-           DO UPDATE SET analisi_ai = utilizzo_mensile.analisi_ai + 1""",
-        (org_id, mese)
-    )
-    db.commit()
+def _incrementa_analisi(org_id: int):
+    """Incrementa il contatore analisi AI nel mese corrente (connessione autonoma)."""
+    try:
+        mese = datetime.now().strftime('%Y-%m')
+        _db = get_db()
+        _db.execute(
+            """INSERT INTO utilizzo_mensile (organizzazione_id, mese, analisi_ai)
+               VALUES (?, ?, 1)
+               ON CONFLICT (organizzazione_id, mese)
+               DO UPDATE SET analisi_ai = utilizzo_mensile.analisi_ai + 1""",
+            (org_id, mese)
+        )
+        _db.commit()
+        _db.close()
+    except Exception as _e:
+        log.error("Errore incremento analisi org=%s: %s", org_id, _e)
 
 # Actor Apify per la ricerca persone su LinkedIn (no cookies richiesti)
 APIFY_ACTOR = "harvestapi~linkedin-profile-search"
@@ -704,7 +714,6 @@ def cerca():
         (tipo_profilo, parametri_str, len(tutti_profili), org_id)
     )
     ricerca_id = cur.lastrowid
-    _incrementa_ricerche(db, org_id)
 
     for p in tutti_profili:
         testo = _costruisci_testo_profilo(p)
@@ -719,6 +728,7 @@ def cerca():
 
     db.commit()
     db.close()
+    _incrementa_ricerche(org_id)
 
     # ── Messaggio finale ──────────────────────────────────────────────────────
     if nuovi == 0:
@@ -940,7 +950,7 @@ def _esegui_ricerca_background(job_id, tipo_profilo, max_profili, imp, org_id=1)
         )
         ricerca_id = cur_r.lastrowid
         db.commit()
-        _incrementa_ricerche(db, org_id)
+        _incrementa_ricerche(org_id)
 
         for p in items_da_importare:
             testo = _costruisci_testo_profilo(p)
@@ -1355,9 +1365,9 @@ def analizza_candidato():
             (candidato_id, ricerca_id, nome, cognome)
         )
 
-    _incrementa_analisi(db, org_id)
     db.commit()
     db.close()
+    _incrementa_analisi(org_id)
 
     return jsonify({**risultato, "candidato_id": candidato_id})
 

@@ -20,12 +20,12 @@
 .piano-prezzo { font-size:1.3rem;font-weight:700;color:var(--blu-scuro);margin:.3rem 0; }
 .piano-nome   { font-size:.85rem;color:var(--grigio-testo); }
 
-.uso-bar-wrap { margin:.6rem 0; }
-.uso-bar-label{ display:flex;justify-content:space-between;font-size:.82rem;color:var(--grigio-testo);margin-bottom:.25rem; }
-.uso-bar      { height:8px;background:var(--grigio-bg);border-radius:4px;overflow:hidden; }
-.uso-bar-fill { height:100%;border-radius:4px;background:var(--azzurro);transition:width .4s; }
-.uso-bar-fill.critico { background:#ef4444; }
-.uso-bar-fill.attenzione { background:#f59e0b; }
+.utilizzo-item      { margin-bottom:1rem; }
+.utilizzo-header    { display:flex;justify-content:space-between;align-items:baseline;margin-bottom:6px; }
+.utilizzo-label     { font-size:.85rem;font-weight:500;color:var(--blu-scuro); }
+.utilizzo-valori    { font-size:.82rem;font-weight:600;color:var(--grigio-testo); }
+.progress-bar-bg    { background:#e5e7eb;border-radius:999px;height:8px;overflow:hidden; }
+.progress-bar-fill  { height:100%;border-radius:999px;transition:width .8s ease;width:0; }
 
 .team-row     { display:flex;align-items:center;gap:.75rem;padding:.6rem 0;border-bottom:1px solid var(--grigio-bg); }
 .team-row:last-child { border-bottom:none; }
@@ -166,56 +166,37 @@
             <div class="piano-nome">Piano attivo dell'organizzazione</div>
         </div>
         <div style="flex:1;min-width:260px;">
-            {% macro barra(label, usato, massimo) %}
-            {% set pct = (usato / massimo * 100)|int if massimo > 0 else 0 %}
-            {% set classe = 'critico' if pct >= 90 else ('attenzione' if pct >= 70 else '') %}
-            <div class="uso-bar-wrap">
-                <div class="uso-bar-label">
-                    <span>{{ label }}</span>
-                    <span>{{ usato }} / {{ massimo }}</span>
+            {%- macro barra_utilizzo(label, usato, massimo) -%}
+            {%- if massimo == -1 -%}
+            <div class="utilizzo-item">
+                <div class="utilizzo-header">
+                    <span class="utilizzo-label">{{ label }}</span>
+                    <span class="utilizzo-valori" style="color:#16a34a;">{{ usato }} / Illimitato</span>
                 </div>
-                <div class="uso-bar">
-                    <div class="uso-bar-fill {{ classe }}" style="width:{{ [pct,100]|min }}%;"></div>
+                <div class="progress-bar-bg">
+                    <div class="progress-bar-fill" data-width="100%" style="background:#16a34a;"></div>
                 </div>
             </div>
-            {% endmacro %}
-
-            {% set cand_max = piano_info.candidati_max %}
-            {% set ric_max  = piano_info.ricerche_max %}
-            {% set ai_max   = piano_info.analisi_max %}
-            {% set pt_max   = piano_info.profili_target_max %}
-
-            {% if cand_max != -1 %}
-            {{ barra('Candidati in pipeline', conteggi.candidati, cand_max) }}
-            {% else %}
-            <div class="uso-bar-wrap">
-                <div class="uso-bar-label"><span>Candidati in pipeline</span><span>{{ conteggi.candidati }} / ∞</span></div>
+            {%- else -%}
+            {%- set pct = [((usato / massimo * 100)|int), 100]|min -%}
+            {%- set colore = '#ef4444' if pct >= 86 else ('#f59e0b' if pct >= 61 else '#6366f1') -%}
+            <div class="utilizzo-item">
+                <div class="utilizzo-header">
+                    <span class="utilizzo-label">{{ label }}</span>
+                    <span class="utilizzo-valori">{{ usato }} / {{ massimo }}</span>
+                </div>
+                <div class="progress-bar-bg">
+                    <div class="progress-bar-fill" data-width="{{ pct }}%"
+                         style="background:{{ colore }};"></div>
+                </div>
             </div>
-            {% endif %}
+            {%- endif -%}
+            {%- endmacro -%}
 
-            {% if ric_max != -1 %}
-            {{ barra('Ricerche effettuate questo mese', utilizzo.ricerche, ric_max) }}
-            {% else %}
-            <div class="uso-bar-wrap">
-                <div class="uso-bar-label"><span>Ricerche effettuate questo mese</span><span>{{ utilizzo.ricerche }} / ∞</span></div>
-            </div>
-            {% endif %}
-
-            {% if ai_max != -1 %}
-            {{ barra('Analisi AI questo mese', utilizzo.analisi_ai, ai_max) }}
-            {% else %}
-            <div class="uso-bar-wrap">
-                <div class="uso-bar-label"><span>Analisi AI questo mese</span><span>{{ utilizzo.analisi_ai }} / ∞</span></div>
-            </div>
-            {% endif %}
-
-            {% if pt_max != -1 %}
-            {{ barra('Profili target creati', conteggi.profili_target, pt_max) }}
-            {% else %}
-            <div class="uso-bar-wrap">
-                <div class="uso-bar-label"><span>Profili target creati</span><span>{{ conteggi.profili_target }} / ∞</span></div>
-            </div>
-            {% endif %}
+            {{ barra_utilizzo('Candidati in pipeline',          conteggi.candidati,      piano_info.candidati_max) }}
+            {{ barra_utilizzo('Ricerche effettuate questo mese', utilizzo.ricerche,       piano_info.ricerche_max) }}
+            {{ barra_utilizzo('Analisi AI questo mese',          utilizzo.analisi_ai,     piano_info.analisi_max) }}
+            {{ barra_utilizzo('Profili target creati',           conteggi.profili_target, piano_info.profili_target_max) }}
         </div>
     </div>
 
@@ -420,6 +401,14 @@
 </div>
 
 <script>
+// ── Animazione barre utilizzo ─────────────────
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.progress-bar-fill').forEach(function(bar) {
+        var target = bar.getAttribute('data-width');
+        setTimeout(function() { bar.style.width = target; }, 100);
+    });
+});
+
 // ── Navigazione attiva ────────────────────────
 const sections = document.querySelectorAll('.imp-section');
 const navLinks  = document.querySelectorAll('.imp-nav a');
