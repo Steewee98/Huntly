@@ -204,12 +204,12 @@
 
 <!-- Storico contenuti generati -->
 {% if storico %}
-<div class="card" style="margin-top:2rem;">
+<div class="card" style="margin-top:2rem;max-width:720px;margin-left:auto;margin-right:auto;">
     <div class="card-header"><h3>Ultimi Contenuti Generati</h3></div>
     <div class="card-body">
         <div class="storico-lista">
             {% for s in storico %}
-            <div class="storico-item">
+            <div class="storico-item" style="cursor:pointer;" onclick="toggleStorico(this)">
                 <div class="storico-meta">
                     {% if s.obiettivo %}
                     <span class="badge badge-outline">{{ s.obiettivo }}</span>
@@ -218,8 +218,23 @@
                     <span class="badge">{{ s.profilo_destinazione }}</span>
                     {% endif %}
                     <span class="text-muted">{{ s.data_creazione[:10] }}</span>
+                    <span class="storico-expand" style="margin-left:auto;font-size:0.78rem;color:var(--azzurro);">&#9660; Espandi</span>
                 </div>
                 <div class="storico-tema">{{ s.tema }}</div>
+                <!-- Varianti espandibili -->
+                <div class="storico-varianti hidden" style="margin-top:0.75rem;display:flex;flex-direction:column;gap:0.75rem;">
+                    {% for v in [s.variante_1, s.variante_2, s.variante_3] %}
+                    {% if v %}
+                    <div style="position:relative;background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:0.75rem;">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.4rem;">
+                            <span style="font-size:0.75rem;font-weight:600;color:var(--grigio-testo);text-transform:uppercase;letter-spacing:0.03em;">Variante {{ loop.index }}</span>
+                            <button class="btn btn-outline btn-xs" onclick="event.stopPropagation();copiaStorico(this)">&#128203; Copia</button>
+                        </div>
+                        <div class="storico-testo-variante" style="font-size:0.84rem;line-height:1.55;color:#1e293b;white-space:pre-wrap;word-break:break-word;">{{ v }}</div>
+                    </div>
+                    {% endif %}
+                    {% endfor %}
+                </div>
             </div>
             {% endfor %}
         </div>
@@ -478,6 +493,24 @@ function impostaCaricamentoContenuti(attivo) {
     btn.disabled = attivo;
     document.getElementById('btn-genera-testo').classList.toggle('hidden', attivo);
     document.getElementById('btn-genera-loading').classList.toggle('hidden', !attivo);
+}
+
+// Storico expand/collapse
+function toggleStorico(el) {
+    var varianti = el.querySelector('.storico-varianti');
+    var expand   = el.querySelector('.storico-expand');
+    var aperto   = !varianti.classList.contains('hidden');
+    varianti.classList.toggle('hidden');
+    expand.innerHTML = aperto ? '&#9660; Espandi' : '&#9650; Chiudi';
+}
+
+function copiaStorico(btn) {
+    var card = btn.closest('div[style*="position:relative"]');
+    var testo = card.querySelector('.storico-testo-variante').textContent;
+    navigator.clipboard.writeText(testo).then(function() {
+        btn.textContent = '\u2713 Copiato!';
+        setTimeout(function() { btn.innerHTML = '&#128203; Copia'; }, 2000);
+    });
 }
 
 // Helpers
