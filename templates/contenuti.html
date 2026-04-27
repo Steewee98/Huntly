@@ -7,9 +7,9 @@
     <p class="page-subtitle">Genera post LinkedIn personalizzati con la tua voce</p>
 </div>
 
-<div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;align-items:start;">
+<div style="display:flex;flex-direction:column;gap:1.5rem;max-width:720px;margin:0 auto;">
 
-<!-- ===== COLONNA SINISTRA: form ===== -->
+<!-- ===== FORM ===== -->
 <div>
 
 <!-- Sezione 1: Chi pubblica -->
@@ -135,9 +135,9 @@
 <!-- Errore -->
 <div id="errore-contenuti" class="hidden alert alert-errore"></div>
 
-</div><!-- fine colonna sinistra -->
+</div><!-- fine form -->
 
-<!-- ===== COLONNA DESTRA: anteprime LinkedIn ===== -->
+<!-- ===== VARIANTI (sotto il form, piena larghezza) ===== -->
 <div id="varianti-container" class="hidden">
     <div style="display:flex;flex-direction:column;gap:1.25rem;">
         {% for i in range(1, 4) %}
@@ -198,9 +198,9 @@
         </div>
         {% endfor %}
     </div>
-</div><!-- fine colonna destra -->
+</div><!-- fine varianti -->
 
-</div><!-- fine grid -->
+</div><!-- fine layout -->
 
 <!-- Storico contenuti generati -->
 {% if storico %}
@@ -246,9 +246,6 @@
 .obiettivo-card:hover { border-color: var(--azzurro); background: #f0f7ff; }
 .obiettivo-card.selected { border-color: var(--azzurro); background: #eff6ff; font-weight: 600; }
 .obiettivo-icon { font-size: 1rem; flex-shrink: 0; }
-@media (max-width: 900px) {
-    .contenuti-grid { grid-template-columns: 1fr !important; }
-}
 </style>
 <script>
 var _obiettivo = 'candidati';
