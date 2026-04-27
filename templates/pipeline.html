@@ -614,6 +614,48 @@
                     <input type="email" id="calendly-email" class="form-input" placeholder="candidato@email.com">
                     <small style="color:var(--grigio-testo);font-size:.78rem;">L'email viene salvata automaticamente sul candidato.</small>
                 </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:.75rem;margin-bottom:1rem;">
+                    <div class="form-group" style="margin-bottom:0;">
+                        <label class="form-label">Data della chiamata</label>
+                        <input type="date" id="invito-data" class="form-input">
+                    </div>
+                    <div class="form-group" style="margin-bottom:0;">
+                        <label class="form-label">Ora della chiamata</label>
+                        <select id="invito-ora" class="form-input form-select">
+                            <option value="">Seleziona orario</option>
+                            <option value="09:00">09:00</option>
+                            <option value="09:30">09:30</option>
+                            <option value="10:00">10:00</option>
+                            <option value="10:30">10:30</option>
+                            <option value="11:00">11:00</option>
+                            <option value="11:30">11:30</option>
+                            <option value="12:00">12:00</option>
+                            <option value="12:30">12:30</option>
+                            <option value="13:00">13:00</option>
+                            <option value="13:30">13:30</option>
+                            <option value="14:00">14:00</option>
+                            <option value="14:30">14:30</option>
+                            <option value="15:00">15:00</option>
+                            <option value="15:30">15:30</option>
+                            <option value="16:00">16:00</option>
+                            <option value="16:30">16:30</option>
+                            <option value="17:00">17:00</option>
+                            <option value="17:30">17:30</option>
+                            <option value="18:00">18:00</option>
+                            <option value="18:30">18:30</option>
+                            <option value="19:00">19:00</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group" style="margin-bottom:1rem;">
+                    <label class="form-label">Durata</label>
+                    <select id="invito-durata" class="form-input form-select">
+                        <option value="15">15 minuti</option>
+                        <option value="30" selected>30 minuti</option>
+                        <option value="45">45 minuti</option>
+                        <option value="60">1 ora</option>
+                    </select>
+                </div>
                 <div class="form-group" style="margin-bottom:1.25rem;">
                     <label class="form-label">Link Calendly</label>
                     <input type="text" id="calendly-link" class="form-input" readonly style="background:var(--grigio-bg);cursor:default;">
@@ -1441,9 +1483,17 @@ function padCal(n) { return String(n).padStart(2, '0'); }
 /* ────────────────────────────────────────────────────────── */
 /* CALENDLY — Invita candidato                               */
 /* ────────────────────────────────────────────────────────── */
+var _GIORNI_SETTIMANA = ['domenica','lunedì','martedì','mercoledì','giovedì','venerdì','sabato'];
+
 async function invitaCalendly(candidatoId, nomeCandidato) {
     document.getElementById('calendly-titolo').textContent = 'Invita: ' + nomeCandidato;
     document.getElementById('calendly-candidato-id').value = candidatoId;
+    // Reset campi data/ora
+    var oggi = new Date();
+    document.getElementById('invito-data').min = oggi.toISOString().slice(0, 10);
+    document.getElementById('invito-data').value = '';
+    document.getElementById('invito-ora').value = '';
+    document.getElementById('invito-durata').value = '30';
     nascondi('calendly-no-url');
     nascondi('calendly-form');
     mostra('modal-calendly');
@@ -1483,21 +1533,41 @@ async function inviaCalendly() {
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({ candidato_id: parseInt(candidatoId), email: email })
         });
-        // Aggiorna in-memory
         var idx = candidatiData.findIndex(function(x) { return x.id === parseInt(candidatoId); });
         if (idx >= 0) candidatiData[idx].email = email;
     } catch(e) { /* non bloccare il flusso */ }
 
+    // Leggi campi data/ora/durata
+    var dataVal = document.getElementById('invito-data').value;
+    var oraVal  = document.getElementById('invito-ora').value;
+    var durata  = document.getElementById('invito-durata').value || '30';
+    var durataLabel = durata === '60' ? '1 ora' : durata + ' minuti';
+    var haDataOra = dataVal && oraVal;
+
+    // Componi proposta
+    var proposta = '';
+    if (haDataOra) {
+        var d = new Date(dataVal + 'T00:00:00');
+        var giorno = _GIORNI_SETTIMANA[d.getDay()];
+        var gg = String(d.getDate()).padStart(2, '0');
+        var mm = String(d.getMonth() + 1).padStart(2, '0');
+        var dataFmt = gg + '/' + mm + '/' + d.getFullYear();
+        proposta = 'Ti propongo: ' + giorno + ' ' + dataFmt + ' alle ' + oraVal + ' (' + durataLabel + ').\n\n' +
+            'Se ti va bene, confermami cliccando qui:\n' + calendlyUrl + '\n\n' +
+            'Oppure scegli tu il momento più comodo:\n' + calendlyUrl;
+    } else {
+        proposta = 'Ti propongo una chiamata di ' + durataLabel + ' — scegli tu il momento più comodo:\n' + calendlyUrl;
+    }
+
     // Componi mailto
     var c = candidatiData.find(function(x) { return x.id === parseInt(candidatoId); });
-    var nome = c ? ((c.nome || '') + ' ' + (c.cognome || '')).trim() : '';
-    var subject = encodeURIComponent('Fissiamo un colloquio' + (nome ? ' — ' + nome : ''));
+    var nomeUtente = '{{ session.get("nome", "") }}';
+    var subject = encodeURIComponent('Fissiamo un colloquio' + (c ? ' — ' + ((c.nome || '') + ' ' + (c.cognome || '')).trim() : ''));
     var body = encodeURIComponent(
         'Ciao' + (c && c.nome ? ' ' + c.nome : '') + ',\n\n' +
-        'Ti scrivo per fissare un colloquio conoscitivo.\n' +
-        'Puoi scegliere il giorno e l\'orario che preferisci dal mio calendario:\n\n' +
-        calendlyUrl + '\n\n' +
-        'A presto!'
+        'ho letto il tuo profilo e mi piacerebbe molto avere una breve chiamata con te.\n\n' +
+        proposta + '\n\n' +
+        'A presto,\n' + nomeUtente
     );
     window.open('mailto:' + encodeURIComponent(email) + '?subject=' + subject + '&body=' + body, '_blank');
     nascondi('modal-calendly');
