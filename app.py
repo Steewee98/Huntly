@@ -259,6 +259,14 @@ def admin_test_api():
     return jsonify(risultato), 200 if risultato["ok"] else 500
 
 
+@app.route("/debug/impostazioni")
+def debug_impostazioni():
+    db = get_db()
+    rows = db.execute("SELECT * FROM impostazioni_profilo").fetchall()
+    db.close()
+    return jsonify([dict(r) for r in rows])
+
+
 if __name__ == "__main__":
     # Avvia il server in modalità debug per lo sviluppo
     app.run(debug=True, port=5001)
