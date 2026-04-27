@@ -17,7 +17,7 @@
     </button>
     <button class="tab-btn" data-tab="valutazione" onclick="attivaTab('valutazione')"
             style="padding:0.65rem 1.25rem;border:none;background:none;cursor:pointer;font-size:0.9rem;font-weight:500;color:var(--grigio-testo);border-bottom:3px solid transparent;margin-bottom:-2px;transition:all 0.15s;">
-        &#9733; Valutazione
+        ⭐ Valutazione
     </button>
     <button class="tab-btn" data-tab="calendario" onclick="attivaTab('calendario')"
             style="padding:0.65rem 1.25rem;border:none;background:none;cursor:pointer;font-size:0.9rem;font-weight:500;color:var(--grigio-testo);border-bottom:3px solid transparent;margin-bottom:-2px;transition:all 0.15s;">
@@ -1281,7 +1281,7 @@ function renderProfiliNome(profili) {
             (p.azienda  ? '<div style="font-size:0.8rem;color:var(--grigio-testo);">' + p.azienda + (p.location ? ' · ' + p.location : '') + '</div>' : '') +
             linkedinLink +
             '</div>' +
-            '<button class="btn btn-primary btn-sm" onclick=\'selezionaProfilo(' + JSON.stringify(p).replace(/'/g,"&#39;") + ')\'>&#9733; Analizza</button>';
+            '<button class="btn btn-primary btn-sm" onclick=\'selezionaProfilo(' + JSON.stringify(p).replace(/'/g,"&#39;") + ')\'>⭐ Analizza</button>';
         lista.appendChild(div);
     });
     document.getElementById('risultati-nome').classList.remove('hidden');
@@ -1438,7 +1438,7 @@ function mostraRisultatiVal(dati) {
     var badge = document.getElementById('arricchimento-badge');
     if (badge) {
         if (dati.arricchito) {
-            badge.textContent = '★ Analisi Arricchita';
+            badge.textContent = '⭐ Analisi Arricchita';
             badge.style.cssText = 'margin-top:0.5rem;font-size:0.75rem;padding:3px 10px;border-radius:20px;display:inline-block;background:#dbeafe;color:#1e40af;';
         } else {
             badge.textContent = 'Analisi base (score ' + (dati.punteggio || '?') + ')';

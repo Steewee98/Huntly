@@ -559,7 +559,7 @@ function renderRisultati(persone, totale, tentativi, messaggio, sourceSummary) {
             '<td>' + linkedinBtn + '</td>' +
             '<td style="display:flex;gap:0.4rem;">' +
             '<button class="btn btn-outline btn-xs" onclick=\'apriModal(' + JSON.stringify(p) + ')\'>&#43; Importa</button>' +
-            '<button class="btn btn-primary btn-xs" onclick=\'avviaAnalisiDiretta(' + JSON.stringify(p) + ')\'>&#9733; Analizza</button>' +
+            '<button class="btn btn-primary btn-xs" onclick=\'avviaAnalisiDiretta(' + JSON.stringify(p) + ')\'>⭐ Analizza</button>' +
             '<button class="btn btn-outline btn-xs" style="color:#c0392b;border-color:#c0392b;" onclick=\'scartaProfilo(' + JSON.stringify(p) + ', this)\'>&#10005; Scarta</button>' +
             '</td>' +
             '</tr>';
@@ -673,7 +673,7 @@ function avviaAnalisiDiretta(persona) {
     var nomeCompleto = [p.nome, p.cognome].filter(Boolean).join(' ') || 'candidato';
 
     // Reset modal
-    document.getElementById('modal-report-titolo').textContent = '&#9733; Analisi AI: ' + nomeCompleto;
+    document.getElementById('modal-report-titolo').textContent = '⭐ Analisi AI: ' + nomeCompleto;
     document.getElementById('modal-report-streaming').classList.remove('hidden');
     document.getElementById('modal-report-body').classList.add('hidden');
     document.getElementById('modal-report-body').innerHTML = '';

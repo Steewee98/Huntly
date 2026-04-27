@@ -191,7 +191,7 @@
                             {% if p.punteggio is none %}
                             <button class="btn btn-primary btn-xs"
                                     onclick="analizzaSingolo({{ loop.index0 }}, this)">
-                                &#9733; Analizza
+                                ⭐ Analizza
                             </button>
                             {% endif %}
                             {% if p.candidato_id %}
@@ -315,7 +315,7 @@ function analizzaSingolo(idx, btnEl) {
     const nome = ((p.nome || '') + ' ' + (p.cognome || '')).trim() || 'candidato';
 
     // Apri modal con streaming
-    document.getElementById('modal-report-titolo').textContent = '&#9733; Analisi AI: ' + nome;
+    document.getElementById('modal-report-titolo').textContent = '⭐ Analisi AI: ' + nome;
     var streamEl = document.getElementById('modal-report-streaming');
     var bodyEl   = document.getElementById('modal-report-body');
     var savedEl  = document.getElementById('modal-report-saved');
@@ -377,7 +377,7 @@ function analizzaSingolo(idx, btnEl) {
                             document.getElementById('modal-report-status').textContent =
                                 'Errore: ' + (ev.messaggio || 'sconosciuto');
                             btnEl.disabled = false;
-                            btnEl.innerHTML = '&#9733; Analizza';
+                            btnEl.innerHTML = '⭐ Analizza';
                         }
                     } catch(e) {
                         console.error('[SSE parse error]', e.message, '| line:', line.slice(0, 80));
@@ -392,7 +392,7 @@ function analizzaSingolo(idx, btnEl) {
         document.getElementById('modal-report-spinner').style.display = 'none';
         document.getElementById('modal-report-status').textContent = 'Errore di connessione: ' + err;
         btnEl.disabled = false;
-        btnEl.innerHTML = '&#9733; Analizza';
+        btnEl.innerHTML = '⭐ Analizza';
     });
 }
 
@@ -450,7 +450,7 @@ function _salvaDettaglio(idx, dati, btnEl) {
     })
     .catch(function(err) { console.error('[salva dettaglio]', err); })
     .finally(function() {
-        if (btnEl) { btnEl.disabled = false; btnEl.innerHTML = '&#9733; Analizza'; }
+        if (btnEl) { btnEl.disabled = false; btnEl.innerHTML = '⭐ Analizza'; }
     });
 }
 

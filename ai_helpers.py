@@ -113,26 +113,15 @@ def analizza_profilo_linkedin(testo_profilo: str, tipo_profilo: str, impostazion
     testo_profilo = clean_text(testo_profilo)
 
     if impostazioni:
-        if tipo_profilo == "A":
-            descrizione_profilo = (
-                f"Profilo A (Senior): età tra {impostazioni.get('eta_min', 40)} e "
-                f"{impostazioni.get('eta_max', 65)} anni, almeno "
-                f"{impostazioni.get('anni_esperienza_min', 5)} anni di esperienza nel settore. "
-                f"Settori di provenienza accettati: {impostazioni.get('settori', 'consulenza, bancario, finanziario')}. "
-                f"Ruoli target: {impostazioni.get('ruoli_target', '')}. "
-                f"Segnali positivi (favoriscono la valutazione): {impostazioni.get('keyword_positive', '')}. "
-                f"Segnali negativi (penalizzano la valutazione): {impostazioni.get('keyword_negative', '')}."
-            )
-        else:
-            descrizione_profilo = (
-                f"Profilo B (Under 35): età tra {impostazioni.get('eta_min', 22)} e "
-                f"{impostazioni.get('eta_max', 35)} anni, almeno "
-                f"{impostazioni.get('anni_esperienza_min', 2)} anni di esperienza bancaria. "
-                f"Istituti di provenienza preferiti: {impostazioni.get('istituti', 'banche, assicurazioni, SIM')}. "
-                f"Ruoli target: {impostazioni.get('ruoli_target', '')}. "
-                f"Segnali positivi (favoriscono la valutazione): {impostazioni.get('keyword_positive', '')}. "
-                f"Segnali negativi (penalizzano la valutazione): {impostazioni.get('keyword_negative', '')}."
-            )
+        descrizione_profilo = (
+            f"Profilo target: età tra {impostazioni.get('eta_min', 25)} e "
+            f"{impostazioni.get('eta_max', 60)} anni, almeno "
+            f"{impostazioni.get('anni_esperienza_min', 2)} anni di esperienza. "
+            f"Settori di provenienza accettati: {impostazioni.get('settori', '')}. "
+            f"Ruoli target: {impostazioni.get('ruoli_target', '')}. "
+            f"Segnali positivi (favoriscono la valutazione): {impostazioni.get('keyword_positive', '')}. "
+            f"Segnali negativi (penalizzano la valutazione): {impostazioni.get('keyword_negative', '')}."
+        )
         p_eta = impostazioni.get('peso_eta', 5)
         p_esp = impostazioni.get('peso_esperienza', 5)
         p_set = impostazioni.get('peso_settore', 5)
@@ -142,26 +131,19 @@ def analizza_profilo_linkedin(testo_profilo: str, tipo_profilo: str, impostazion
             f"\nPer il punteggio finale (1-10) usa questi pesi (scala 0-10, 0=ignora, 10=determinante):\n"
             f"- Eta nel range target: {p_eta}/10\n"
             f"- Anni di esperienza: {p_esp}/10\n"
-            f"- Settore/istituto di provenienza: {p_set}/10\n"
+            f"- Settore di provenienza: {p_set}/10\n"
             f"- Corrispondenza ruolo target: {p_ruo}/10\n"
             f"- Parole chiave positive/negative: {p_kw}/10"
         )
     else:
-        if tipo_profilo == "A":
-            descrizione_profilo = (
-                "Profilo A: professionista senior tra 40 e 65 anni, "
-                "con esperienza in consulenza, libero professionista o con P.IVA, "
-                "orientato all'autonomia e alla gestione clienti."
-            )
-        else:
-            descrizione_profilo = (
-                "Profilo B: professionista under 35 con esperienza bancaria, "
-                "orientato alla crescita professionale nel settore finanziario."
-            )
+        descrizione_profilo = (
+            "Profilo target generico: professionista con esperienza rilevante, "
+            "valuta competenze, percorso e coerenza con un ruolo di responsabilità."
+        )
         istr_punteggio = ""
 
     prompt = (
-        "Sei un esperto recruiter nel settore della consulenza finanziaria e bancaria.\n"
+        "Sei un esperto recruiter.\n"
         "Analizza il seguente profilo LinkedIn per valutarne la compatibilita con questo target:\n\n"
         f"{descrizione_profilo}{istr_punteggio}\n\n"
         "PROFILO LINKEDIN:\n"
@@ -222,7 +204,7 @@ def analizza_profilo_arricchito(
     )
 
     prompt = (
-        "Sei un esperto recruiter nel settore della consulenza finanziaria e bancaria.\n"
+        "Sei un esperto recruiter.\n"
         "Disponi di un'analisi base già effettuata e di dati arricchiti da Proxycurl.\n\n"
         f"ANALISI BASE:\n{base_str}\n\n"
         f"TESTO PROFILO:\n{clean_text(testo_profilo)[:1500]}\n\n"
@@ -291,26 +273,15 @@ def analizza_profilo_linkedin_stream(
 
     # Stessa logica di costruzione prompt di analizza_profilo_linkedin
     if impostazioni:
-        if tipo_profilo == "A":
-            descrizione_profilo = (
-                f"Profilo A (Senior): età tra {impostazioni.get('eta_min', 40)} e "
-                f"{impostazioni.get('eta_max', 65)} anni, almeno "
-                f"{impostazioni.get('anni_esperienza_min', 5)} anni di esperienza nel settore. "
-                f"Settori di provenienza accettati: {impostazioni.get('settori', 'consulenza, bancario, finanziario')}. "
-                f"Ruoli target: {impostazioni.get('ruoli_target', '')}. "
-                f"Segnali positivi: {impostazioni.get('keyword_positive', '')}. "
-                f"Segnali negativi: {impostazioni.get('keyword_negative', '')}."
-            )
-        else:
-            descrizione_profilo = (
-                f"Profilo B (Under 35): età tra {impostazioni.get('eta_min', 22)} e "
-                f"{impostazioni.get('eta_max', 35)} anni, almeno "
-                f"{impostazioni.get('anni_esperienza_min', 2)} anni di esperienza bancaria. "
-                f"Istituti di provenienza preferiti: {impostazioni.get('istituti', 'banche, assicurazioni, SIM')}. "
-                f"Ruoli target: {impostazioni.get('ruoli_target', '')}. "
-                f"Segnali positivi: {impostazioni.get('keyword_positive', '')}. "
-                f"Segnali negativi: {impostazioni.get('keyword_negative', '')}."
-            )
+        descrizione_profilo = (
+            f"Profilo target: età tra {impostazioni.get('eta_min', 25)} e "
+            f"{impostazioni.get('eta_max', 60)} anni, almeno "
+            f"{impostazioni.get('anni_esperienza_min', 2)} anni di esperienza. "
+            f"Settori di provenienza accettati: {impostazioni.get('settori', '')}. "
+            f"Ruoli target: {impostazioni.get('ruoli_target', '')}. "
+            f"Segnali positivi: {impostazioni.get('keyword_positive', '')}. "
+            f"Segnali negativi: {impostazioni.get('keyword_negative', '')}."
+        )
         p_eta = impostazioni.get('peso_eta', 5)
         p_esp = impostazioni.get('peso_esperienza', 5)
         p_set = impostazioni.get('peso_settore', 5)
@@ -320,22 +291,19 @@ def analizza_profilo_linkedin_stream(
             f"\nPer il punteggio finale (1-10) usa questi pesi (scala 0-10):\n"
             f"- Eta nel range target: {p_eta}/10\n"
             f"- Anni di esperienza: {p_esp}/10\n"
-            f"- Settore/istituto di provenienza: {p_set}/10\n"
+            f"- Settore di provenienza: {p_set}/10\n"
             f"- Corrispondenza ruolo target: {p_ruo}/10\n"
             f"- Parole chiave positive/negative: {p_kw}/10"
         )
     else:
         descrizione_profilo = (
-            "Profilo A: professionista senior tra 40 e 65 anni, con esperienza in consulenza, "
-            "libero professionista o con P.IVA, orientato all'autonomia e alla gestione clienti."
-            if tipo_profilo == "A" else
-            "Profilo B: professionista under 35 con esperienza bancaria, "
-            "orientato alla crescita professionale nel settore finanziario."
+            "Profilo target generico: professionista con esperienza rilevante, "
+            "valuta competenze, percorso e coerenza con un ruolo di responsabilità."
         )
         istr_punteggio = ""
 
     prompt = (
-        "Sei un esperto recruiter nel settore della consulenza finanziaria e bancaria.\n"
+        "Sei un esperto recruiter.\n"
         "Analizza il seguente profilo LinkedIn per valutarne la compatibilita con questo target:\n\n"
         f"{descrizione_profilo}{istr_punteggio}\n\n"
         "PROFILO LINKEDIN:\n"
