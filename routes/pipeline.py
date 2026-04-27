@@ -27,8 +27,10 @@ STATI_APPUNTAMENTO = ['Da fare', 'Completato', 'Annullato']
 
 @pipeline_bp.route("/pipeline")
 def index():
-    """Pagina principale della pipeline con tab: Pipeline, Valutazione, Calendario, Cronologia."""
+    """Pagina principale della pipeline con tab: Pipeline, Calendario, Cronologia."""
     tab = request.args.get("tab", "pipeline")
+    if tab not in ("pipeline", "calendario", "cronologia"):
+        tab = "pipeline"
 
     org_id = get_org_id()
     db = get_db()
@@ -80,17 +82,6 @@ def index():
     """, (org_id,)).fetchall()
     appuntamenti = [dict(a) for a in appuntamenti]
 
-    # Candidato pre-selezionato per tab Valutazione (param candidato_id)
-    candidato_val = None
-    candidato_id_param = request.args.get("candidato_id")
-    if candidato_id_param:
-        row = db.execute(
-            "SELECT * FROM candidati WHERE id = ? AND organizzazione_id = ?",
-            (candidato_id_param, org_id)
-        ).fetchone()
-        if row:
-            candidato_val = dict(row)
-
     db.close()
 
     return render_template(
@@ -104,7 +95,6 @@ def index():
         tipi_app=TIPI_APPUNTAMENTO,
         gestori_cal=GESTORI_CAL,
         stati_app=STATI_APPUNTAMENTO,
-        candidato=candidato_val,
         tab_attivo=tab,
     )
 

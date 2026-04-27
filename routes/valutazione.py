@@ -24,9 +24,9 @@ valutazione_bp = Blueprint("valutazione", __name__)
 
 @valutazione_bp.route("/valutazione")
 def index():
-    """Redirect alla pipeline con tab valutazione."""
+    """Redirect alla pipeline."""
     params = {k: v for k, v in request.args.items()}
-    params['tab'] = 'valutazione'
+    params.pop('tab', None)
     return redirect(url_for('pipeline.index', **params))
 
 

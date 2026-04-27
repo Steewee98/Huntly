@@ -15,10 +15,6 @@
             style="padding:0.65rem 1.25rem;border:none;background:none;cursor:pointer;font-size:0.9rem;font-weight:500;color:var(--grigio-testo);border-bottom:3px solid transparent;margin-bottom:-2px;transition:all 0.15s;">
         &#9776; Pipeline
     </button>
-    <button class="tab-btn" data-tab="valutazione" onclick="attivaTab('valutazione')"
-            style="padding:0.65rem 1.25rem;border:none;background:none;cursor:pointer;font-size:0.9rem;font-weight:500;color:var(--grigio-testo);border-bottom:3px solid transparent;margin-bottom:-2px;transition:all 0.15s;">
-        ⭐ Valutazione
-    </button>
     <button class="tab-btn" data-tab="calendario" onclick="attivaTab('calendario')"
             style="padding:0.65rem 1.25rem;border:none;background:none;cursor:pointer;font-size:0.9rem;font-weight:500;color:var(--grigio-testo);border-bottom:3px solid transparent;margin-bottom:-2px;transition:all 0.15s;">
         &#128197; Calendario
@@ -148,8 +144,8 @@
                             <button class="btn btn-outline btn-xs" onclick="mostraReport({{ c.id }})">Report</button>
                             {% else %}
                             <button class="btn btn-outline btn-xs"
-                                    onclick="attivaTab('valutazione');setTimeout(function(){var cid=document.getElementById('candidato-id');if(cid)cid.value='{{ c.id }}';},50)">
-                                Valuta
+                                    onclick="analizzaCandidatoPipeline({{ c.id }})">
+                                Analizza
                             </button>
                             {% endif %}
                             <button class="btn btn-secondary btn-xs"
@@ -178,264 +174,7 @@
 
 
 <!-- ═══════════════════════════════════════════════════════ -->
-<!-- TAB 2 — Valutazione                                     -->
-<!-- ═══════════════════════════════════════════════════════ -->
-<div id="tab-valutazione" class="tab-content hidden">
-
-<div class="page-header" style="margin-bottom:1.25rem;">
-    <div>
-        <h2 style="font-size:1.1rem;font-weight:700;margin:0;">Valutazione Candidati</h2>
-        <p class="page-subtitle" style="margin:0;">Analizza un profilo LinkedIn con intelligenza artificiale</p>
-    </div>
-</div>
-
-<div class="card">
-    <div class="card-body">
-        {% if candidato %}
-        <div class="alert alert-info">
-            <strong>Candidato:</strong> {{ candidato.nome }} {{ candidato.cognome }}
-            {% if candidato.ruolo_attuale %} — {{ candidato.ruolo_attuale }}{% endif %}
-            {% if candidato.azienda %} @ {{ candidato.azienda }}{% endif %}
-        </div>
-        <input type="hidden" id="candidato-id" value="{{ candidato.id }}">
-        {% else %}
-        <input type="hidden" id="candidato-id" value="">
-        {% endif %}
-
-        <!-- Selezione tipo profilo -->
-        <div class="form-group">
-            <label class="form-label">Tipo di Profilo Target</label>
-            <div class="profilo-toggle">
-                <label class="toggle-option {% if not candidato or candidato.tipo_profilo == 'A' %}selected{% endif %}" id="label-profilo-a">
-                    <input type="radio" name="tipo_profilo" value="A"
-                           {% if not candidato or candidato.tipo_profilo == 'A' %}checked{% endif %}>
-                    <div class="toggle-content">
-                        <span class="toggle-badge">Profilo A</span>
-                        <span class="toggle-desc">40–65 anni · Consulenza · P.IVA</span>
-                    </div>
-                </label>
-                <label class="toggle-option {% if candidato and candidato.tipo_profilo == 'B' %}selected{% endif %}" id="label-profilo-b">
-                    <input type="radio" name="tipo_profilo" value="B"
-                           {% if candidato and candidato.tipo_profilo == 'B' %}checked{% endif %}>
-                    <div class="toggle-content">
-                        <span class="toggle-badge">Profilo B</span>
-                        <span class="toggle-desc">Under 35 · Esperienza Bancaria</span>
-                    </div>
-                </label>
-            </div>
-        </div>
-
-        <!-- Testo profilo nascosto -->
-        <textarea id="testo-profilo" class="hidden"></textarea>
-
-        <!-- URL LinkedIn opzionale per arricchimento -->
-        <div class="form-group" style="margin-bottom:0.75rem;">
-            <label class="form-label" style="display:flex;align-items:center;gap:0.4rem;">
-                URL LinkedIn
-                <span style="font-size:0.72rem;font-weight:400;color:var(--grigio-testo);">(opzionale — migliora l'analisi)</span>
-            </label>
-            <input type="text" id="linkedin-url-input" class="form-input"
-                   placeholder="https://www.linkedin.com/in/nome-cognome">
-        </div>
-
-        <!-- Ricerca per nome -->
-        <div class="form-group">
-            <div class="form-row" style="margin-bottom:0.75rem;">
-                <div class="form-group">
-                    <label class="form-label">Nome</label>
-                    <input type="text" id="cerca-nome" class="form-input" placeholder="es. Mario">
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Cognome</label>
-                    <input type="text" id="cerca-cognome" class="form-input" placeholder="es. Rossi">
-                </div>
-            </div>
-            <button class="btn btn-outline" id="btn-cerca-nome" onclick="cercaPerNome()">
-                <span id="cerca-nome-testo">&#128269; Trova su LinkedIn</span>
-                <span id="cerca-nome-loading" class="hidden"><span class="spinner" style="border-top-color:var(--azzurro);border-color:rgba(46,124,246,0.3)"></span> Ricerca in corso...</span>
-            </button>
-
-            <div id="risultati-nome" class="hidden" style="margin-top:1.25rem;">
-                <p style="font-size:0.85rem;color:var(--grigio-testo);margin-bottom:0.75rem;">Seleziona il profilo corretto e clicca Analizza:</p>
-                <div id="lista-profili-nome" style="display:flex;flex-direction:column;gap:0.75rem;"></div>
-            </div>
-            <div id="nessun-profilo-nome" class="hidden alert alert-info" style="margin-top:1rem;">
-                Nessun profilo trovato. Prova con un nome diverso.
-            </div>
-        </div>
-
-        <!-- Bottone analisi nascosto -->
-        <button id="btn-analizza" class="hidden" onclick="avviaAnalisi()">
-            <span id="btn-testo"></span>
-            <span id="btn-loading" class="hidden"><span class="spinner"></span></span>
-        </button>
-    </div>
-</div>
-
-<!-- Anteprima streaming -->
-<div id="stream-preview" class="hidden" style="margin-top:1.5rem;">
-    <div class="card">
-        <div class="card-header">
-            <h3 style="font-size:0.88rem;color:var(--grigio-testo);font-weight:500;">
-                <span class="spinner" style="width:14px;height:14px;border-width:2px;margin-right:6px;vertical-align:middle;"></span>
-                Generazione analisi in corso...
-            </h3>
-        </div>
-        <div class="card-body" style="padding:1rem 1.25rem;">
-            <pre id="stream-testo"
-                 style="white-space:pre-wrap;word-break:break-word;font-family:inherit;
-                        font-size:0.82rem;color:var(--grigio-testo);margin:0;
-                        min-height:48px;max-height:240px;overflow-y:auto;"></pre>
-        </div>
-    </div>
-</div>
-
-<!-- Skeleton loading -->
-<div id="skeleton-results" class="hidden" style="margin-top:1.5rem;">
-    <div class="results-grid">
-        <div class="card result-card" style="min-height:120px;">
-            <div class="card-body">
-                <div class="skeleton-box" style="width:80px;height:80px;border-radius:50%;margin:0 auto 0.75rem;"></div>
-                <div class="skeleton-box" style="width:60%;height:14px;margin:0 auto;"></div>
-            </div>
-        </div>
-        <div class="card result-card">
-            <div class="card-header"><div class="skeleton-box" style="width:40%;height:16px;"></div></div>
-            <div class="card-body">
-                <div class="skeleton-box" style="height:12px;margin-bottom:8px;"></div>
-                <div class="skeleton-box" style="height:12px;margin-bottom:8px;width:90%;"></div>
-                <div class="skeleton-box" style="height:12px;width:75%;"></div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Risultati analisi -->
-<div id="risultati" class="hidden">
-    <div class="results-grid">
-        <div class="card result-card score-card">
-            <div class="card-body text-center">
-                <div class="score-circle" id="score-circle"><span id="score-value">—</span></div>
-                <p class="score-label">Compatibilità</p>
-                <div id="arricchimento-badge" class="hidden" style="margin-top:0.5rem;font-size:0.75rem;padding:3px 10px;border-radius:20px;display:inline-block;"></div>
-            </div>
-        </div>
-        <div class="card result-card">
-            <div class="card-header"><h3>Analisi del Percorso</h3></div>
-            <div class="card-body"><p id="analisi-percorso" class="result-text"></p></div>
-        </div>
-    </div>
-    <div class="card">
-        <div class="card-header"><h3>Spunti per il Primo Contatto</h3></div>
-        <div class="card-body"><ul id="spunti-lista" class="spunti-list"></ul></div>
-    </div>
-    <div class="card">
-        <div class="card-header">
-            <h3>Bozza Messaggio di Outreach</h3>
-            <div style="display:flex;gap:0.5rem;">
-                <button class="btn btn-outline btn-sm" onclick="rigeneraMessaggio()">
-                    <span id="btn-rigenera-testo">&#8635; Nuova versione</span>
-                    <span id="btn-rigenera-loading" class="hidden"><span class="spinner" style="border-top-color:var(--azzurro);border-color:rgba(46,124,246,0.3)"></span></span>
-                </button>
-                <button class="btn btn-outline btn-sm" onclick="copiaMessaggio()">Copia</button>
-            </div>
-        </div>
-        <div class="card-body">
-            <div id="messaggio-outreach" class="outreach-box"></div>
-            <p class="char-count"><span id="char-count">0</span> / 300 caratteri</p>
-            <div class="riscrivi-section">
-                <label class="form-label" style="margin-bottom:0.5rem;">Riscrivi con istruzioni personalizzate</label>
-                <div class="riscrivi-row">
-                    <textarea id="prompt-riscrivi" class="form-textarea" rows="2"
-                              placeholder="Es: rendi il tono più diretto, aggiungi un riferimento al settore bancario..."></textarea>
-                    <button class="btn btn-primary" id="btn-riscrivi" onclick="riscriviMessaggio()">
-                        <span id="btn-riscrivi-testo">Riscrivi</span>
-                        <span id="btn-riscrivi-loading" class="hidden"><span class="spinner"></span></span>
-                    </button>
-                </div>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- Errore valutazione -->
-<div id="errore-box" class="hidden alert alert-errore"></div>
-
-<!-- Sezione arricchimento Proxycurl -->
-<div id="risultati-arricchiti" class="hidden" style="margin-top:1rem;">
-    <div class="card" style="border-left:4px solid #2E7CF6;">
-        <div class="card-header" style="background:linear-gradient(90deg,rgba(46,124,246,0.08),transparent);">
-            <h3 style="color:var(--azzurro);display:flex;align-items:center;gap:0.5rem;">
-                <span>&#127919;</span> Analisi Arricchita
-                <span class="badge" style="background:#2E7CF6;color:#fff;font-size:0.7rem;padding:2px 8px;border-radius:20px;">Proxycurl</span>
-            </h3>
-        </div>
-        <div class="card-body">
-            <!-- Tre barre score -->
-            <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:1rem;margin-bottom:1.25rem;">
-                <div style="text-align:center;">
-                    <div style="font-size:0.8rem;color:var(--grigio-testo);margin-bottom:0.35rem;">Compatibilità Ruolo</div>
-                    <div style="position:relative;height:8px;background:#e9ecef;border-radius:4px;">
-                        <div id="bar-compatibilita" style="position:absolute;left:0;top:0;height:100%;background:#2E7CF6;border-radius:4px;width:0%;transition:width 0.6s;"></div>
-                    </div>
-                    <div id="val-compatibilita" style="font-weight:700;color:var(--blu-scuro);margin-top:0.3rem;">—</div>
-                </div>
-                <div style="text-align:center;">
-                    <div style="font-size:0.8rem;color:var(--grigio-testo);margin-bottom:0.35rem;">Indice Mobilità</div>
-                    <div style="position:relative;height:8px;background:#e9ecef;border-radius:4px;">
-                        <div id="bar-mobilita" style="position:absolute;left:0;top:0;height:100%;background:#10b981;border-radius:4px;width:0%;transition:width 0.6s;"></div>
-                    </div>
-                    <div id="val-mobilita" style="font-weight:700;color:var(--blu-scuro);margin-top:0.3rem;">—</div>
-                </div>
-                <div style="text-align:center;">
-                    <div style="font-size:0.8rem;color:var(--grigio-testo);margin-bottom:0.35rem;">Qualità Profilo</div>
-                    <div style="position:relative;height:8px;background:#e9ecef;border-radius:4px;">
-                        <div id="bar-qualita" style="position:absolute;left:0;top:0;height:100%;background:#f59e0b;border-radius:4px;width:0%;transition:width 0.6s;"></div>
-                    </div>
-                    <div id="val-qualita" style="font-weight:700;color:var(--blu-scuro);margin-top:0.3rem;">—</div>
-                </div>
-            </div>
-            <!-- Pattern carriera + momento contatto -->
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">
-                <div>
-                    <div style="font-size:0.8rem;font-weight:600;color:var(--grigio-testo);margin-bottom:0.3rem;">Pattern Carriera</div>
-                    <div id="arric-pattern" style="font-size:0.92rem;color:var(--blu-scuro);">—</div>
-                </div>
-                <div>
-                    <div style="font-size:0.8rem;font-weight:600;color:var(--grigio-testo);margin-bottom:0.3rem;">Momento Contatto</div>
-                    <div id="arric-momento" style="font-size:0.92rem;color:var(--blu-scuro);">—</div>
-                </div>
-            </div>
-            <!-- Segnali positivi / negativi -->
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">
-                <div>
-                    <div style="font-size:0.8rem;font-weight:600;color:#10b981;margin-bottom:0.4rem;">&#10003; Segnali Positivi</div>
-                    <ul id="arric-positivi" style="margin:0;padding-left:1.2rem;font-size:0.88rem;color:var(--blu-scuro);"></ul>
-                </div>
-                <div>
-                    <div style="font-size:0.8rem;font-weight:600;color:#ef4444;margin-bottom:0.4rem;">&#9888; Segnali Negativi</div>
-                    <ul id="arric-negativi" style="margin:0;padding-left:1.2rem;font-size:0.88rem;color:var(--blu-scuro);"></ul>
-                </div>
-            </div>
-            <!-- Sintesi -->
-            <div style="background:rgba(46,124,246,0.05);border-radius:8px;padding:0.85rem;">
-                <div style="font-size:0.8rem;font-weight:600;color:var(--grigio-testo);margin-bottom:0.4rem;">Sintesi</div>
-                <p id="arric-sintesi" style="margin:0;font-size:0.92rem;color:var(--blu-scuro);"></p>
-            </div>
-            <!-- Messaggio personalizzato -->
-            <div style="margin-top:1rem;">
-                <div style="font-size:0.8rem;font-weight:600;color:var(--grigio-testo);margin-bottom:0.4rem;">Messaggio Personalizzato (basato su attività LinkedIn)</div>
-                <div id="arric-messaggio" class="outreach-box" style="background:#f0f7ff;border-color:#2E7CF6;"></div>
-            </div>
-        </div>
-    </div>
-</div>
-
-</div><!-- /tab-valutazione -->
-
-
-<!-- ═══════════════════════════════════════════════════════ -->
-<!-- TAB 3 — Calendario                                      -->
+<!-- TAB 2 — Calendario                                      -->
 <!-- ═══════════════════════════════════════════════════════ -->
 <div id="tab-calendario" class="tab-content hidden">
 
@@ -553,7 +292,7 @@
 
 
 <!-- ═══════════════════════════════════════════════════════ -->
-<!-- TAB 4 — Cronologia Valutazioni                          -->
+<!-- TAB 3 — Cronologia Valutazioni                          -->
 <!-- ═══════════════════════════════════════════════════════ -->
 <div id="tab-cronologia" class="tab-content hidden">
 
@@ -1008,6 +747,85 @@ function mostraReport(id) {
     _mostraReportNelModal(dati, candidatoInfo, salvaCallback);
 }
 
+function analizzaCandidatoPipeline(id) {
+    var c = candidatiData.find(function(x) { return x.id === id; });
+    if (!c) return;
+
+    var nomeCompleto = ((c.nome || '') + ' ' + (c.cognome || '')).trim() || 'candidato';
+    document.getElementById('modal-report-titolo').textContent = '\u2B50 Analisi AI: ' + nomeCompleto;
+    var streamEl = document.getElementById('modal-report-streaming');
+    var bodyEl   = document.getElementById('modal-report-body');
+    var savedEl  = document.getElementById('modal-report-saved');
+    streamEl.classList.remove('hidden');
+    bodyEl.classList.add('hidden');
+    bodyEl.innerHTML = '';
+    savedEl.classList.add('hidden');
+    document.getElementById('modal-report-status').textContent = 'Analisi in corso...';
+    document.getElementById('modal-report-stream-text').textContent = '';
+    document.getElementById('modal-report-spinner').style.display = '';
+    mostra('modal-report');
+
+    var testo = [
+        'Nome: '    + (c.nome || '') + ' ' + (c.cognome || ''),
+        'Ruolo: '   + (c.ruolo_attuale || ''),
+        'Azienda: ' + (c.azienda       || ''),
+        c.testo_profilo ? 'Profilo:\n' + c.testo_profilo : '',
+    ].filter(Boolean).join('\n');
+
+    fetch('/valutazione/analizza_stream', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            testo_profilo: testo,
+            tipo_profilo:  c.tipo_profilo || 'A',
+            candidato_id:  c.id,
+            linkedin_url:  c.profilo_linkedin || null,
+        })
+    })
+    .then(function(response) {
+        var reader  = response.body.getReader();
+        var decoder = new TextDecoder();
+        var buffer  = '';
+        function read() {
+            return reader.read().then(function(result) {
+                if (result.done) return;
+                buffer += decoder.decode(result.value, {stream: true});
+                var lines = buffer.split('\n');
+                buffer = lines.pop();
+                lines.forEach(function(line) {
+                    if (!line.startsWith('data: ')) return;
+                    var dataStr = line.slice(6).trim();
+                    if (!dataStr) return;
+                    try {
+                        var ev = JSON.parse(dataStr);
+                        if (ev.type === 'chunk') {
+                            document.getElementById('modal-report-stream-text').textContent += ev.text || '';
+                            var st = document.getElementById('modal-report-stream-text');
+                            st.scrollTop = st.scrollHeight;
+                        } else if (ev.type === 'arricchimento_start') {
+                            document.getElementById('modal-report-status').innerHTML = '&#11088; Arricchimento con dati LinkedIn in corso...';
+                        } else if (ev.type === 'done') {
+                            var candidatoInfo = { testo: testo, linkedin: c.profilo_linkedin || null, tipo: c.tipo_profilo || 'A', candidato_id: c.id };
+                            var salvaCallback = function(nuoviDati) { _salvaPipelineArricchito(c.id, nuoviDati); };
+                            _mostraReportNelModal(ev.risultato, candidatoInfo, salvaCallback);
+                            _salvaPipelineArricchito(c.id, ev.risultato);
+                        } else if (ev.type === 'errore') {
+                            document.getElementById('modal-report-spinner').style.display = 'none';
+                            document.getElementById('modal-report-status').textContent = 'Errore: ' + (ev.messaggio || 'sconosciuto');
+                        }
+                    } catch(e) { console.error('[SSE pipeline]', e.message); }
+                });
+                return read();
+            });
+        }
+        return read();
+    })
+    .catch(function(err) {
+        document.getElementById('modal-report-spinner').style.display = 'none';
+        document.getElementById('modal-report-status').textContent = 'Errore di connessione: ' + err;
+    });
+}
+
 function _salvaPipelineArricchito(candidatoId, dati) {
     if (!dati.arricchito) return;
     var datiArricchiti = JSON.stringify({
@@ -1193,355 +1011,6 @@ function chiudiModalNote(event) {
         nascondi('modal-note');
         noteCandidatoId = null;
     }
-}
-
-
-/* ────────────────────────────────────────────────────────── */
-/* VALUTAZIONE — Analisi LinkedIn AI                          */
-/* ────────────────────────────────────────────────────────── */
-var testoProfiloCorrente = '';
-
-// Auto-avvio da sessionStorage (es. da ricerca candidati)
-(function() {
-    var testo = sessionStorage.getItem('profilo_da_analizzare');
-    if (testo) {
-        sessionStorage.removeItem('profilo_da_analizzare');
-        document.getElementById('testo-profilo').value = testo;
-        attivaTab('valutazione');
-        setTimeout(avviaAnalisi, 300);
-    }
-})();
-
-document.querySelectorAll('input[name="tipo_profilo"]').forEach(function(radio) {
-    radio.addEventListener('change', function() {
-        document.querySelectorAll('.toggle-option').forEach(function(el) { el.classList.remove('selected'); });
-        this.closest('.toggle-option').classList.add('selected');
-    });
-});
-
-async function cercaPerNome() {
-    var nome    = document.getElementById('cerca-nome').value.trim();
-    var cognome = document.getElementById('cerca-cognome').value.trim();
-    if (!nome && !cognome) { alert('Inserisci almeno nome o cognome.'); return; }
-
-    document.getElementById('cerca-nome-testo').classList.add('hidden');
-    document.getElementById('cerca-nome-loading').classList.remove('hidden');
-    document.getElementById('btn-cerca-nome').disabled = true;
-    document.getElementById('risultati-nome').classList.add('hidden');
-    document.getElementById('nessun-profilo-nome').classList.add('hidden');
-
-    try {
-        var resp = await fetch('/valutazione/cerca_per_nome', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ nome: nome, cognome: cognome })
-        });
-        var dati = await jsonSicuro(resp);
-        if (dati.errore) { alert('Errore: ' + dati.errore); return; }
-        var profili = await pollFinoAlCompletamento(dati.run_id);
-        if (!profili) return;
-        if (profili.length === 0) {
-            document.getElementById('nessun-profilo-nome').classList.remove('hidden');
-        } else {
-            renderProfiliNome(profili);
-        }
-    } catch(e) {
-        alert('Errore: ' + e);
-    } finally {
-        document.getElementById('cerca-nome-testo').classList.remove('hidden');
-        document.getElementById('cerca-nome-loading').classList.add('hidden');
-        document.getElementById('btn-cerca-nome').disabled = false;
-    }
-}
-
-async function pollFinoAlCompletamento(runId) {
-    for (var i = 0; i < 40; i++) {
-        await new Promise(function(r) { setTimeout(r, 5000); });
-        var r = await fetch('/valutazione/poll_run/' + runId);
-        var d = await jsonSicuro(r);
-        if (d.errore) { alert('Errore: ' + d.errore); return null; }
-        if (d.status === 'done') return d.profili;
-    }
-    alert('Timeout: ricerca troppo lenta. Riprova.');
-    return null;
-}
-
-function renderProfiliNome(profili) {
-    var lista = document.getElementById('lista-profili-nome');
-    lista.innerHTML = '';
-    profili.forEach(function(p) {
-        var nomeCompleto = [p.nome, p.cognome].filter(Boolean).join(' ') || '—';
-        var linkedinLink = p.linkedin ? '<a href="' + p.linkedin + '" target="_blank" style="font-size:0.78rem;color:var(--azzurro);">LinkedIn ↗</a>' : '';
-        var div = document.createElement('div');
-        div.style.cssText = 'display:flex;justify-content:space-between;align-items:center;padding:0.875rem 1rem;border:1.5px solid var(--grigio-bordo);border-radius:8px;background:white;gap:1rem;';
-        div.innerHTML =
-            '<div style="flex:1;min-width:0;">' +
-            '<div style="font-weight:600;font-size:0.9rem;">' + nomeCompleto + '</div>' +
-            (p.headline ? '<div style="font-size:0.82rem;color:var(--grigio-testo);margin-top:2px;">' + p.headline + '</div>' : '') +
-            (p.azienda  ? '<div style="font-size:0.8rem;color:var(--grigio-testo);">' + p.azienda + (p.location ? ' · ' + p.location : '') + '</div>' : '') +
-            linkedinLink +
-            '</div>' +
-            '<button class="btn btn-primary btn-sm" onclick=\'selezionaProfilo(' + JSON.stringify(p).replace(/'/g,"&#39;") + ')\'>⭐ Analizza</button>';
-        lista.appendChild(div);
-    });
-    document.getElementById('risultati-nome').classList.remove('hidden');
-}
-
-function selezionaProfilo(p) {
-    document.getElementById('testo-profilo').value = p.testo_profilo || '';
-    // Auto-popola URL LinkedIn se disponibile dal risultato Apify
-    if (p.linkedin) {
-        document.getElementById('linkedin-url-input').value = p.linkedin;
-    }
-    avviaAnalisi();
-}
-
-async function avviaAnalisi() {
-    var testo        = document.getElementById('testo-profilo').value.trim();
-    var tipoProfilo  = document.querySelector('input[name="tipo_profilo"]:checked').value;
-    var candidatoId  = document.getElementById('candidato-id').value || null;
-    var linkedinUrl  = (document.getElementById('linkedin-url-input').value || '').trim() || null;
-
-    if (!testo) {
-        mostraErroreVal('Inserire il testo del profilo LinkedIn prima di procedere.');
-        return;
-    }
-
-    testoProfiloCorrente = testo;
-    impostaCaricamento(true);
-    nascondi('risultati');
-    nascondi('risultati-arricchiti');
-    nascondi('errore-box');
-    nascondi('skeleton-results');
-    nascondi('arricchimento-badge');
-    // Non resettare linkedin-url-input: l'utente potrebbe averlo inserito manualmente
-
-    var previewEl = document.getElementById('stream-preview');
-    var streamTxt = document.getElementById('stream-testo');
-    streamTxt.textContent = '';
-    previewEl.classList.remove('hidden');
-
-    try {
-        var risposta = await fetch('/valutazione/analizza_stream', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ testo_profilo: testo, tipo_profilo: tipoProfilo, candidato_id: candidatoId, linkedin_url: linkedinUrl })
-        });
-        if (!risposta.ok) throw new Error('Errore HTTP ' + risposta.status);
-
-        var reader  = risposta.body.getReader();
-        var decoder = new TextDecoder('utf-8');
-        var buffer  = '';
-        var risultatoFinale = null;
-
-        while (true) {
-            var readResult = await reader.read();
-            if (readResult.done) break;
-            buffer += decoder.decode(readResult.value, { stream: true });
-            var parti = buffer.split('\n\n');
-            buffer = parti.pop();
-            for (var i = 0; i < parti.length; i++) {
-                var linea = parti[i].trim();
-                if (!linea.startsWith('data:')) continue;
-                var evento;
-                try {
-                    evento = JSON.parse(linea.slice(5).trim());
-                } catch(e) {
-                    console.warn('[SSE] JSON.parse fallito (' + linea.length + ' chars):', e.message, linea.slice(5, 120));
-                    continue;
-                }
-                if (evento.type === 'chunk') {
-                    streamTxt.textContent += evento.text;
-                    streamTxt.scrollTop = streamTxt.scrollHeight;
-                } else if (evento.type === 'arricchimento_start') {
-                    streamTxt.textContent += '\n\n⏳ Arricchimento profilo con dati LinkedIn...';
-                    streamTxt.scrollTop = streamTxt.scrollHeight;
-                } else if (evento.type === 'done') {
-                    risultatoFinale = evento.risultato;
-                    console.log('[SSE] done — arricchito:', risultatoFinale.arricchito, '| punteggio:', risultatoFinale.punteggio, '| campi:', Object.keys(risultatoFinale).join(', '));
-                } else if (evento.type === 'errore') {
-                    previewEl.classList.add('hidden');
-                    mostraErroreVal('Errore AI: ' + evento.messaggio);
-                    return;
-                }
-            }
-        }
-
-        if (!risultatoFinale) throw new Error('Analisi non completata: risposta incompleta.');
-
-        previewEl.classList.add('hidden');
-        mostra('skeleton-results');
-        await new Promise(function(r) { setTimeout(r, 200); });
-        nascondi('skeleton-results');
-
-        mostraRisultatiVal(risultatoFinale);
-        aggiornaCronologiaUI(risultatoFinale, tipoProfilo, testo, risultatoFinale.nome_contatto || '');
-        document.getElementById('testo-profilo').value = '';
-
-        fetch('/valutazione/salva_analisi', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ testo_profilo: testo, tipo_profilo: tipoProfilo, candidato_id: candidatoId, risultato: risultatoFinale })
-        }).then(function(r) { return r.json(); }).then(function(resp) {
-            // Usa candidato_id_usato dal backend (include il fallback via LinkedIn URL)
-            var idUsato = (resp && resp.candidato_id_usato) ? resp.candidato_id_usato : candidatoId;
-            if (idUsato && risultatoFinale.arricchito) {
-                var datiArricchiti = {
-                    punteggio_compatibilita: risultatoFinale.punteggio_compatibilita,
-                    indice_mobilita: risultatoFinale.indice_mobilita,
-                    punteggio_qualita_profilo: risultatoFinale.punteggio_qualita_profilo,
-                    pattern_carriera: risultatoFinale.pattern_carriera,
-                    momento_contatto: risultatoFinale.momento_contatto,
-                    segnali_positivi: risultatoFinale.segnali_positivi,
-                    segnali_negativi: risultatoFinale.segnali_negativi,
-                    sintesi: risultatoFinale.sintesi,
-                    messaggio_personalizzato: risultatoFinale.messaggio_personalizzato,
-                };
-                // Aggiorna candidatiData in-memory: il Report in Pipeline mostra subito i dati
-                var cIdx = candidatiData.findIndex(function(x) { return String(x.id) === String(idUsato); });
-                if (cIdx >= 0) {
-                    candidatiData[cIdx].dati_arricchiti = JSON.stringify(datiArricchiti);
-                }
-            }
-        }).catch(function(e) { console.warn('[valutazione] salvataggio fallito:', e); });
-
-    } catch(err) {
-        previewEl.classList.add('hidden');
-        mostraErroreVal('Errore: ' + err.message);
-    } finally {
-        impostaCaricamento(false);
-    }
-}
-
-function mostraRisultatiVal(dati) {
-    var score = dati.punteggio;
-    document.getElementById('score-value').textContent = score;
-    document.getElementById('score-circle').className = 'score-circle ' + getScoreClass(score);
-    document.getElementById('analisi-percorso').textContent = dati.analisi_percorso;
-
-    var lista = document.getElementById('spunti-lista');
-    lista.innerHTML = '';
-    (dati.spunti_contatto || []).forEach(function(spunto) {
-        var li = document.createElement('li');
-        li.className = 'spunto-item';
-        li.textContent = spunto;
-        lista.appendChild(li);
-    });
-
-    var msg = dati.messaggio_outreach || '';
-    document.getElementById('messaggio-outreach').textContent = msg;
-    document.getElementById('char-count').textContent = msg.length;
-
-    mostra('risultati');
-
-    // Badge arricchimento (visibile nell'UI senza DevTools)
-    var badge = document.getElementById('arricchimento-badge');
-    if (badge) {
-        if (dati.arricchito) {
-            badge.textContent = '⭐ Analisi Arricchita';
-            badge.style.cssText = 'margin-top:0.5rem;font-size:0.75rem;padding:3px 10px;border-radius:20px;display:inline-block;background:#dbeafe;color:#1e40af;';
-        } else {
-            badge.textContent = 'Analisi base (score ' + (dati.punteggio || '?') + ')';
-            badge.style.cssText = 'margin-top:0.5rem;font-size:0.75rem;padding:3px 10px;border-radius:20px;display:inline-block;background:#f3f4f6;color:#6b7280;';
-        }
-        badge.classList.remove('hidden');
-    }
-
-    // Sezione arricchita (Proxycurl)
-    if (dati.arricchito) {
-        try {
-            var score10 = function(v) { return v ? Math.min(100, Math.round(v * 10)) : 0; };
-            var c = dati.punteggio_compatibilita || 0;
-            var m = dati.indice_mobilita || 0;
-            var q = dati.punteggio_qualita_profilo || 0;
-            document.getElementById('bar-compatibilita').style.width = score10(c) + '%';
-            document.getElementById('val-compatibilita').textContent = c + '/10';
-            document.getElementById('bar-mobilita').style.width = score10(m) + '%';
-            document.getElementById('val-mobilita').textContent = m + '/10';
-            document.getElementById('bar-qualita').style.width = score10(q) + '%';
-            document.getElementById('val-qualita').textContent = q + '/10';
-            document.getElementById('arric-pattern').textContent = dati.pattern_carriera || '—';
-            document.getElementById('arric-momento').textContent = dati.momento_contatto || '—';
-            var liHtml = function(arr) {
-                return (arr || []).map(function(s) { return '<li>' + s + '</li>'; }).join('');
-            };
-            document.getElementById('arric-positivi').innerHTML = liHtml(dati.segnali_positivi);
-            document.getElementById('arric-negativi').innerHTML = liHtml(dati.segnali_negativi);
-            document.getElementById('arric-sintesi').textContent = dati.sintesi || '—';
-            document.getElementById('arric-messaggio').textContent = dati.messaggio_personalizzato || '—';
-        } catch(e) {
-            console.error('[arricchimento] errore popolamento campi:', e);
-        }
-        mostra('risultati-arricchiti');
-    } else {
-        nascondi('risultati-arricchiti');
-    }
-
-    document.getElementById('risultati').scrollIntoView({ behavior: 'smooth' });
-}
-
-async function rigeneraMessaggio() { await chiamaRigenera(''); }
-async function riscriviMessaggio() {
-    var istruzioni = document.getElementById('prompt-riscrivi').value.trim();
-    if (!istruzioni) { document.getElementById('prompt-riscrivi').focus(); return; }
-    await chiamaRigenera(istruzioni);
-}
-
-async function chiamaRigenera(istruzioni) {
-    var messaggioAttuale = document.getElementById('messaggio-outreach').textContent.trim();
-    if (!messaggioAttuale) return;
-    var isRiscrivi = istruzioni.length > 0;
-    var btnLoadingId = isRiscrivi ? 'btn-riscrivi-loading' : 'btn-rigenera-loading';
-    var btnTestoId   = isRiscrivi ? 'btn-riscrivi-testo'   : 'btn-rigenera-testo';
-    var btnId        = isRiscrivi ? 'btn-riscrivi' : null;
-    document.getElementById(btnLoadingId).classList.remove('hidden');
-    document.getElementById(btnTestoId).classList.add('hidden');
-    if (btnId) document.getElementById(btnId).disabled = true;
-    try {
-        var risposta = await fetch('/valutazione/rigenera_messaggio', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ testo_profilo: testoProfiloCorrente, messaggio_attuale: messaggioAttuale, istruzioni: istruzioni })
-        });
-        var dati = await jsonSicuro(risposta);
-        if (!risposta.ok) throw new Error(dati.errore || 'Errore');
-        var box = document.getElementById('messaggio-outreach');
-        box.style.opacity = '0.4';
-        setTimeout(function() {
-            box.textContent = dati.messaggio;
-            document.getElementById('char-count').textContent = dati.messaggio.length;
-            box.style.opacity = '1';
-        }, 200);
-        if (isRiscrivi) document.getElementById('prompt-riscrivi').value = '';
-    } catch(err) {
-        mostraErroreVal('Errore rigenerazione: ' + err.message);
-    } finally {
-        document.getElementById(btnLoadingId).classList.add('hidden');
-        document.getElementById(btnTestoId).classList.remove('hidden');
-        if (btnId) document.getElementById(btnId).disabled = false;
-    }
-}
-
-function copiaMessaggio() {
-    var testo = document.getElementById('messaggio-outreach').textContent;
-    navigator.clipboard.writeText(testo).then(function() {
-        var btn = event.target;
-        btn.textContent = 'Copiato!';
-        setTimeout(function() { btn.textContent = 'Copia'; }, 2000);
-    });
-}
-
-function impostaCaricamento(attivo) {
-    var btn = document.getElementById('btn-analizza');
-    btn.disabled = attivo;
-    document.getElementById('btn-testo').classList.toggle('hidden', attivo);
-    document.getElementById('btn-loading').classList.toggle('hidden', !attivo);
-}
-
-function mostraErroreVal(msg) {
-    var el = document.getElementById('errore-box');
-    el.textContent = msg;
-    mostra('errore-box');
 }
 
 
