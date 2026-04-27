@@ -39,9 +39,10 @@ def admin_required(f):
 # Costi stimati per unita
 # ─────────────────────────────────────────────
 
-COSTO_RICERCA = 0.50      # Apify run
-COSTO_ANALISI = 0.03      # Claude API call
+COSTO_RICERCA = 0.50        # Apify run
+COSTO_ANALISI = 0.03        # Claude API call
 COSTO_ARRICCHIMENTO = 0.01  # EnrichLayer/Proxycurl
+COSTO_RAILWAY = 10.00       # Railway hosting fisso stimato
 
 
 # ─────────────────────────────────────────────
@@ -118,9 +119,16 @@ def index():
 
     db.close()
 
+    # --- Costi e contabilità ---
     costo_ricerche = round(tot_ricerche_mese * COSTO_RICERCA, 2)
     costo_analisi = round(tot_analisi_mese * COSTO_ANALISI, 2)
     costo_totale = round(costo_ricerche + costo_analisi, 2)
+
+    entrate_mese = mrr
+    arr = mrr * 12
+    costi_totale_con_railway = round(costo_ricerche + costo_analisi + COSTO_RAILWAY, 2)
+    margine = round(entrate_mese - costi_totale_con_railway, 2)
+    margine_pct = round((margine / entrate_mese * 100) if entrate_mese > 0 else 0, 1)
 
     return render_template(
         "admin.html",
@@ -130,6 +138,7 @@ def index():
         org_pro=org_pro,
         org_business=org_business,
         mrr=mrr,
+        arr=arr,
         organizzazioni=organizzazioni,
         mese=mese,
         tot_ricerche_mese=tot_ricerche_mese,
@@ -137,6 +146,11 @@ def index():
         costo_ricerche=costo_ricerche,
         costo_analisi=costo_analisi,
         costo_totale=costo_totale,
+        costo_railway=COSTO_RAILWAY,
+        costi_totale_con_railway=costi_totale_con_railway,
+        entrate_mese=entrate_mese,
+        margine=margine,
+        margine_pct=margine_pct,
         utenti_recenti=utenti_recenti,
         attivita=attivita,
         utenti_free=utenti_free,

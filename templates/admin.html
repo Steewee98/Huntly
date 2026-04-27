@@ -62,6 +62,7 @@
 <!-- Sidebar navigazione sezioni -->
 <nav class="admin-nav" id="admin-sidebar">
     <a href="#panoramica" class="active" onclick="scrollAdmin(event,'panoramica')">Panoramica</a>
+    <a href="#contabilita" onclick="scrollAdmin(event,'contabilita')">Contabilita</a>
     <a href="#organizzazioni" onclick="scrollAdmin(event,'organizzazioni')">Organizzazioni</a>
     <a href="#utilizzo-api" onclick="scrollAdmin(event,'utilizzo-api')">Utilizzo API</a>
     <a href="#utenti" onclick="scrollAdmin(event,'utenti')">Utenti</a>
@@ -101,6 +102,81 @@
             <div class="kpi-label">MRR stimato</div>
         </div>
     </div>
+</section>
+
+<!-- ===== SEZIONE: Contabilita ===== -->
+<section id="contabilita">
+    <h2 style="font-size:1rem;margin-bottom:0.75rem;">Contabilita</h2>
+
+    <!-- Riga 1: Entrate -->
+    <div class="card" style="background:#052e16;color:#fff;margin-bottom:1rem;padding:1rem;">
+        <div style="font-size:0.78rem;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;color:#86efac;margin-bottom:0.6rem;">Entrate</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;">
+            <div>
+                <div style="font-size:0.75rem;color:#bbf7d0;">MRR</div>
+                <div style="font-size:1.5rem;font-weight:700;">&euro;{{ mrr }}</div>
+            </div>
+            <div>
+                <div style="font-size:0.75rem;color:#bbf7d0;">ARR stimato</div>
+                <div style="font-size:1.5rem;font-weight:700;">&euro;{{ "{:,.0f}".format(arr).replace(",",".") }}</div>
+            </div>
+            <div>
+                <div style="font-size:0.75rem;color:#bbf7d0;">Utenti paganti</div>
+                <div style="font-size:1.5rem;font-weight:700;">{{ org_pro + org_business }}</div>
+                <div style="font-size:0.75rem;color:#86efac;">Pro: {{ org_pro }} &middot; Business: {{ org_business }}</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Riga 2: Costi -->
+    <div class="card" style="background:#450a0a;color:#fff;margin-bottom:1rem;padding:1rem;">
+        <div style="font-size:0.78rem;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;color:#fca5a5;margin-bottom:0.6rem;">Costi stimati &mdash; {{ mese }}</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:1rem;">
+            <div>
+                <div style="font-size:0.75rem;color:#fecaca;">Apify (ricerche)</div>
+                <div style="font-size:1.2rem;font-weight:700;">&euro;{{ "%.2f"|format(costo_ricerche) }}</div>
+                <div style="font-size:0.7rem;color:#fca5a5;">{{ tot_ricerche_mese }} &times; &euro;0.50</div>
+            </div>
+            <div>
+                <div style="font-size:0.75rem;color:#fecaca;">Anthropic Claude</div>
+                <div style="font-size:1.2rem;font-weight:700;">&euro;{{ "%.2f"|format(costo_analisi) }}</div>
+                <div style="font-size:0.7rem;color:#fca5a5;">{{ tot_analisi_mese }} &times; &euro;0.03</div>
+            </div>
+            <div>
+                <div style="font-size:0.75rem;color:#fecaca;">Railway hosting</div>
+                <div style="font-size:1.2rem;font-weight:700;">&euro;{{ "%.2f"|format(costo_railway) }}</div>
+                <div style="font-size:0.7rem;color:#fca5a5;">fisso</div>
+            </div>
+            <div>
+                <div style="font-size:0.75rem;color:#fecaca;">Totale costi</div>
+                <div style="font-size:1.3rem;font-weight:700;">&euro;{{ "%.2f"|format(costi_totale_con_railway) }}</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Riga 3: Margine -->
+    <div class="card" style="background:{% if margine >= 0 %}#172554{% else %}#7f1d1d{% endif %};color:#fff;padding:1rem;">
+        <div style="font-size:0.78rem;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;color:{% if margine >= 0 %}#93c5fd{% else %}#fca5a5{% endif %};margin-bottom:0.6rem;">
+            Margine{% if margine < 0 %} &#9888; Costi superiori alle entrate{% endif %}
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+            <div>
+                <div style="font-size:0.75rem;color:{% if margine >= 0 %}#bfdbfe{% else %}#fecaca{% endif %};">Margine mese</div>
+                <div style="font-size:1.5rem;font-weight:700;">&euro;{{ "%.2f"|format(margine) }}</div>
+            </div>
+            <div>
+                <div style="font-size:0.75rem;color:{% if margine >= 0 %}#bfdbfe{% else %}#fecaca{% endif %};">Margine %</div>
+                <div style="font-size:1.5rem;font-weight:700;">{{ margine_pct }}%</div>
+            </div>
+        </div>
+    </div>
+
+    <p style="font-size:0.7rem;color:var(--grigio-testo);margin-top:0.5rem;font-style:italic;line-height:1.5;">
+        I costi API sono stime basate su utilizzo registrato. Verifica i costi reali su
+        <a href="https://console.apify.com/billing" target="_blank" style="color:var(--azzurro);">Apify billing</a> e
+        <a href="https://console.anthropic.com/settings/billing" target="_blank" style="color:var(--azzurro);">Anthropic billing</a>.
+        Il costo Railway è un valore fisso indicativo.
+    </p>
 </section>
 
 <!-- ===== SEZIONE 2: Organizzazioni ===== -->
