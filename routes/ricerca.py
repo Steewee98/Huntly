@@ -14,7 +14,7 @@ import threading
 import uuid
 import requests
 from datetime import datetime
-from flask import Blueprint, render_template, request, jsonify, Response
+from flask import Blueprint, render_template, request, jsonify, Response, session
 from database import get_db
 from ai_helpers import analizza_profilo_linkedin
 from dedup import is_duplicate
@@ -590,6 +590,80 @@ def salva_messaggio():
     db.commit()
     db.close()
     return jsonify({"ok": True})
+
+
+@ricerca_bp.route("/ricerca/cerca-per-url", methods=["POST"])
+def cerca_per_url():
+    """Ricerca diretta di un profilo LinkedIn tramite URL."""
+    dati = request.get_json()
+    url = (dati.get("url") or "").strip()
+    profilo_id = dati.get("profilo_id")
+    org_id = session.get('organizzazione_id')
+
+    if not url or "linkedin.com/in/" not in url:
+        return jsonify({"errore": "URL LinkedIn non valido"}), 400
+
+    from proxycurl_helpers import arricchisci_profilo
+    dati_profilo = arricchisci_profilo(url)
+
+    if not dati_profilo:
+        return jsonify({"errore": "Profilo non trovato. Verifica l'URL o la configurazione EnrichLayer."}), 404
+
+    esperienze = dati_profilo.get("experiences") or []
+    azienda = esperienze[0].get("company", "") if esperienze else ""
+    city = dati_profilo.get("city") or ""
+    country = dati_profilo.get("country_full_name") or ""
+    location = ", ".join(filter(None, [city, country]))
+
+    profilo = {
+        "nome":     dati_profilo.get("first_name", ""),
+        "cognome":  dati_profilo.get("last_name", ""),
+        "ruolo":    dati_profilo.get("headline", ""),
+        "azienda":  azienda,
+        "location": location,
+        "linkedin": url,
+        "sommario": (dati_profilo.get("summary") or "")[:200],
+        "headline": dati_profilo.get("headline", ""),
+        "source":   "linkedin_direct",
+        "gia_in_pipeline": False,
+        "candidato_id_esistente": None,
+    }
+
+    # Dedup
+    db = get_db()
+    dup, motivo_dup, cand_id = is_duplicate(db, profilo)
+    profilo["gia_in_pipeline"] = dup
+    profilo["candidato_id_esistente"] = cand_id
+
+    # Salva ricerca in DB
+    parametri_str = json.dumps({"url": url, "fonte": "linkedin_direct"}, ensure_ascii=False)
+    cur = db.execute(
+        "INSERT INTO ricerche_automatiche (tipo_profilo, parametri, profili_trovati, profili_importati, fonte, stato, organizzazione_id) VALUES (?, ?, 1, 0, 'linkedin_direct', 'completata', ?)",
+        (f"pt_{profilo_id}" if profilo_id else "direct", parametri_str, org_id)
+    )
+    ricerca_id = cur.lastrowid
+
+    testo = f"Nome: {profilo['nome']} {profilo['cognome']}\nRuolo: {profilo['ruolo']}\nAzienda: {profilo['azienda']}\nLocation: {profilo['location']}\nSommario: {profilo['sommario']}"
+    cur_p = db.execute(
+        "INSERT INTO profili_ricerca (ricerca_id, nome, cognome, ruolo, azienda, location, linkedin_url, testo_profilo, source, organizzazione_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (ricerca_id, profilo["nome"], profilo["cognome"], profilo["ruolo"], profilo["azienda"], profilo["location"], url, testo, "linkedin_direct", org_id)
+    )
+    profilo["profilo_ricerca_id"] = cur_p.lastrowid
+    profilo["ricerca_id"] = ricerca_id
+    db.commit()
+    db.close()
+
+    _incrementa_ricerche(org_id)
+
+    return jsonify({
+        "persone": [profilo],
+        "totale": 1,
+        "nuovi": 0 if dup else 1,
+        "gia_presenti": 1 if dup else 0,
+        "messaggio": "Profilo trovato e pronto per l'analisi",
+        "ricerca_id": ricerca_id,
+        "source_summary": "LinkedIn Direct: 1 profilo",
+    })
 
 
 @ricerca_bp.route("/ricerca")
