@@ -225,12 +225,39 @@
                 <div class="storico-varianti hidden" style="margin-top:0.75rem;display:flex;flex-direction:column;gap:0.75rem;">
                     {% for v in [s.variante_1, s.variante_2, s.variante_3] %}
                     {% if v %}
-                    <div style="position:relative;background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:0.75rem;">
+                    <div class="storico-variante-card" data-tema="{{ s.tema }}" data-obiettivo="{{ s.obiettivo or '' }}"
+                         style="position:relative;background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:0.75rem;">
                         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.4rem;">
                             <span style="font-size:0.75rem;font-weight:600;color:var(--grigio-testo);text-transform:uppercase;letter-spacing:0.03em;">Variante {{ loop.index }}</span>
-                            <button class="btn btn-outline btn-xs" onclick="event.stopPropagation();copiaStorico(this)">&#128203; Copia</button>
+                            <div style="display:flex;gap:0.4rem;">
+                                <button class="btn btn-outline btn-xs" onclick="event.stopPropagation();copiaStorico(this)">&#128203; Copia</button>
+                                <button class="btn btn-secondary btn-xs storico-btn-visual" onclick="event.stopPropagation();generaVisualStorico(this)">
+                                    <span class="sv-label">&#128444; Visual</span>
+                                    <span class="sv-loading hidden"><span class="spinner" style="width:12px;height:12px;border-width:2px;border-top-color:var(--azzurro);border-color:rgba(46,124,246,0.3)"></span></span>
+                                </button>
+                            </div>
                         </div>
                         <div class="storico-testo-variante" style="font-size:0.84rem;line-height:1.55;color:#1e293b;white-space:pre-wrap;word-break:break-word;">{{ v }}</div>
+                        <!-- Area visual (generata on-demand) -->
+                        <div class="sv-result hidden" style="margin-top:0.75rem;">
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+                                <span style="font-size:0.78rem;font-weight:600;color:var(--grigio-testo);text-transform:uppercase;letter-spacing:0.05em;">Visual LinkedIn</span>
+                                <a class="btn btn-outline btn-xs sv-download" download="visual-storico.jpg" target="_blank">&#8595; Scarica</a>
+                            </div>
+                            <img class="sv-img" src="" alt="Visual LinkedIn"
+                                 style="width:100%;border-radius:6px;box-shadow:var(--shadow);display:block;">
+                            <p class="sv-prompt" style="font-size:0.72rem;color:var(--grigio-testo);margin-top:0.4rem;font-style:italic;"></p>
+                            <div style="display:flex;gap:0.5rem;margin-top:0.5rem;align-items:flex-end;">
+                                <div class="form-group" style="flex:1;margin-bottom:0;">
+                                    <input type="text" class="form-input sv-custom-prompt"
+                                           placeholder="Stile custom: più minimalista, tonalità calde..."
+                                           onclick="event.stopPropagation();">
+                                </div>
+                                <button class="btn btn-secondary btn-sm" onclick="event.stopPropagation();generaVisualStorico(this.closest('.storico-variante-card').querySelector('.storico-btn-visual'))">
+                                    &#8635; Rigenera
+                                </button>
+                            </div>
+                        </div>
                     </div>
                     {% endif %}
                     {% endfor %}
@@ -505,12 +532,55 @@ function toggleStorico(el) {
 }
 
 function copiaStorico(btn) {
-    var card = btn.closest('div[style*="position:relative"]');
+    var card = btn.closest('.storico-variante-card');
     var testo = card.querySelector('.storico-testo-variante').textContent;
     navigator.clipboard.writeText(testo).then(function() {
         btn.textContent = '\u2713 Copiato!';
         setTimeout(function() { btn.innerHTML = '&#128203; Copia'; }, 2000);
     });
+}
+
+async function generaVisualStorico(btn) {
+    var card = btn.closest('.storico-variante-card');
+    var testo = card.querySelector('.storico-testo-variante').textContent;
+    var tema = card.dataset.tema || '';
+    var obiettivo = card.dataset.obiettivo || '';
+    var customPrompt = card.querySelector('.sv-custom-prompt').value.trim();
+    if (!testo) return;
+
+    btn.disabled = true;
+    card.querySelector('.sv-label').classList.add('hidden');
+    card.querySelector('.sv-loading').classList.remove('hidden');
+
+    try {
+        var resp = await fetch('/contenuti/genera_immagine', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                testo_post: testo,
+                tema: tema,
+                obiettivo: obiettivo,
+                prompt_custom: customPrompt,
+            })
+        });
+        var dati = await jsonSicuro(resp);
+        if (dati.errore) { alert('Errore: ' + dati.errore); return; }
+
+        var img = card.querySelector('.sv-img');
+        img.style.opacity = '0.3';
+        img.onload = function() { this.style.opacity = '1'; };
+        img.src = dati.url;
+        card.querySelector('.sv-download').href = dati.url;
+        card.querySelector('.sv-prompt').textContent = '🎨 Prompt: ' + dati.prompt;
+        card.querySelector('.sv-result').classList.remove('hidden');
+        card.querySelector('.sv-custom-prompt').value = '';
+    } catch(e) {
+        alert('Errore generazione immagine: ' + e);
+    } finally {
+        btn.disabled = false;
+        card.querySelector('.sv-label').classList.remove('hidden');
+        card.querySelector('.sv-loading').classList.add('hidden');
+    }
 }
 
 // Helpers
