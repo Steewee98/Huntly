@@ -197,6 +197,7 @@ function chiudiModalReport() {
 function _mostraReportNelModal(dati, candidatoInfo, salvaCallback) {
     // Salva contesto per eventuale analisi approfondita
     _reportGlobale = candidatoInfo ? { candidatoInfo: candidatoInfo, salvaCallback: salvaCallback || null } : _reportGlobale;
+    _outreachVersioni = [];
     var spinnerEl = document.getElementById('modal-report-spinner');
     var streamEl  = document.getElementById('modal-report-streaming');
     var bodyEl    = document.getElementById('modal-report-body');
@@ -321,12 +322,29 @@ function _mostraReportNelModal(dati, candidatoInfo, salvaCallback) {
             '</ul></div>';
     }
 
-    if (arricchito && dati.messaggio_personalizzato) {
-        html += '<div class="report-sezione"><h4>&#9993; Messaggio Personalizzato</h4>' +
-            '<div class="outreach-box">' + escHtml(dati.messaggio_personalizzato) + '</div></div>';
-    } else if (dati.messaggio_outreach) {
-        html += '<div class="report-sezione"><h4>Messaggio di Outreach</h4>' +
-            '<div class="outreach-box">' + escHtml(dati.messaggio_outreach) + '</div></div>';
+    var _msgOutreach = (arricchito && dati.messaggio_personalizzato) ? dati.messaggio_personalizzato : (dati.messaggio_outreach || '');
+    if (_msgOutreach) {
+        var _titMsg = arricchito ? '&#9993; Messaggio Personalizzato' : 'Messaggio di Outreach';
+        html += '<div class="report-sezione outreach-editor-section">' +
+            '<h4>' + _titMsg + '</h4>' +
+            '<textarea id="outreach-editor" class="outreach-textarea" rows="5">' + escHtml(_msgOutreach) + '</textarea>' +
+            '<div class="outreach-actions">' +
+                '<button class="btn btn-outline btn-sm" onclick="_copiaOutreach()"><span id="outreach-copia-label">Copia</span></button>' +
+                '<button class="btn btn-outline btn-sm" onclick="_rigeneraOutreach()">Rigenera</button>' +
+                '<button class="btn btn-sm" style="background:#f0fdf4;color:#16a34a;border:1px solid #86efac;" onclick="_salvaOutreach()"><span id="outreach-salva-label">Salva</span></button>' +
+                '<span id="outreach-autosave-indicator" style="font-size:0.75rem;color:#9ca3af;margin-left:auto;display:none;">Salvato</span>' +
+            '</div>' +
+            '<div class="outreach-modifica">' +
+                '<label style="font-size:0.82rem;font-weight:600;color:var(--testo);">Chiedi una modifica o variante:</label>' +
+                '<textarea id="outreach-prompt-modifica" class="outreach-textarea" rows="2" ' +
+                    'placeholder="Es: \'Rendilo pi\u00f9 breve e informale\' oppure \'Aggiungi un riferimento al suo ultimo post LinkedIn\'"></textarea>' +
+                '<button class="btn btn-primary btn-sm" onclick="_applicaModificaOutreach()"><span id="outreach-modifica-label">Applica modifica</span></button>' +
+            '</div>' +
+            '<div id="outreach-versioni-wrap" style="display:none;margin-top:0.75rem;">' +
+                '<details><summary style="font-size:0.8rem;color:var(--grigio-testo);cursor:pointer;font-weight:600;">Versioni precedenti</summary>' +
+                '<div id="outreach-versioni-list" style="margin-top:0.5rem;"></div></details>' +
+            '</div>' +
+        '</div>';
     }
 
     // Bottone analisi approfondita (solo se non ancora arricchito e abbiamo il contesto)
@@ -422,5 +440,180 @@ function _lanciaAnalisiApprofondita() {
     .catch(function(err) {
         if (spinnerEl) spinnerEl.style.display = 'none';
         if (statusEl)  statusEl.textContent = 'Errore di connessione: ' + err;
+    });
+}
+
+/* ------------------------------------------------------------------ */
+/* Editor Messaggio Outreach                                            */
+/* ------------------------------------------------------------------ */
+var _outreachVersioni = [];
+var _outreachDebounceTimer = null;
+
+function _outreachSetupAutosave() {
+    var editor = document.getElementById('outreach-editor');
+    if (!editor) return;
+    editor.addEventListener('input', function() {
+        clearTimeout(_outreachDebounceTimer);
+        var indicator = document.getElementById('outreach-autosave-indicator');
+        if (indicator) { indicator.style.display = 'none'; }
+        _outreachDebounceTimer = setTimeout(function() {
+            _salvaOutreach(true);
+        }, 2000);
+    });
+}
+
+// Osserva il modal per attaccare l'autosave quando il contenuto viene renderizzato
+var _outreachObserver = new MutationObserver(function() {
+    if (document.getElementById('outreach-editor')) {
+        _outreachSetupAutosave();
+    }
+});
+var _reportBody = document.getElementById('modal-report-body');
+if (_reportBody) _outreachObserver.observe(_reportBody, { childList: true });
+
+function _copiaOutreach() {
+    var editor = document.getElementById('outreach-editor');
+    if (!editor) return;
+    navigator.clipboard.writeText(editor.value).then(function() {
+        var label = document.getElementById('outreach-copia-label');
+        label.textContent = 'Copiato \u2713';
+        setTimeout(function() { label.textContent = 'Copia'; }, 2000);
+    });
+}
+
+function _pushVersione(testo) {
+    if (!testo || !testo.trim()) return;
+    _outreachVersioni.push(testo.trim());
+    var wrap = document.getElementById('outreach-versioni-wrap');
+    var list = document.getElementById('outreach-versioni-list');
+    if (!wrap || !list) return;
+    wrap.style.display = '';
+    var idx = _outreachVersioni.length - 1;
+    var div = document.createElement('div');
+    div.className = 'outreach-versione-item';
+    div.innerHTML = '<div class="outreach-versione-header">' +
+        '<span style="font-size:0.75rem;color:var(--grigio-testo);">v' + (idx + 1) + '</span>' +
+        '<button class="btn btn-outline btn-xs" onclick="_ripristinaVersione(' + idx + ')">Usa questa</button></div>' +
+        '<div class="outreach-versione-text">' + escHtml(testo.trim()) + '</div>';
+    list.insertBefore(div, list.firstChild);
+}
+
+function _ripristinaVersione(idx) {
+    var editor = document.getElementById('outreach-editor');
+    if (!editor || idx >= _outreachVersioni.length) return;
+    var corrente = editor.value.trim();
+    if (corrente && corrente !== _outreachVersioni[idx]) {
+        _pushVersione(corrente);
+    }
+    editor.value = _outreachVersioni[idx];
+}
+
+function _rigeneraOutreach() {
+    var editor = document.getElementById('outreach-editor');
+    if (!editor || !_reportGlobale || !_reportGlobale.candidatoInfo) return;
+    var corrente = editor.value.trim();
+    _pushVersione(corrente);
+
+    var btn = editor.closest('.outreach-editor-section').querySelector('button:nth-child(2)');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner"></span>'; }
+
+    fetch('/valutazione/rigenera_messaggio', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            testo_profilo: _reportGlobale.candidatoInfo.testo || '',
+            messaggio_attuale: corrente,
+            istruzioni: ''
+        })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.messaggio) {
+            editor.value = data.messaggio;
+        } else {
+            alert('Errore: ' + (data.errore || 'risposta vuota'));
+        }
+    })
+    .catch(function(err) { alert('Errore: ' + err); })
+    .finally(function() {
+        if (btn) { btn.disabled = false; btn.textContent = 'Rigenera'; }
+    });
+}
+
+function _salvaOutreach(silent) {
+    var editor = document.getElementById('outreach-editor');
+    if (!editor || !_reportGlobale || !_reportGlobale.candidatoInfo) return;
+    var ci = _reportGlobale.candidatoInfo;
+    var candidatoId = ci.candidato_id || null;
+    if (!candidatoId) {
+        if (!silent) {
+            var indicator = document.getElementById('outreach-autosave-indicator');
+            if (indicator) { indicator.textContent = 'Nessun candidato associato'; indicator.style.display = ''; }
+        }
+        return;
+    }
+
+    fetch('/ricerca/salva-messaggio', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            candidato_id: candidatoId,
+            messaggio: editor.value.trim()
+        })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        var indicator = document.getElementById('outreach-autosave-indicator');
+        if (data.ok && indicator) {
+            indicator.textContent = silent ? 'Salvato \u2713' : 'Salvato \u2713';
+            indicator.style.display = '';
+            var label = document.getElementById('outreach-salva-label');
+            if (!silent && label) {
+                label.textContent = 'Salvato \u2713';
+                setTimeout(function() { label.textContent = 'Salva'; }, 2000);
+            }
+            setTimeout(function() { indicator.style.display = 'none'; }, 3000);
+        }
+    })
+    .catch(function(err) { console.error('[salva outreach]', err); });
+}
+
+function _applicaModificaOutreach() {
+    var editor = document.getElementById('outreach-editor');
+    var promptEl = document.getElementById('outreach-prompt-modifica');
+    if (!editor || !promptEl) return;
+    var istruzioni = promptEl.value.trim();
+    if (!istruzioni) { alert('Scrivi le istruzioni di modifica.'); return; }
+
+    var corrente = editor.value.trim();
+    _pushVersione(corrente);
+
+    var labelEl = document.getElementById('outreach-modifica-label');
+    var btnEl = labelEl ? labelEl.closest('button') : null;
+    if (btnEl) { btnEl.disabled = true; }
+    if (labelEl) { labelEl.innerHTML = '<span class="spinner"></span> Generazione...'; }
+
+    fetch('/valutazione/rigenera_messaggio', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            testo_profilo: (_reportGlobale && _reportGlobale.candidatoInfo) ? _reportGlobale.candidatoInfo.testo || '' : '',
+            messaggio_attuale: corrente,
+            istruzioni: istruzioni
+        })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.messaggio) {
+            editor.value = data.messaggio;
+            promptEl.value = '';
+        } else {
+            alert('Errore: ' + (data.errore || 'risposta vuota'));
+        }
+    })
+    .catch(function(err) { alert('Errore: ' + err); })
+    .finally(function() {
+        if (btnEl) { btnEl.disabled = false; }
+        if (labelEl) { labelEl.textContent = 'Applica modifica'; }
     });
 }

@@ -819,6 +819,9 @@ function _salvaAnalisiRicerca(dati, p) {
             if (resp && !resp.errore) {
                 savedEl.style.cssText = '';
                 savedEl.classList.remove('hidden');
+                if (resp.candidato_id && _reportGlobale && _reportGlobale.candidatoInfo) {
+                    _reportGlobale.candidatoInfo.candidato_id = resp.candidato_id;
+                }
             }
         });
     })

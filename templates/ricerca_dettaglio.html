@@ -300,7 +300,7 @@ function vediReport(idx) {
         p.testo_profilo ? 'Profilo:\n' + p.testo_profilo : '',
     ].filter(Boolean).join('\n');
 
-    var candidatoInfo = { testo: testo, linkedin: p.linkedin_url || null, tipo: 'A', scopo: _dettaglioScopo };
+    var candidatoInfo = { testo: testo, linkedin: p.linkedin_url || null, tipo: 'A', scopo: _dettaglioScopo, candidato_id: p.candidato_id || null };
     var salvaCallback = function(nuoviDati) { _salvaDettaglio(idx, nuoviDati, null); };
 
     _mostraReportNelModal(dati, candidatoInfo, salvaCallback);
@@ -373,7 +373,7 @@ function analizzaSingolo(idx, btnEl) {
                             document.getElementById('modal-report-status').innerHTML =
                                 '&#11088; Arricchimento con dati LinkedIn in corso...';
                         } else if (ev.type === 'done') {
-                            var _ci = { testo: testo, linkedin: p.linkedin_url || null, tipo: 'A', scopo: _dettaglioScopo };
+                            var _ci = { testo: testo, linkedin: p.linkedin_url || null, tipo: 'A', scopo: _dettaglioScopo, candidato_id: p.candidato_id || null };
                             _mostraReportNelModal(ev.risultato, _ci);
                             _salvaDettaglio(idx, ev.risultato, btnEl);
                         } else if (ev.type === 'errore') {

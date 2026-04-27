@@ -573,6 +573,25 @@ def scarta():
     return jsonify({"successo": True})
 
 
+@ricerca_bp.route("/ricerca/salva-messaggio", methods=["POST"])
+def salva_messaggio():
+    """Salva il messaggio outreach modificato dall'utente nel DB."""
+    dati = request.get_json() or {}
+    candidato_id = dati.get("candidato_id")
+    messaggio = (dati.get("messaggio") or "").strip()
+    if not candidato_id:
+        return jsonify({"errore": "candidato_id mancante"}), 400
+    org_id = get_org_id()
+    db = get_db()
+    db.execute(
+        "UPDATE candidati SET messaggio_outreach = ?, data_aggiornamento = CURRENT_TIMESTAMP WHERE id = ? AND organizzazione_id = ?",
+        (messaggio, candidato_id, org_id)
+    )
+    db.commit()
+    db.close()
+    return jsonify({"ok": True})
+
+
 @ricerca_bp.route("/ricerca")
 def index():
     """Pagina di ricerca automatica figure con Apify/LinkedIn."""

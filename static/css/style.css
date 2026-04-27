@@ -532,6 +532,62 @@ body {
     min-height: 60px;
 }
 
+/* Editor Messaggio Outreach */
+.outreach-textarea {
+    width: 100%;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 0.9rem;
+    line-height: 1.6;
+    resize: vertical;
+    font-family: inherit;
+    color: var(--testo);
+    background: var(--grigio-bg);
+    transition: border-color 0.2s;
+}
+.outreach-textarea:focus {
+    outline: none;
+    border-color: var(--azzurro);
+    box-shadow: 0 0 0 3px rgba(99,102,241,0.1);
+}
+.outreach-actions {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    margin-top: 0.5rem;
+}
+.outreach-modifica {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--grigio-bordo);
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+.outreach-modifica .outreach-textarea {
+    background: #fff;
+}
+.outreach-versione-item {
+    background: #f8fafc;
+    border: 1px solid var(--grigio-bordo);
+    border-radius: 6px;
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 0.4rem;
+    font-size: 0.82rem;
+}
+.outreach-versione-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.3rem;
+}
+.outreach-versione-text {
+    white-space: pre-wrap;
+    color: var(--grigio-testo);
+    line-height: 1.5;
+}
+
 .char-count {
     font-size: 0.78rem;
     color: var(--grigio-testo);
