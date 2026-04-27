@@ -35,14 +35,10 @@ def admin_required(f):
     return decorated
 
 
-# ─────────────────────────────────────────────
-# Costi stimati per unita
-# ─────────────────────────────────────────────
-
-COSTO_RICERCA = 0.50        # Apify run
-COSTO_ANALISI = 0.03        # Claude API call
-COSTO_ARRICCHIMENTO = 0.01  # EnrichLayer/Proxycurl
-COSTO_RAILWAY = 10.00       # Railway hosting fisso stimato
+def _load_costi(db) -> dict:
+    """Carica costi configurabili da config_costi."""
+    rows = db.execute("SELECT chiave, valore FROM config_costi").fetchall()
+    return {r["chiave"]: float(r["valore"]) for r in rows}
 
 
 # ─────────────────────────────────────────────
@@ -75,10 +71,11 @@ def index():
     """).fetchall()
 
     # --- Utilizzo API mese corrente ---
-    row_ric = db.execute("SELECT COALESCE(SUM(ricerche), 0) AS n FROM utilizzo_mensile WHERE mese = ?", (mese,)).fetchone()
-    row_ana = db.execute("SELECT COALESCE(SUM(analisi_ai), 0) AS n FROM utilizzo_mensile WHERE mese = ?", (mese,)).fetchone()
-    tot_ricerche_mese = row_ric["n"]
-    tot_analisi_mese = row_ana["n"]
+    tot_ricerche_mese = db.execute("SELECT COALESCE(SUM(ricerche), 0) AS n FROM utilizzo_mensile WHERE mese = ?", (mese,)).fetchone()["n"]
+    tot_analisi_mese = db.execute("SELECT COALESCE(SUM(analisi_ai), 0) AS n FROM utilizzo_mensile WHERE mese = ?", (mese,)).fetchone()["n"]
+    arricchimenti_mese = db.execute(
+        "SELECT COUNT(*) AS n FROM candidati WHERE dati_proxycurl IS NOT NULL AND data_inserimento >= DATE_TRUNC('month', NOW())"
+    ).fetchone()["n"]
 
     # --- Utenti recenti ---
     utenti_recenti = db.execute("""
@@ -117,18 +114,44 @@ def index():
         ORDER BY u.creato_il DESC
     """).fetchall()
 
+    # --- Costi configurabili ---
+    costi_cfg = _load_costi(db)
+
+    # --- Previsioni ---
+    nuovi_paganti_media = db.execute("""
+        SELECT COUNT(*) / 3.0 AS n FROM organizzazioni
+        WHERE piano IN ('pro', 'business')
+        AND creato_il > NOW() - INTERVAL '3 months'
+    """).fetchone()["n"] or 0
+
     db.close()
 
-    # --- Costi e contabilità ---
-    costo_ricerche = round(tot_ricerche_mese * COSTO_RICERCA, 2)
-    costo_analisi = round(tot_analisi_mese * COSTO_ANALISI, 2)
-    costo_totale = round(costo_ricerche + costo_analisi, 2)
+    # --- Calcoli contabilità ---
+    costo_apify = round(tot_ricerche_mese * costi_cfg.get("costo_apify_per_ricerca", 0), 2)
+    costo_anthropic = round(tot_analisi_mese * costi_cfg.get("costo_anthropic_per_analisi", 0), 2)
+    costo_enrichlayer = round(arricchimenti_mese * costi_cfg.get("costo_enrichlayer_per_arricchimento", 0), 2)
+    costo_railway = round(costi_cfg.get("costo_railway_mensile", 0), 2)
+    costi_totali = round(costo_apify + costo_anthropic + costo_enrichlayer + costo_railway, 2)
 
-    entrate_mese = mrr
     arr = mrr * 12
-    costi_totale_con_railway = round(costo_ricerche + costo_analisi + COSTO_RAILWAY, 2)
-    margine = round(entrate_mese - costi_totale_con_railway, 2)
-    margine_pct = round((margine / entrate_mese * 100) if entrate_mese > 0 else 0, 1)
+    margine = round(mrr - costi_totali, 2)
+    margine_pct = round((margine / mrr * 100) if mrr > 0 else 0, 1)
+
+    # Previsioni a 3, 6, 12 mesi
+    paganti_attuali = max(org_pro + org_business, 1)
+    previsioni = {}
+    for m in (3, 6, 12):
+        pro_prev = org_pro + (nuovi_paganti_media * m * 0.7)
+        bus_prev = org_business + (nuovi_paganti_media * m * 0.3)
+        mrr_prev = round((pro_prev * 49) + (bus_prev * 149))
+        molt = (pro_prev + bus_prev) / paganti_attuali
+        costi_prev = round(costi_totali * molt)
+        previsioni[m] = {
+            "mrr": mrr_prev,
+            "costi": costi_prev,
+            "margine": mrr_prev - costi_prev,
+            "utenti_paganti": round(pro_prev + bus_prev),
+        }
 
     return render_template(
         "admin.html",
@@ -143,14 +166,16 @@ def index():
         mese=mese,
         tot_ricerche_mese=tot_ricerche_mese,
         tot_analisi_mese=tot_analisi_mese,
-        costo_ricerche=costo_ricerche,
-        costo_analisi=costo_analisi,
-        costo_totale=costo_totale,
-        costo_railway=COSTO_RAILWAY,
-        costi_totale_con_railway=costi_totale_con_railway,
-        entrate_mese=entrate_mese,
+        arricchimenti_mese=arricchimenti_mese,
+        costi_cfg=costi_cfg,
+        costo_apify=costo_apify,
+        costo_anthropic=costo_anthropic,
+        costo_enrichlayer=costo_enrichlayer,
+        costo_railway=costo_railway,
+        costi_totali=costi_totali,
         margine=margine,
         margine_pct=margine_pct,
+        previsioni=previsioni,
         utenti_recenti=utenti_recenti,
         attivita=attivita,
         utenti_free=utenti_free,
@@ -255,3 +280,33 @@ def esporta_csv():
         mimetype="text/csv",
         headers={"Content-Disposition": f"attachment; filename=huntly-org-{datetime.now().strftime('%Y%m%d')}.csv"},
     )
+
+
+# ─────────────────────────────────────────────
+# POST /admin/salva-costi
+# ─────────────────────────────────────────────
+
+@admin_bp.route("/admin/salva-costi", methods=["POST"])
+@admin_required
+def salva_costi():
+    dati = request.get_json() or {}
+    chiavi_valide = (
+        "costo_apify_per_ricerca",
+        "costo_anthropic_per_analisi",
+        "costo_enrichlayer_per_arricchimento",
+        "costo_railway_mensile",
+    )
+    db = get_db()
+    for chiave, valore in dati.items():
+        if chiave not in chiavi_valide:
+            continue
+        db.execute(
+            """INSERT INTO config_costi (chiave, valore, aggiornato_il)
+               VALUES (?, ?, NOW())
+               ON CONFLICT (chiave) DO UPDATE SET valore = ?, aggiornato_il = NOW()""",
+            (chiave, valore, valore),
+        )
+    db.commit()
+    db.close()
+    log.info("[admin] Costi aggiornati: %s", dati)
+    return jsonify({"ok": True})

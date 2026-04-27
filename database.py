@@ -497,6 +497,22 @@ WHERE NOT EXISTS (SELECT 1 FROM profili_target WHERE nome = 'Profilo Junior')"""
         # ── Admin flag ────────────────────────────────────────────────────
         "ALTER TABLE utenti ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE",
 
+        # ── Config costi admin ────────────────────────────────────────────
+        """CREATE TABLE IF NOT EXISTS config_costi (
+    id            SERIAL PRIMARY KEY,
+    chiave        VARCHAR(50) UNIQUE NOT NULL,
+    valore        NUMERIC(10,4) NOT NULL DEFAULT 0,
+    aggiornato_il TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)""",
+        """INSERT INTO config_costi (chiave, valore) VALUES ('costo_apify_per_ricerca', 0)
+           ON CONFLICT (chiave) DO NOTHING""",
+        """INSERT INTO config_costi (chiave, valore) VALUES ('costo_anthropic_per_analisi', 0)
+           ON CONFLICT (chiave) DO NOTHING""",
+        """INSERT INTO config_costi (chiave, valore) VALUES ('costo_enrichlayer_per_arricchimento', 0)
+           ON CONFLICT (chiave) DO NOTHING""",
+        """INSERT INTO config_costi (chiave, valore) VALUES ('costo_railway_mensile', 0)
+           ON CONFLICT (chiave) DO NOTHING""",
+
         # ── Indici per performance query ───────────────────────────────────
         "CREATE INDEX IF NOT EXISTS idx_candidati_tipo_profilo  ON candidati(tipo_profilo)",
         "CREATE INDEX IF NOT EXISTS idx_candidati_stato          ON candidati(stato)",
