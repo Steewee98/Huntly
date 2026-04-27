@@ -494,6 +494,9 @@ WHERE NOT EXISTS (SELECT 1 FROM profili_target WHERE nome = 'Profilo Junior')"""
         "ALTER TABLE utenti ADD COLUMN IF NOT EXISTS email_mittente TEXT",
         "ALTER TABLE candidati ADD COLUMN IF NOT EXISTS email TEXT",
 
+        # ── Admin flag ────────────────────────────────────────────────────
+        "ALTER TABLE utenti ADD COLUMN IF NOT EXISTS is_admin BOOLEAN DEFAULT FALSE",
+
         # ── Indici per performance query ───────────────────────────────────
         "CREATE INDEX IF NOT EXISTS idx_candidati_tipo_profilo  ON candidati(tipo_profilo)",
         "CREATE INDEX IF NOT EXISTS idx_candidati_stato          ON candidati(stato)",

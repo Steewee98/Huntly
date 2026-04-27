@@ -1,0 +1,366 @@
+{% extends "base.html" %}
+{% block title %}Admin — Huntly{% endblock %}
+
+{% block content %}
+<style>
+/* Admin-specific styles */
+.admin-wrap { display: flex; gap: 2rem; max-width: 1100px; margin: 0 auto; }
+.admin-nav {
+    position: sticky; top: 1rem; align-self: flex-start;
+    width: 180px; flex-shrink: 0;
+    display: flex; flex-direction: column; gap: 0.25rem;
+    font-size: 0.82rem;
+}
+.admin-nav a {
+    padding: 0.45rem 0.7rem; border-radius: 6px;
+    color: var(--grigio-testo); text-decoration: none; transition: all 0.15s;
+}
+.admin-nav a:hover { background: #e8e8f0; color: var(--testo); }
+.admin-nav a.active { background: var(--azzurro); color: #fff; font-weight: 600; }
+.admin-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1.5rem; }
+.admin-badge {
+    display: inline-block; padding: 0.15rem 0.55rem; border-radius: 20px;
+    font-size: 0.72rem; font-weight: 700; color: #fff; letter-spacing: 0.03em;
+}
+.admin-kpi { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 1rem; }
+.admin-kpi .card { text-align: center; padding: 1rem; }
+.admin-kpi .kpi-value { font-size: 1.6rem; font-weight: 700; color: var(--azzurro); }
+.admin-kpi .kpi-label { font-size: 0.78rem; color: var(--grigio-testo); margin-top: 0.2rem; }
+.admin-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+.admin-table th {
+    text-align: left; padding: 0.5rem 0.6rem; color: var(--grigio-testo);
+    font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
+    font-size: 0.72rem; border-bottom: 2px solid var(--grigio-bordo);
+}
+.admin-table td { padding: 0.55rem 0.6rem; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+.admin-table tr:hover td { background: #f8f9fc; }
+.piano-badge-free     { background: #6B7280; }
+.piano-badge-pro      { background: #6366f1; }
+.piano-badge-business { background: #059669; }
+.costi-grid { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 1rem; }
+.costi-grid .card { padding: 1rem; text-align: center; }
+.costi-value { font-size: 1.3rem; font-weight: 700; }
+.costi-label { font-size: 0.76rem; color: var(--grigio-testo); margin-top: 0.15rem; }
+.azioni-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem; }
+.azioni-grid .card { padding: 1rem; }
+.azione-title { font-weight: 600; font-size: 0.85rem; margin-bottom: 0.6rem; }
+@media (max-width: 768px) {
+    .admin-wrap { flex-direction: column; }
+    .admin-nav { position: static; width: 100%; flex-direction: row; flex-wrap: wrap; }
+    .costi-grid, .azioni-grid { grid-template-columns: 1fr; }
+    .admin-kpi { grid-template-columns: 1fr 1fr; }
+}
+</style>
+
+<div class="page-header" style="display:flex;align-items:center;gap:0.75rem;">
+    <h1 class="page-title">Admin</h1>
+    <span class="admin-badge" style="background:#dc2626;font-size:0.7rem;">ADMIN</span>
+</div>
+
+<div class="admin-wrap">
+
+<!-- Sidebar navigazione sezioni -->
+<nav class="admin-nav" id="admin-sidebar">
+    <a href="#panoramica" class="active" onclick="scrollAdmin(event,'panoramica')">Panoramica</a>
+    <a href="#organizzazioni" onclick="scrollAdmin(event,'organizzazioni')">Organizzazioni</a>
+    <a href="#utilizzo-api" onclick="scrollAdmin(event,'utilizzo-api')">Utilizzo API</a>
+    <a href="#utenti" onclick="scrollAdmin(event,'utenti')">Utenti</a>
+    <a href="#attivita" onclick="scrollAdmin(event,'attivita')">Attivita</a>
+    <a href="#azioni" onclick="scrollAdmin(event,'azioni')">Azioni rapide</a>
+</nav>
+
+<div class="admin-main">
+
+<!-- ===== SEZIONE 1: Panoramica ===== -->
+<section id="panoramica">
+    <h2 style="font-size:1rem;margin-bottom:0.75rem;">Panoramica Generale</h2>
+    <div class="admin-kpi">
+        <div class="card">
+            <div class="kpi-value">{{ totale_org }}</div>
+            <div class="kpi-label">Organizzazioni</div>
+        </div>
+        <div class="card">
+            <div class="kpi-value">{{ totale_utenti }}</div>
+            <div class="kpi-label">Utenti attivi</div>
+        </div>
+        <div class="card">
+            <div class="kpi-value">{{ org_free }}</div>
+            <div class="kpi-label">Piano Free</div>
+        </div>
+        <div class="card">
+            <div class="kpi-value" style="color:#6366f1;">{{ org_pro }}</div>
+            <div class="kpi-label">Piano Pro</div>
+        </div>
+        <div class="card">
+            <div class="kpi-value" style="color:#059669;">{{ org_business }}</div>
+            <div class="kpi-label">Piano Business</div>
+        </div>
+        <div class="card">
+            <div class="kpi-value" style="color:#16a34a;">&euro;{{ mrr }}</div>
+            <div class="kpi-label">MRR stimato</div>
+        </div>
+    </div>
+</section>
+
+<!-- ===== SEZIONE 2: Organizzazioni ===== -->
+<section id="organizzazioni">
+    <h2 style="font-size:1rem;margin-bottom:0.75rem;">Organizzazioni</h2>
+    <div class="card" style="overflow-x:auto;">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>Nome</th>
+                    <th>Piano</th>
+                    <th>Creata il</th>
+                    <th>Utenti</th>
+                    <th>Candidati</th>
+                    <th>Ricerche</th>
+                    <th>Analisi AI</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for o in organizzazioni %}
+                <tr>
+                    <td style="font-weight:600;">{{ o.nome }}</td>
+                    <td>
+                        <span class="admin-badge piano-badge-{{ o.piano or 'free' }}">{{ (o.piano or 'free')|upper }}</span>
+                    </td>
+                    <td>{{ o.creato_il[:10] if o.creato_il else '—' }}</td>
+                    <td>{{ o.n_utenti }}</td>
+                    <td>{{ o.n_candidati }}</td>
+                    <td>{{ o.tot_ricerche }}</td>
+                    <td>{{ o.tot_analisi }}</td>
+                    <td>
+                        <select class="form-input" style="font-size:0.78rem;padding:0.2rem 0.4rem;width:auto;"
+                                onchange="cambiaPiano({{ o.id }}, this.value)" data-orig="{{ o.piano or 'free' }}">
+                            <option value="free"     {{ 'selected' if (o.piano or 'free') == 'free' }}>Free</option>
+                            <option value="pro"      {{ 'selected' if o.piano == 'pro' }}>Pro</option>
+                            <option value="business"  {{ 'selected' if o.piano == 'business' }}>Business</option>
+                        </select>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<!-- ===== SEZIONE 3: Utilizzo API ===== -->
+<section id="utilizzo-api">
+    <h2 style="font-size:1rem;margin-bottom:0.75rem;">Utilizzo API &mdash; {{ mese }}</h2>
+    <div class="costi-grid">
+        <div class="card">
+            <div class="costi-value" style="color:var(--azzurro);">{{ tot_ricerche_mese }}</div>
+            <div class="costi-label">Ricerche Apify</div>
+            <div style="font-size:0.8rem;margin-top:0.3rem;font-weight:600;">&euro;{{ "%.2f"|format(costo_ricerche) }}</div>
+        </div>
+        <div class="card">
+            <div class="costi-value" style="color:#8b5cf6;">{{ tot_analisi_mese }}</div>
+            <div class="costi-label">Analisi Claude</div>
+            <div style="font-size:0.8rem;margin-top:0.3rem;font-weight:600;">&euro;{{ "%.2f"|format(costo_analisi) }}</div>
+        </div>
+        <div class="card">
+            <div class="costi-value" style="color:#059669;">—</div>
+            <div class="costi-label">Arricchimenti</div>
+            <div style="font-size:0.8rem;margin-top:0.3rem;font-weight:600;">N/D</div>
+        </div>
+        <div class="card" style="border:2px solid var(--azzurro);">
+            <div class="costi-value" style="color:#dc2626;">&euro;{{ "%.2f"|format(costo_totale) }}</div>
+            <div class="costi-label">Totale stimato</div>
+        </div>
+    </div>
+    <p style="font-size:0.72rem;color:var(--grigio-testo);margin-top:0.5rem;font-style:italic;">
+        Costi stimati approssimativi. Verifica sui dashboard API (Apify, Anthropic, EnrichLayer) per dati reali.
+    </p>
+</section>
+
+<!-- ===== SEZIONE 4: Utenti recenti ===== -->
+<section id="utenti">
+    <h2 style="font-size:1rem;margin-bottom:0.75rem;">Utenti Recenti</h2>
+    <div class="card" style="overflow-x:auto;">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>Nome</th>
+                    <th>Email</th>
+                    <th>Organizzazione</th>
+                    <th>Piano</th>
+                    <th>Registrato il</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for u in utenti_recenti %}
+                <tr>
+                    <td style="font-weight:500;">{{ u.nome or '—' }}</td>
+                    <td>{{ u.email }}</td>
+                    <td>{{ u.org_nome or '—' }}</td>
+                    <td><span class="admin-badge piano-badge-{{ u.org_piano or 'free' }}">{{ (u.org_piano or 'free')|upper }}</span></td>
+                    <td>{{ u.creato_il[:10] if u.creato_il else '—' }}</td>
+                    <td>{% if u.is_admin %}<span class="admin-badge" style="background:#dc2626;">ADMIN</span>{% endif %}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<!-- ===== SEZIONE 5: Attivita recente ===== -->
+<section id="attivita">
+    <h2 style="font-size:1rem;margin-bottom:0.75rem;">Attivita Recente</h2>
+    <div class="card" style="overflow-x:auto;">
+        <table class="admin-table">
+            <thead>
+                <tr>
+                    <th>Organizzazione</th>
+                    <th>Tipo</th>
+                    <th>Fonte</th>
+                    <th>Profili trovati</th>
+                    <th>Data</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for a in attivita %}
+                <tr>
+                    <td>{{ a.org_nome or '—' }}</td>
+                    <td>{{ a.tipo_profilo }}</td>
+                    <td>{{ a.fonte or 'apify' }}</td>
+                    <td>{{ a.profili_trovati or 0 }}</td>
+                    <td>{{ a.data_ricerca[:16] if a.data_ricerca else '—' }}</td>
+                </tr>
+                {% endfor %}
+                {% if not attivita %}
+                <tr><td colspan="5" style="text-align:center;color:var(--grigio-testo);">Nessuna attivita</td></tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+</section>
+
+<!-- ===== SEZIONE 6: Azioni rapide ===== -->
+<section id="azioni">
+    <h2 style="font-size:1rem;margin-bottom:0.75rem;">Azioni Rapide</h2>
+    <div class="azioni-grid">
+
+        <!-- Esporta CSV -->
+        <div class="card">
+            <div class="azione-title">Esporta CSV</div>
+            <p style="font-size:0.78rem;color:var(--grigio-testo);margin-bottom:0.6rem;">Scarica lista organizzazioni con piano e utenti.</p>
+            <a href="/admin/esporta-csv" class="btn btn-primary btn-sm">&#8595; Scarica CSV</a>
+        </div>
+
+        <!-- Cambia piano per email -->
+        <div class="card">
+            <div class="azione-title">Cambia piano per email</div>
+            <div class="form-group" style="margin-bottom:0.5rem;">
+                <input type="email" id="az-email-piano" class="form-input" placeholder="email@utente.com" style="font-size:0.82rem;">
+            </div>
+            <div style="display:flex;gap:0.4rem;">
+                <select id="az-piano" class="form-input form-select" style="font-size:0.82rem;flex:1;">
+                    <option value="free">Free</option>
+                    <option value="pro">Pro</option>
+                    <option value="business">Business</option>
+                </select>
+                <button class="btn btn-primary btn-sm" onclick="cambiaPianoEmail()">Salva</button>
+            </div>
+            <div id="az-piano-esito" style="font-size:0.78rem;margin-top:0.3rem;"></div>
+        </div>
+
+        <!-- Imposta admin -->
+        <div class="card">
+            <div class="azione-title">Imposta Admin</div>
+            <div class="form-group" style="margin-bottom:0.5rem;">
+                <input type="email" id="az-email-admin" class="form-input" placeholder="email@utente.com" style="font-size:0.82rem;">
+            </div>
+            <div style="display:flex;gap:0.5rem;align-items:center;">
+                <label style="font-size:0.82rem;display:flex;align-items:center;gap:0.3rem;">
+                    <input type="checkbox" id="az-is-admin" checked> is_admin
+                </label>
+                <button class="btn btn-primary btn-sm" onclick="impostaAdmin()">Salva</button>
+            </div>
+            <div id="az-admin-esito" style="font-size:0.78rem;margin-top:0.3rem;"></div>
+        </div>
+
+    </div>
+</section>
+
+</div><!-- fine admin-main -->
+</div><!-- fine admin-wrap -->
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Sidebar scroll tracking
+function scrollAdmin(e, id) {
+    e.preventDefault();
+    var el = document.getElementById(id);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.querySelectorAll('#admin-sidebar a').forEach(function(a) { a.classList.remove('active'); });
+    e.currentTarget.classList.add('active');
+}
+
+// IntersectionObserver per evidenziare la sezione visibile
+var _adminSections = document.querySelectorAll('.admin-main > section');
+var _adminObs = new IntersectionObserver(function(entries) {
+    entries.forEach(function(entry) {
+        if (entry.isIntersecting) {
+            var id = entry.target.id;
+            document.querySelectorAll('#admin-sidebar a').forEach(function(a) {
+                a.classList.toggle('active', a.getAttribute('href') === '#' + id);
+            });
+        }
+    });
+}, { rootMargin: '-20% 0px -60% 0px' });
+_adminSections.forEach(function(s) { _adminObs.observe(s); });
+
+// Cambia piano org (dalla tabella)
+async function cambiaPiano(orgId, piano) {
+    try {
+        var resp = await fetch('/admin/cambia-piano', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ org_id: orgId, piano: piano })
+        });
+        var d = await resp.json();
+        if (d.errore) alert('Errore: ' + d.errore);
+    } catch(e) { alert('Errore: ' + e); }
+}
+
+// Cambia piano per email
+async function cambiaPianoEmail() {
+    var email = document.getElementById('az-email-piano').value.trim();
+    var piano = document.getElementById('az-piano').value;
+    var esito = document.getElementById('az-piano-esito');
+    if (!email) { esito.textContent = 'Inserisci email'; esito.style.color = '#dc2626'; return; }
+    try {
+        var resp = await fetch('/admin/cambia-piano-email', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: email, piano: piano })
+        });
+        var d = await resp.json();
+        if (d.errore) { esito.textContent = d.errore; esito.style.color = '#dc2626'; }
+        else { esito.textContent = 'Piano aggiornato'; esito.style.color = '#16a34a'; }
+    } catch(e) { esito.textContent = 'Errore: ' + e; esito.style.color = '#dc2626'; }
+}
+
+// Imposta admin
+async function impostaAdmin() {
+    var email = document.getElementById('az-email-admin').value.trim();
+    var isAdmin = document.getElementById('az-is-admin').checked;
+    var esito = document.getElementById('az-admin-esito');
+    if (!email) { esito.textContent = 'Inserisci email'; esito.style.color = '#dc2626'; return; }
+    try {
+        var resp = await fetch('/admin/imposta-admin', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: email, is_admin: isAdmin })
+        });
+        var d = await resp.json();
+        if (d.errore) { esito.textContent = d.errore; esito.style.color = '#dc2626'; }
+        else { esito.textContent = 'Admin aggiornato'; esito.style.color = '#16a34a'; }
+    } catch(e) { esito.textContent = 'Errore: ' + e; esito.style.color = '#dc2626'; }
+}
+</script>
+{% endblock %}

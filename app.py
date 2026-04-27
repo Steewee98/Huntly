@@ -20,6 +20,7 @@ from routes.calendario import calendario_bp
 from routes.dashboard import dashboard_bp
 from routes.profili import profili_bp
 from routes.profilo_personale import profilo_personale_bp
+from routes.admin import admin_bp
 
 # Carica le variabili d'ambiente dal file .env (se presente)
 load_dotenv()
@@ -40,6 +41,7 @@ app.register_blueprint(calendario_bp)
 app.register_blueprint(dashboard_bp)
 app.register_blueprint(profili_bp)
 app.register_blueprint(profilo_personale_bp)
+app.register_blueprint(admin_bp)
 
 # Proteggi tutte le view con login_required (eccetto auth)
 for bp in [valutazione_bp, candidati_bp, pipeline_bp, contenuti_bp, ricerca_bp, impostazioni_bp, calendario_bp, dashboard_bp, profili_bp, profilo_personale_bp]:
@@ -54,8 +56,19 @@ _STATIC_VERSION = str(int(time.time()))
 def inject_static_version():
     """Inietta static_version e utente corrente in tutti i template."""
     from flask import session as _session
+    is_admin = False
+    uid = _session.get("user_id")
+    if uid:
+        try:
+            _db = get_db()
+            _row = _db.execute("SELECT is_admin FROM utenti WHERE id = ?", (uid,)).fetchone()
+            _db.close()
+            is_admin = bool(_row and _row.get("is_admin"))
+        except Exception:
+            pass
     return {
         "static_version": _STATIC_VERSION,
+        "is_admin": is_admin,
         "current_user": {
             "nome":             _session.get("nome", ""),
             "email":            _session.get("username", ""),

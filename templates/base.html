@@ -80,6 +80,16 @@
             <span class="nav-icon">&#9881;</span>
             <span>Impostazioni</span>
         </a>
+        {% if is_admin %}
+        <div style="border-top:1px solid var(--grigio-bordo);margin:0.75rem 0 0.5rem;"></div>
+        <a href="{{ url_for('admin.index') }}"
+           class="nav-item {% if request.blueprint == 'admin' %}active{% endif %}"
+           style="{% if request.blueprint == 'admin' %}background:#dc2626;color:#fff;{% endif %}">
+            <span class="nav-icon">&#9879;</span>
+            <span>Admin</span>
+            {% if request.blueprint == 'admin' %}<span class="admin-badge" style="display:inline-block;padding:0.1rem 0.4rem;border-radius:10px;font-size:0.62rem;font-weight:700;color:#fff;background:#dc2626;margin-left:auto;">ADMIN</span>{% endif %}
+        </a>
+        {% endif %}
     </nav>
 
 
