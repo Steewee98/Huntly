@@ -458,6 +458,8 @@ def init_db():
 )""",
         "ALTER TABLE profili_target ADD COLUMN IF NOT EXISTS organizzazione_id INTEGER",
         "UPDATE profili_target SET organizzazione_id = 1 WHERE organizzazione_id IS NULL",
+        "ALTER TABLE profili_target ADD COLUMN IF NOT EXISTS scopo VARCHAR(50) DEFAULT 'recruiting'",
+        "ALTER TABLE profili_target ADD COLUMN IF NOT EXISTS scopo_dettaglio TEXT",
         # Seed: 2 profili generici se la tabella è vuota
         """INSERT INTO profili_target (nome, descrizione, ruoli_target, settori, eta_min, eta_max, anni_esperienza_min, keyword_positive, colore)
 SELECT 'Profilo Senior', 'Figure manageriali con almeno 10 anni di esperienza', '', '', 40, 65, 10, '', '#6366f1'

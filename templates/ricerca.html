@@ -325,6 +325,11 @@ let tipoProfiloSelezionato = 'A';   // per modal importa
 let tipoAnalisiSelezionato = 'A';   // per modal analisi AI
 let ricercaIdCorrente      = null;  // id del record ricerche_automatiche corrente
 let personaInAnalisi       = null;  // candidato che sta per essere analizzato
+let profiloTargetIdAttivo  = null;  // id profilo_target attivo (per scopo AI)
+var _profiloScopoMap = {
+    {% for p in profili_target %}{{ p.id }}: '{{ p.scopo or "recruiting" }}',{% endfor %}
+};
+var _scopoLabelsJS = {recruiting:'Recruiting',sales:'Sales',partnership:'Partnership',network:'Network'};
 
 /* ------------------------------------------------------------------ */
 /* Ricerca Automatica (asincrona con polling)                          */
@@ -334,6 +339,7 @@ var _btnInCorso      = null;  // riferimento al bottone attivo durante il pollin
 var _btnLabelInCorso = null;  // label originale del bottone
 
 function ricercaAutomatica(profiloId, btn) {
+    profiloTargetIdAttivo = profiloId;
     var maxProfili = parseInt(document.getElementById('max-profili').value, 10) || 20;
     document.querySelectorAll('.btn-auto-profilo').forEach(function(b) { b.disabled = true; });
     _btnInCorso = btn;
@@ -464,6 +470,9 @@ function cercaFigure() {
         alert('Inserisci almeno il ruolo o delle parole chiave.');
         return;
     }
+
+    var selProfilo = document.getElementById('profilo_id_cerca');
+    profiloTargetIdAttivo = selProfilo ? parseInt(selProfilo.value) || null : null;
 
     document.getElementById('risultati-tbody').innerHTML = '';
     document.getElementById('risultati-section').classList.add('hidden');
@@ -695,9 +704,10 @@ function avviaAnalisiDiretta(persona) {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({
-            testo_profilo: testo,
-            tipo_profilo:  tipoAnalisiSelezionato,
-            linkedin_url:  p.linkedin || null,
+            testo_profilo:     testo,
+            tipo_profilo:      tipoAnalisiSelezionato,
+            linkedin_url:      p.linkedin || null,
+            profilo_target_id: profiloTargetIdAttivo,
         })
     })
     .then(function(response) {
@@ -726,7 +736,8 @@ function avviaAnalisiDiretta(persona) {
                             document.getElementById('modal-report-status').innerHTML =
                                 '&#11088; Arricchimento con dati LinkedIn in corso...';
                         } else if (ev.type === 'done') {
-                            var candidatoInfo = { testo: testo, linkedin: p.linkedin || null, tipo: tipoAnalisiSelezionato };
+                            var _scopo = profiloTargetIdAttivo ? (_profiloScopoMap[profiloTargetIdAttivo] || null) : null;
+                            var candidatoInfo = { testo: testo, linkedin: p.linkedin || null, tipo: tipoAnalisiSelezionato, scopo: _scopo };
                             var salvaCallback = function(nuoviDati) { _salvaAnalisiRicerca(nuoviDati, p); };
                             _mostraReportNelModal(ev.risultato, candidatoInfo, salvaCallback);
                             _salvaAnalisiRicerca(ev.risultato, p);

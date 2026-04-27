@@ -218,7 +218,21 @@ function _mostraReportNelModal(dati, candidatoInfo, salvaCallback) {
     }
 
     html += '<div class="report-sezione" style="text-align:center;">' +
-        '<div class="report-score ' + scoreClass + '">' + punteggio + '/10</div></div>';
+        '<div class="report-score ' + scoreClass + '">' + punteggio + '/10</div>';
+
+    // Badge scopo ricerca
+    var _scopoInfo = candidatoInfo ? (candidatoInfo.scopo || null) : null;
+    if (_scopoInfo) {
+        var _scopeIcons = {recruiting:'\u{1F3AF}',sales:'\u{1F4BC}',partnership:'\u{1F91D}',network:'\u{1F310}'};
+        var _scopeNames = {recruiting:'Recruiting',sales:'Sales',partnership:'Partnership',network:'Network'};
+        var _scopeColors = {recruiting:'#6366f1',sales:'#d97706',partnership:'#16a34a',network:'#0891b2'};
+        var _sc = _scopoInfo.toLowerCase();
+        html += '<div style="margin-top:0.5rem;"><span style="font-size:0.75rem;padding:3px 10px;border-radius:20px;' +
+            'background:' + (_scopeColors[_sc] || '#6366f1') + '1a;color:' + (_scopeColors[_sc] || '#6366f1') + ';' +
+            'font-weight:600;border:1px solid ' + (_scopeColors[_sc] || '#6366f1') + ';">' +
+            (_scopeIcons[_sc] || '') + ' ' + (_scopeNames[_sc] || _scopoInfo) + '</span></div>';
+    }
+    html += '</div>';
 
     if (arricchito) {
         var _card = function(label, val) {

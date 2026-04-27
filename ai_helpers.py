@@ -105,12 +105,53 @@ def test_connessione_api() -> dict:
         return {"ok": False, "errore": str(e)}
 
 
+def _build_scopo_prompt(scopo: str, scopo_dettaglio: str) -> str:
+    """Costruisce la sezione scopo del prompt in base al tipo di ricerca."""
+    if scopo == 'sales':
+        return (
+            f"\nSCOPO: Sales — stai cercando potenziali clienti per vendere un prodotto/servizio.\n"
+            f"Prodotto/servizio: {scopo_dettaglio}\n"
+            "NON stai cercando di assumere questa persona.\n"
+            "Valuta quanto questo profilo corrisponde al cliente ideale per questo prodotto.\n"
+            "Considera: ha il problema che il prodotto risolve? Ha budget decisionale? È il giusto interlocutore?\n"
+            "Il messaggio di outreach deve parlare del valore del prodotto per lui, "
+            "NON di opportunità di lavoro. Deve essere un messaggio di vendita consultiva, "
+            "non aggressivo, che apre una conversazione sul problema che il prodotto risolve.\n"
+        )
+    elif scopo == 'partnership':
+        return (
+            f"\nSCOPO: Partnership — stai cercando collaboratori o partner commerciali.\n"
+            f"Tipo di collaborazione: {scopo_dettaglio}\n"
+            "Valuta quanto questo profilo è adatto per una collaborazione.\n"
+            "Il messaggio di outreach deve proporre una collaborazione win-win, "
+            "spiegando il vantaggio reciproco.\n"
+        )
+    elif scopo == 'network':
+        return (
+            f"\nSCOPO: Network — stai costruendo la tua rete professionale.\n"
+            f"Motivo: {scopo_dettaglio or 'espansione rete professionale'}\n"
+            "Valuta l'interesse di connettersi con questo profilo.\n"
+            "Il messaggio di outreach deve essere leggero, genuino, "
+            "focalizzato su interessi comuni o settore condiviso.\n"
+        )
+    else:  # recruiting (default)
+        return (
+            "\nSCOPO: Recruiting — stai cercando candidati da assumere.\n"
+            + (f"Posizione cercata: {scopo_dettaglio}\n" if scopo_dettaglio else "")
+            + "Valuta quanto questo profilo è adatto per essere assunto.\n"
+            "Il messaggio di outreach deve parlare di opportunità di carriera e crescita professionale.\n"
+        )
+
+
 def analizza_profilo_linkedin(testo_profilo: str, tipo_profilo: str, impostazioni: dict = None) -> dict:
     """
     Analizza un profilo LinkedIn e restituisce valutazione strutturata.
     tipo_profilo: 'A' = Senior, 'B' = Under 35
     """
     testo_profilo = clean_text(testo_profilo)
+
+    scopo = (impostazioni or {}).get('scopo', 'recruiting')
+    scopo_dettaglio = (impostazioni or {}).get('scopo_dettaglio', '')
 
     if impostazioni:
         descrizione_profilo = (
@@ -142,10 +183,13 @@ def analizza_profilo_linkedin(testo_profilo: str, tipo_profilo: str, impostazion
         )
         istr_punteggio = ""
 
+    scopo_prompt = _build_scopo_prompt(scopo, scopo_dettaglio)
+
     prompt = (
-        "Sei un esperto recruiter.\n"
+        "Sei un esperto recruiter e business developer italiano.\n"
         "Analizza il seguente profilo LinkedIn per valutarne la compatibilita con questo target:\n\n"
-        f"{descrizione_profilo}{istr_punteggio}\n\n"
+        f"{descrizione_profilo}{istr_punteggio}\n"
+        f"{scopo_prompt}\n"
         "PROFILO LINKEDIN:\n"
         f"{testo_profilo}\n\n"
         "Fornisci la tua analisi ESCLUSIVAMENTE nel seguente formato JSON valido, senza testo aggiuntivo:\n"
@@ -155,13 +199,13 @@ def analizza_profilo_linkedin(testo_profilo: str, tipo_profilo: str, impostazion
         '  "azienda": "<nome dell\'azienda attuale estratto dal testo, o null>",\n'
         '  "anni_esperienza": <numero intero degli anni totali di esperienza professionale stimati dal testo, o null>,\n'
         '  "punteggio": <numero da 1 a 10>,\n'
-        '  "analisi_percorso": "<analisi dettagliata del percorso professionale in 3-4 frasi>",\n'
+        '  "analisi_percorso": "<analisi dettagliata in 3-4 frasi, coerente con lo scopo della ricerca>",\n'
         '  "spunti_contatto": [\n'
-        '    "<spunto personalizzato 1 per il primo contatto>",\n'
-        '    "<spunto personalizzato 2 per il primo contatto>",\n'
-        '    "<spunto personalizzato 3 per il primo contatto>"\n'
+        '    "<spunto personalizzato 1 per il primo contatto, coerente con lo scopo>",\n'
+        '    "<spunto personalizzato 2>",\n'
+        '    "<spunto personalizzato 3>"\n'
         '  ],\n'
-        '  "messaggio_outreach": "<bozza completa del messaggio di outreach personalizzato su LinkedIn, tono professionale ma umano, max 300 caratteri>"\n'
+        '  "messaggio_outreach": "<bozza completa del messaggio personalizzato su LinkedIn, coerente con lo scopo, tono professionale ma umano, max 300 caratteri>"\n'
         "}"
     )
 
@@ -272,6 +316,9 @@ def analizza_profilo_linkedin_stream(
     testo_profilo = clean_text(testo_profilo)
 
     # Stessa logica di costruzione prompt di analizza_profilo_linkedin
+    scopo_s = (impostazioni or {}).get('scopo', 'recruiting')
+    scopo_dettaglio_s = (impostazioni or {}).get('scopo_dettaglio', '')
+
     if impostazioni:
         descrizione_profilo = (
             f"Profilo target: età tra {impostazioni.get('eta_min', 25)} e "
@@ -302,10 +349,13 @@ def analizza_profilo_linkedin_stream(
         )
         istr_punteggio = ""
 
+    scopo_prompt_s = _build_scopo_prompt(scopo_s, scopo_dettaglio_s)
+
     prompt = (
-        "Sei un esperto recruiter.\n"
+        "Sei un esperto recruiter e business developer italiano.\n"
         "Analizza il seguente profilo LinkedIn per valutarne la compatibilita con questo target:\n\n"
-        f"{descrizione_profilo}{istr_punteggio}\n\n"
+        f"{descrizione_profilo}{istr_punteggio}\n"
+        f"{scopo_prompt_s}\n"
         "PROFILO LINKEDIN:\n"
         f"{testo_profilo}\n\n"
         "Fornisci la tua analisi ESCLUSIVAMENTE nel seguente formato JSON valido, senza testo aggiuntivo:\n"
@@ -315,9 +365,9 @@ def analizza_profilo_linkedin_stream(
         '  "azienda": "<nome azienda attuale, o null>",\n'
         '  "anni_esperienza": <numero intero o null>,\n'
         '  "punteggio": <numero da 1 a 10>,\n'
-        '  "analisi_percorso": "<analisi dettagliata in 3-4 frasi>",\n'
+        '  "analisi_percorso": "<analisi dettagliata in 3-4 frasi, coerente con lo scopo>",\n'
         '  "spunti_contatto": ["<spunto 1>","<spunto 2>","<spunto 3>"],\n'
-        '  "messaggio_outreach": "<bozza messaggio LinkedIn max 300 caratteri>"\n'
+        '  "messaggio_outreach": "<bozza messaggio LinkedIn coerente con lo scopo, max 300 caratteri>"\n'
         "}"
     )
 

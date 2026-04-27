@@ -579,7 +579,7 @@ def index():
     org_id = get_org_id()
     db = get_db()
     profili_target = db.execute(
-        "SELECT id, nome, descrizione, colore FROM profili_target WHERE attivo = TRUE AND organizzazione_id = ? ORDER BY creato_il",
+        "SELECT id, nome, descrizione, colore, scopo FROM profili_target WHERE attivo = TRUE AND organizzazione_id = ? ORDER BY creato_il",
         (org_id,)
     ).fetchall()
     cronologia = db.execute(
@@ -1438,11 +1438,28 @@ def dettaglio_ricerca(ricerca_id):
     except Exception:
         parametri = {}
 
+    # Estrai profilo target ID e scopo per badge nell'analisi AI
+    profilo_target_id = None
+    profilo_scopo = None
+    tp = ricerca.get('tipo_profilo') or ''
+    if tp.startswith('pt_'):
+        try:
+            profilo_target_id = int(tp[3:])
+            db2 = get_db()
+            _pt = db2.execute("SELECT scopo FROM profili_target WHERE id = ?", (profilo_target_id,)).fetchone()
+            db2.close()
+            if _pt:
+                profilo_scopo = _pt['scopo']
+        except (ValueError, TypeError):
+            pass
+
     return render_template("ricerca_dettaglio.html",
                            ricerca=ricerca,
                            profili=profili,
                            parametri=parametri,
-                           usa_fallback=usa_fallback)
+                           usa_fallback=usa_fallback,
+                           profilo_target_id=profilo_target_id,
+                           profilo_scopo=profilo_scopo)
 
 
 @ricerca_bp.route("/ricerca/dettaglio/<int:ricerca_id>/export_csv")

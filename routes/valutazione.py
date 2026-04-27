@@ -141,7 +141,20 @@ def analizza_stream():
     testo_profilo = dati.get("testo_profilo", "").strip()
     tipo_profilo  = dati.get("tipo_profilo", "A")
     candidato_id  = dati.get("candidato_id")
-    print(f"=== STREAM PARAMS: tipo={tipo_profilo} candidato_id={candidato_id} linkedin_url={dati.get('linkedin_url')} testo_len={len(testo_profilo)} ===", flush=True)
+    profilo_target_id = dati.get("profilo_target_id")
+    print(f"=== STREAM PARAMS: tipo={tipo_profilo} candidato_id={candidato_id} profilo_target_id={profilo_target_id} linkedin_url={dati.get('linkedin_url')} testo_len={len(testo_profilo)} ===", flush=True)
+
+    # Carica impostazioni dal profilo target (include scopo)
+    impostazioni_stream = None
+    if profilo_target_id:
+        try:
+            _db = get_db()
+            _pt = _db.execute("SELECT * FROM profili_target WHERE id = ?", (profilo_target_id,)).fetchone()
+            _db.close()
+            if _pt:
+                impostazioni_stream = dict(_pt)
+        except Exception:
+            pass
 
     if not testo_profilo:
         def _err():
@@ -190,6 +203,7 @@ def analizza_stream():
     def _genera():
         for chunk in analizza_profilo_linkedin_stream(
             testo_profilo, tipo_profilo,
+            impostazioni=impostazioni_stream,
             linkedin_url=linkedin_url,
             dati_proxycurl_cached=dati_proxycurl_cached,
         ):

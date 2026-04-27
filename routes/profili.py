@@ -59,8 +59,9 @@ def crea():
     db.execute(
         """INSERT INTO profili_target
            (nome, descrizione, ruoli_target, settori, eta_min, eta_max,
-            anni_esperienza_min, keyword_positive, keyword_negative, colore, organizzazione_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            anni_esperienza_min, keyword_positive, keyword_negative, colore,
+            scopo, scopo_dettaglio, organizzazione_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             (d.get("nome") or "").strip(),
             (d.get("descrizione") or "").strip(),
@@ -72,6 +73,8 @@ def crea():
             (d.get("keyword_positive") or "").strip(),
             (d.get("keyword_negative") or "").strip(),
             (d.get("colore") or "#6366f1").strip(),
+            (d.get("scopo") or "recruiting").strip(),
+            (d.get("scopo_dettaglio") or "").strip(),
             org_id,
         )
     )
@@ -89,7 +92,8 @@ def modifica(pid):
         """UPDATE profili_target SET
            nome=?, descrizione=?, ruoli_target=?, settori=?,
            eta_min=?, eta_max=?, anni_esperienza_min=?,
-           keyword_positive=?, keyword_negative=?, colore=?
+           keyword_positive=?, keyword_negative=?, colore=?,
+           scopo=?, scopo_dettaglio=?
            WHERE id=? AND organizzazione_id=?""",
         (
             (d.get("nome") or "").strip(),
@@ -102,6 +106,8 @@ def modifica(pid):
             (d.get("keyword_positive") or "").strip(),
             (d.get("keyword_negative") or "").strip(),
             (d.get("colore") or "#6366f1").strip(),
+            (d.get("scopo") or "recruiting").strip(),
+            (d.get("scopo_dettaglio") or "").strip(),
             pid,
             org_id,
         )

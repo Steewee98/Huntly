@@ -255,6 +255,8 @@
 let profiliData = [];
 try { profiliData = JSON.parse(document.getElementById('profili-data').textContent); }
 catch(e) { console.error('[ricerca_dettaglio] JSON.parse profili-data:', e); }
+var _dettaglioProfiloTargetId = {{ profilo_target_id|tojson }};
+var _dettaglioScopo = {{ (profilo_scopo or '')|tojson }} || null;
 
 /* ── Modal: testo profilo completo ─────────────────────────────────── */
 function vediProfilo(idx) {
@@ -298,7 +300,7 @@ function vediReport(idx) {
         p.testo_profilo ? 'Profilo:\n' + p.testo_profilo : '',
     ].filter(Boolean).join('\n');
 
-    var candidatoInfo = { testo: testo, linkedin: p.linkedin_url || null, tipo: 'A' };
+    var candidatoInfo = { testo: testo, linkedin: p.linkedin_url || null, tipo: 'A', scopo: _dettaglioScopo };
     var salvaCallback = function(nuoviDati) { _salvaDettaglio(idx, nuoviDati, null); };
 
     _mostraReportNelModal(dati, candidatoInfo, salvaCallback);
@@ -339,9 +341,10 @@ function analizzaSingolo(idx, btnEl) {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({
-            testo_profilo: testo,
-            tipo_profilo:  'A',
-            linkedin_url:  p.linkedin_url || null,
+            testo_profilo:     testo,
+            tipo_profilo:      'A',
+            linkedin_url:      p.linkedin_url || null,
+            profilo_target_id: _dettaglioProfiloTargetId,
         })
     })
     .then(function(response) {
@@ -370,7 +373,8 @@ function analizzaSingolo(idx, btnEl) {
                             document.getElementById('modal-report-status').innerHTML =
                                 '&#11088; Arricchimento con dati LinkedIn in corso...';
                         } else if (ev.type === 'done') {
-                            _mostraReportNelModal(ev.risultato);
+                            var _ci = { testo: testo, linkedin: p.linkedin_url || null, tipo: 'A', scopo: _dettaglioScopo };
+                            _mostraReportNelModal(ev.risultato, _ci);
                             _salvaDettaglio(idx, ev.risultato, btnEl);
                         } else if (ev.type === 'errore') {
                             document.getElementById('modal-report-spinner').style.display = 'none';

@@ -22,6 +22,10 @@
             {% if p.descrizione %}
             <p style="font-size:0.85rem;color:var(--grigio-testo);margin-bottom:0.75rem;">{{ p.descrizione }}</p>
             {% endif %}
+            {% set scopo_labels = {'recruiting': '&#127919; Recruiting', 'sales': '&#128188; Sales', 'partnership': '&#129309; Partnership', 'network': '&#127760; Network'} %}
+            <div style="margin-bottom:0.5rem;">
+                <span style="font-size:0.75rem;padding:3px 8px;border-radius:12px;background:var(--azzurro-bg, #eef2ff);color:var(--azzurro, #6366f1);font-weight:600;">{{ scopo_labels.get(p.scopo or 'recruiting', '&#127919; Recruiting') }}</span>
+            </div>
             <div style="font-size:0.8rem;color:var(--grigio-testo);display:flex;flex-direction:column;gap:0.3rem;">
                 {% if p.eta_min or p.eta_max != 99 %}
                 <div>&#128100; Età: {{ p.eta_min }}–{{ p.eta_max }} anni</div>
@@ -76,6 +80,21 @@
             <div class="form-group" style="margin-bottom:1rem;">
                 <label class="form-label">Descrizione</label>
                 <input type="text" id="edit-descrizione" class="form-input" placeholder="Breve descrizione del profilo target">
+            </div>
+
+            <div class="form-group" style="margin-bottom:1rem;">
+                <label class="form-label">Scopo della ricerca *</label>
+                <select id="edit-scopo" class="form-input" onchange="aggiornaScopo()">
+                    <option value="recruiting">&#127919; Recruiting — Cerchi candidati da assumere</option>
+                    <option value="sales">&#128188; Sales — Cerchi clienti per un prodotto/servizio</option>
+                    <option value="partnership">&#129309; Partnership — Cerchi collaboratori o partner</option>
+                    <option value="network">&#127760; Network — Costruisci la tua rete professionale</option>
+                </select>
+            </div>
+
+            <div class="form-group" id="scopo-dettaglio-wrap" style="margin-bottom:1rem;">
+                <label class="form-label" id="scopo-dettaglio-label">Dettagli scopo</label>
+                <textarea id="edit-scopo-dettaglio" class="form-input" rows="2" placeholder=""></textarea>
             </div>
 
             <div class="form-row" style="margin-bottom:1rem;">
@@ -138,11 +157,33 @@
 
 {% block scripts %}
 <script>
+var _scopePlaceholders = {
+    recruiting: "Descrivi la posizione aperta (opzionale) — es. 'Cerchiamo un Sales Manager per espansione nord Italia'",
+    sales: "Cosa vuoi vendere? Descrivi il prodotto/servizio e il valore principale — es. 'Huntly, tool SaaS recruiting AI, €49/mese, risparmia 6 ore/settimana al recruiter'",
+    partnership: "Che tipo di collaborazione cerchi? — es. 'Agenti commerciali per vendita software HR su commissione'",
+    network: "Perché vuoi connetterti con questi profili? — es. 'Costruire rete di HR manager per futuri progetti'"
+};
+var _scopeLabels = {
+    recruiting: 'Posizione aperta (opzionale)',
+    sales: 'Prodotto/servizio da vendere *',
+    partnership: 'Tipo di collaborazione *',
+    network: 'Motivo del contatto (opzionale)'
+};
+
+function aggiornaScopo() {
+    var scopo = document.getElementById('edit-scopo').value;
+    document.getElementById('edit-scopo-dettaglio').placeholder = _scopePlaceholders[scopo] || '';
+    document.getElementById('scopo-dettaglio-label').textContent = _scopeLabels[scopo] || 'Dettagli scopo';
+}
+
 function aprireModale(dati) {
     document.getElementById('modal-titolo').textContent = dati ? 'Modifica Profilo' : 'Nuovo Profilo Target';
     document.getElementById('edit-id').value        = dati ? dati.id : '';
     document.getElementById('edit-nome').value      = dati ? (dati.nome || '') : '';
     document.getElementById('edit-descrizione').value = dati ? (dati.descrizione || '') : '';
+    document.getElementById('edit-scopo').value     = dati ? (dati.scopo || 'recruiting') : 'recruiting';
+    document.getElementById('edit-scopo-dettaglio').value = dati ? (dati.scopo_dettaglio || '') : '';
+    aggiornaScopo();
     document.getElementById('edit-eta-min').value   = dati ? (dati.eta_min ?? 0) : 0;
     document.getElementById('edit-eta-max').value   = dati ? (dati.eta_max ?? 99) : 99;
     document.getElementById('edit-esp-min').value   = dati ? (dati.anni_esperienza_min ?? 0) : 0;
@@ -184,9 +225,17 @@ function salvaProfilo() {
     var id = document.getElementById('edit-id').value;
     var nome = document.getElementById('edit-nome').value.trim();
     if (!nome) { alert('Il nome è obbligatorio.'); return; }
+    var scopo = document.getElementById('edit-scopo').value;
+    var scopoDettaglio = document.getElementById('edit-scopo-dettaglio').value.trim();
+    if ((scopo === 'sales' || scopo === 'partnership') && !scopoDettaglio) {
+        alert('Per lo scopo "' + (scopo === 'sales' ? 'Sales' : 'Partnership') + '" il campo dettagli è obbligatorio.');
+        return;
+    }
     var payload = {
         nome: nome,
         descrizione: document.getElementById('edit-descrizione').value.trim(),
+        scopo: scopo,
+        scopo_dettaglio: scopoDettaglio,
         eta_min: parseInt(document.getElementById('edit-eta-min').value) || 0,
         eta_max: parseInt(document.getElementById('edit-eta-max').value) || 99,
         anni_esperienza_min: parseInt(document.getElementById('edit-esp-min').value) || 0,
