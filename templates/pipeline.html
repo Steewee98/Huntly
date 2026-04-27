@@ -610,6 +610,11 @@
             <div id="calendly-form" class="hidden">
                 <input type="hidden" id="calendly-candidato-id">
                 <div class="form-group" style="margin-bottom:1rem;">
+                    <label class="form-label">La tua email (mittente)</label>
+                    <input type="email" id="invito-email-mittente" class="form-input" placeholder="tua@email.com">
+                    <small style="color:var(--grigio-testo);font-size:.78rem;">L'email da cui invierai il messaggio</small>
+                </div>
+                <div class="form-group" style="margin-bottom:1rem;">
                     <label class="form-label">Email del candidato</label>
                     <input type="email" id="calendly-email" class="form-input" placeholder="candidato@email.com">
                     <small style="color:var(--grigio-testo);font-size:.78rem;">L'email viene salvata automaticamente sul candidato.</small>
@@ -1507,6 +1512,7 @@ async function invitaCalendly(candidatoId, nomeCandidato) {
         }
         document.getElementById('calendly-link').value = dati.calendly_url;
         document.getElementById('calendly-email').value = dati.email_candidato || '';
+        document.getElementById('invito-email-mittente').value = dati.email_mittente || '';
         mostra('calendly-form');
     } catch(e) {
         document.getElementById('calendly-no-url').innerHTML =
@@ -1518,6 +1524,7 @@ async function invitaCalendly(candidatoId, nomeCandidato) {
 async function inviaCalendly() {
     var candidatoId = document.getElementById('calendly-candidato-id').value;
     var email = document.getElementById('calendly-email').value.trim();
+    var emailMittente = document.getElementById('invito-email-mittente').value.trim();
     var calendlyUrl = document.getElementById('calendly-link').value;
 
     if (!email || email.indexOf('@') < 0) {
@@ -1526,13 +1533,20 @@ async function inviaCalendly() {
         return;
     }
 
-    // Salva email sul candidato
+    // Salva email candidato + email mittente in parallelo
     try {
-        await fetch('/candidati/salva-email', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ candidato_id: parseInt(candidatoId), email: email })
-        });
+        await Promise.all([
+            fetch('/candidati/salva-email', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ candidato_id: parseInt(candidatoId), email: email })
+            }),
+            emailMittente ? fetch('/impostazioni/salva-email-mittente', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({ email_mittente: emailMittente })
+            }) : Promise.resolve(),
+        ]);
         var idx = candidatiData.findIndex(function(x) { return x.id === parseInt(candidatoId); });
         if (idx >= 0) candidatiData[idx].email = email;
     } catch(e) { /* non bloccare il flusso */ }

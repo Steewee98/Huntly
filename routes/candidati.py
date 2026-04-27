@@ -21,8 +21,9 @@ def get_calendly_info():
     user_id = session.get("user_id")
     org_id = get_org_id()
     db = get_db()
-    utente = db.execute("SELECT calendly_url FROM utenti WHERE id = ?", (user_id,)).fetchone()
+    utente = db.execute("SELECT calendly_url, email_mittente, email FROM utenti WHERE id = ?", (user_id,)).fetchone()
     calendly_url = (utente["calendly_url"] if utente and utente["calendly_url"] else "") or ""
+    email_mittente = (utente["email_mittente"] if utente and utente["email_mittente"] else "") or (utente["email"] if utente else "") or ""
     email_candidato = ""
     nome_candidato = ""
     if candidato_id:
@@ -38,6 +39,7 @@ def get_calendly_info():
         "calendly_url": calendly_url,
         "email_candidato": email_candidato,
         "nome_candidato": nome_candidato,
+        "email_mittente": email_mittente,
     })
 
 

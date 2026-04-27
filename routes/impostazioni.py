@@ -58,6 +58,18 @@ def _piano_org(db, org_id: int) -> dict:
 # GET /impostazioni
 # ─────────────────────────────────────────────
 
+@impostazioni_bp.route("/impostazioni/salva-email-mittente", methods=["POST"])
+def salva_email_mittente():
+    user_id = session.get("user_id")
+    dati = request.get_json() or {}
+    email = (dati.get("email_mittente") or "").strip()
+    db = get_db()
+    db.execute("UPDATE utenti SET email_mittente = ? WHERE id = ?", (email or None, user_id))
+    db.commit()
+    db.close()
+    return jsonify({"ok": True})
+
+
 @impostazioni_bp.route("/impostazioni/salva-calendly", methods=["POST"])
 def salva_calendly():
     user_id = session.get("user_id")

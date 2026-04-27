@@ -491,6 +491,7 @@ WHERE NOT EXISTS (SELECT 1 FROM profili_target WHERE nome = 'Profilo Junior')"""
 
         # ── Calendly + email candidato ────────────────────────────────────
         "ALTER TABLE utenti ADD COLUMN IF NOT EXISTS calendly_url TEXT",
+        "ALTER TABLE utenti ADD COLUMN IF NOT EXISTS email_mittente TEXT",
         "ALTER TABLE candidati ADD COLUMN IF NOT EXISTS email TEXT",
 
         # ── Indici per performance query ───────────────────────────────────
