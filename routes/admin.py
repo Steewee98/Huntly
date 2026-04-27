@@ -89,16 +89,38 @@ def index():
         ORDER BY u.creato_il DESC LIMIT 20
     """).fetchall()
 
-    # --- Attivita recente ---
+    # --- Attivita recente (con nome profilo target) ---
     attivita = db.execute("""
-        SELECT r.tipo_profilo, r.profili_trovati, r.fonte, r.data_ricerca,
-               o.nome AS org_nome
+        SELECT o.nome AS org_nome,
+               COALESCE(pt.nome, r.tipo_profilo) AS tipo,
+               r.fonte, r.profili_trovati, r.data_ricerca
         FROM ricerche_automatiche r
         LEFT JOIN organizzazioni o ON o.id = r.organizzazione_id
+        LEFT JOIN profili_target pt ON r.tipo_profilo = 'pt_' || pt.id::text
         ORDER BY r.data_ricerca DESC LIMIT 20
     """).fetchall()
 
+    # --- Utenti per piano ---
+    utenti_free = db.execute("""
+        SELECT u.nome, u.email, u.creato_il, o.nome AS org_nome
+        FROM utenti u
+        JOIN organizzazioni o ON o.id = u.organizzazione_id
+        WHERE o.piano = 'free' AND u.attivo = TRUE
+        ORDER BY u.creato_il DESC
+    """).fetchall()
+    utenti_paganti = db.execute("""
+        SELECT u.nome, u.email, u.creato_il, o.nome AS org_nome, o.piano
+        FROM utenti u
+        JOIN organizzazioni o ON o.id = u.organizzazione_id
+        WHERE o.piano IN ('pro', 'business') AND u.attivo = TRUE
+        ORDER BY u.creato_il DESC
+    """).fetchall()
+
     db.close()
+
+    costo_ricerche = round(tot_ricerche_mese * COSTO_RICERCA, 2)
+    costo_analisi = round(tot_analisi_mese * COSTO_ANALISI, 2)
+    costo_totale = round(costo_ricerche + costo_analisi, 2)
 
     return render_template(
         "admin.html",
@@ -112,11 +134,13 @@ def index():
         mese=mese,
         tot_ricerche_mese=tot_ricerche_mese,
         tot_analisi_mese=tot_analisi_mese,
-        costo_ricerche=tot_ricerche_mese * COSTO_RICERCA,
-        costo_analisi=tot_analisi_mese * COSTO_ANALISI,
-        costo_totale=(tot_ricerche_mese * COSTO_RICERCA) + (tot_analisi_mese * COSTO_ANALISI),
+        costo_ricerche=costo_ricerche,
+        costo_analisi=costo_analisi,
+        costo_totale=costo_totale,
         utenti_recenti=utenti_recenti,
         attivita=attivita,
+        utenti_free=utenti_free,
+        utenti_paganti=utenti_paganti,
     )
 
 

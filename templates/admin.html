@@ -47,7 +47,7 @@
 @media (max-width: 768px) {
     .admin-wrap { flex-direction: column; }
     .admin-nav { position: static; width: 100%; flex-direction: row; flex-wrap: wrap; }
-    .costi-grid, .azioni-grid { grid-template-columns: 1fr; }
+    .costi-grid, .azioni-grid, #utenti-piano > div { grid-template-columns: 1fr; }
     .admin-kpi { grid-template-columns: 1fr 1fr; }
 }
 </style>
@@ -65,6 +65,7 @@
     <a href="#organizzazioni" onclick="scrollAdmin(event,'organizzazioni')">Organizzazioni</a>
     <a href="#utilizzo-api" onclick="scrollAdmin(event,'utilizzo-api')">Utilizzo API</a>
     <a href="#utenti" onclick="scrollAdmin(event,'utenti')">Utenti</a>
+    <a href="#utenti-piano" onclick="scrollAdmin(event,'utenti-piano')">Utenti per piano</a>
     <a href="#attivita" onclick="scrollAdmin(event,'attivita')">Attivita</a>
     <a href="#azioni" onclick="scrollAdmin(event,'azioni')">Azioni rapide</a>
 </nav>
@@ -153,25 +154,28 @@
         <div class="card">
             <div class="costi-value" style="color:var(--azzurro);">{{ tot_ricerche_mese }}</div>
             <div class="costi-label">Ricerche Apify</div>
-            <div style="font-size:0.8rem;margin-top:0.3rem;font-weight:600;">&euro;{{ "%.2f"|format(costo_ricerche) }}</div>
+            <div style="font-size:0.78rem;margin-top:0.3rem;color:var(--grigio-testo);">{{ tot_ricerche_mese }} &times; &euro;0.50</div>
+            <div style="font-size:0.9rem;margin-top:0.15rem;font-weight:700;">&euro;{{ "%.2f"|format(costo_ricerche) }}</div>
         </div>
         <div class="card">
             <div class="costi-value" style="color:#8b5cf6;">{{ tot_analisi_mese }}</div>
             <div class="costi-label">Analisi Claude</div>
-            <div style="font-size:0.8rem;margin-top:0.3rem;font-weight:600;">&euro;{{ "%.2f"|format(costo_analisi) }}</div>
+            <div style="font-size:0.78rem;margin-top:0.3rem;color:var(--grigio-testo);">{{ tot_analisi_mese }} &times; &euro;0.03</div>
+            <div style="font-size:0.9rem;margin-top:0.15rem;font-weight:700;">&euro;{{ "%.2f"|format(costo_analisi) }}</div>
         </div>
         <div class="card">
             <div class="costi-value" style="color:#059669;">—</div>
             <div class="costi-label">Arricchimenti</div>
-            <div style="font-size:0.8rem;margin-top:0.3rem;font-weight:600;">N/D</div>
+            <div style="font-size:0.78rem;margin-top:0.3rem;color:var(--grigio-testo);">N &times; &euro;0.01</div>
+            <div style="font-size:0.9rem;margin-top:0.15rem;font-weight:700;">N/D</div>
         </div>
         <div class="card" style="border:2px solid var(--azzurro);">
             <div class="costi-value" style="color:#dc2626;">&euro;{{ "%.2f"|format(costo_totale) }}</div>
-            <div class="costi-label">Totale stimato</div>
+            <div class="costi-label">Totale stimato mese</div>
         </div>
     </div>
     <p style="font-size:0.72rem;color:var(--grigio-testo);margin-top:0.5rem;font-style:italic;">
-        Costi stimati approssimativi. Verifica sui dashboard API (Apify, Anthropic, EnrichLayer) per dati reali.
+        Stime approssimative &mdash; verifica su dashboard Apify e Anthropic per dati reali.
     </p>
 </section>
 
@@ -206,6 +210,67 @@
     </div>
 </section>
 
+<!-- ===== SEZIONE: Utenti per piano ===== -->
+<section id="utenti-piano">
+    <h2 style="font-size:1rem;margin-bottom:0.75rem;">Utenti per Piano</h2>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+
+        <!-- Utenti Free -->
+        <div class="card" style="overflow-x:auto;">
+            <div style="padding:0.75rem 0.75rem 0;font-size:0.85rem;font-weight:600;">
+                <span class="admin-badge piano-badge-free">FREE</span>
+                {{ utenti_free|length }} utenti
+            </div>
+            <table class="admin-table" style="margin-top:0.5rem;">
+                <thead>
+                    <tr><th>Nome</th><th>Email</th><th>Organizzazione</th><th>Registrato</th></tr>
+                </thead>
+                <tbody>
+                    {% for u in utenti_free %}
+                    <tr>
+                        <td style="font-weight:500;">{{ u.nome or '—' }}</td>
+                        <td><a href="mailto:{{ u.email }}" style="color:var(--azzurro);text-decoration:none;">{{ u.email }}</a></td>
+                        <td>{{ u.org_nome or '—' }}</td>
+                        <td>{{ u.creato_il[:10] if u.creato_il else '—' }}</td>
+                    </tr>
+                    {% endfor %}
+                    {% if not utenti_free %}
+                    <tr><td colspan="4" style="text-align:center;color:var(--grigio-testo);">Nessun utente free</td></tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Utenti Paganti -->
+        <div class="card" style="overflow-x:auto;">
+            <div style="padding:0.75rem 0.75rem 0;font-size:0.85rem;font-weight:600;">
+                <span class="admin-badge piano-badge-pro">PAGANTI</span>
+                {{ utenti_paganti|length }} utenti &mdash; MRR &euro;{{ mrr }}
+            </div>
+            <table class="admin-table" style="margin-top:0.5rem;">
+                <thead>
+                    <tr><th>Nome</th><th>Email</th><th>Organizzazione</th><th>Piano</th><th>Registrato</th></tr>
+                </thead>
+                <tbody>
+                    {% for u in utenti_paganti %}
+                    <tr>
+                        <td style="font-weight:500;">{{ u.nome or '—' }}</td>
+                        <td><a href="mailto:{{ u.email }}" style="color:var(--azzurro);text-decoration:none;">{{ u.email }}</a></td>
+                        <td>{{ u.org_nome or '—' }}</td>
+                        <td><span class="admin-badge piano-badge-{{ u.piano }}">{{ u.piano|upper }}</span></td>
+                        <td>{{ u.creato_il[:10] if u.creato_il else '—' }}</td>
+                    </tr>
+                    {% endfor %}
+                    {% if not utenti_paganti %}
+                    <tr><td colspan="5" style="text-align:center;color:var(--grigio-testo);">Nessun utente pagante</td></tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+
+    </div>
+</section>
+
 <!-- ===== SEZIONE 5: Attivita recente ===== -->
 <section id="attivita">
     <h2 style="font-size:1rem;margin-bottom:0.75rem;">Attivita Recente</h2>
@@ -224,7 +289,7 @@
                 {% for a in attivita %}
                 <tr>
                     <td>{{ a.org_nome or '—' }}</td>
-                    <td>{{ a.tipo_profilo }}</td>
+                    <td>{{ a.tipo or '—' }}</td>
                     <td>{{ a.fonte or 'apify' }}</td>
                     <td>{{ a.profili_trovati or 0 }}</td>
                     <td>{{ a.data_ricerca[:16] if a.data_ricerca else '—' }}</td>
