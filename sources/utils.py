@@ -140,13 +140,14 @@ def normalizza_profilo_infojobs(p: dict) -> dict:
     Converte un job listing InfoJobs in profilo sintetico.
     L'azienda che cerca quella figura diventa un lead da contattare.
     source='infojobs'.
+    Output crawlerbros~infojobs-scraper: title, companyName, city, url, descriptionText, contractType, salary, teleworking.
     """
     title   = _str(p.get("title") or p.get("jobTitle") or p.get("positionName") or "")
-    company = _str(p.get("company") or p.get("companyName") or p.get("employer") or "")
+    company = _str(p.get("companyName") or p.get("company") or p.get("employer") or "")
     if not company:
         company = "Azienda non specificata"
-    location = _str(p.get("location") or p.get("city") or p.get("province") or "")
-    desc     = _str(p.get("description") or p.get("jobDescription") or p.get("details") or "")[:200]
+    location = _str(p.get("city") or p.get("location") or p.get("province") or "")
+    desc     = _str(p.get("descriptionText") or p.get("description") or p.get("jobDescription") or "")[:200]
     url      = _str(p.get("url") or p.get("jobUrl") or p.get("link") or "")
 
     return {

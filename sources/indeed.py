@@ -15,7 +15,7 @@ from sources.utils import normalizza_profilo_indeed
 
 log = logging.getLogger(__name__)
 
-INDEED_ACTOR = "misceres/indeed-scraper"
+INDEED_ACTOR = "misceres~indeed-scraper"
 APIFY_BASE   = "https://api.apify.com/v2"
 TIMEOUT_MAX  = 140   # secondi
 
@@ -32,13 +32,13 @@ def cerca_indeed(ruolo: str, citta: str = "") -> tuple:
     if not api_key:
         return None, "APIFY_API_KEY non configurata"
 
-    # Indeed scraper input — usa keyword + location per l'Italia
+    # Indeed scraper input — usa position + location per l'Italia
     location = citta.strip() if citta else "Italia"
     run_input = {
-        "keyword":  ruolo or "consulente",
-        "location": location,
-        "maxItems": 10,
-        "country":  "it",
+        "position":           ruolo or "consulente",
+        "location":           location,
+        "maxItemsPerSearch":  10,
+        "country":            "IT",
     }
 
     log.info("[indeed] INPUT: %s", json.dumps(run_input, ensure_ascii=False))

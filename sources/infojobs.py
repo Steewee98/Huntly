@@ -1,6 +1,6 @@
 """
-Adapter InfoJobs Italy per Huntly.
-Cerca job listings tramite Apify dtrungtin/infojobs-jobs-scraper.
+Adapter InfoJobs per Huntly.
+Cerca job listings tramite Apify crawlerbros~infojobs-scraper.
 Converte ogni listing in un profilo sintetico: l'azienda che cerca
 quella figura diventa un lead da contattare.
 """
@@ -15,9 +15,9 @@ from sources.utils import normalizza_profilo_infojobs
 
 log = logging.getLogger(__name__)
 
-INFOJOBS_ACTOR = "dtrungtin/infojobs-jobs-scraper"
+INFOJOBS_ACTOR = "crawlerbros~infojobs-scraper"
 APIFY_BASE     = "https://api.apify.com/v2"
-TIMEOUT_MAX    = 140   # secondi
+TIMEOUT_MAX    = 180   # secondi — crawlerbros actor può impiegare 40-90s
 
 
 def cerca_infojobs(ruolo: str, citta: str = "") -> tuple:
@@ -32,10 +32,10 @@ def cerca_infojobs(ruolo: str, citta: str = "") -> tuple:
     if not api_key:
         return None, "APIFY_API_KEY non configurata"
 
-    # InfoJobs scraper input
+    # InfoJobs scraper input — crawlerbros actor usa keyword + province
     run_input = {
         "keyword":  ruolo or "consulente",
-        "location": citta.strip() if citta else "",
+        "province": citta.strip() if citta else "",
         "maxItems": 10,
     }
 
