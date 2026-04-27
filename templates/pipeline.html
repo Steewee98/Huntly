@@ -153,8 +153,9 @@
                                 Follow-up
                             </button>
                             <button class="btn btn-outline btn-xs"
-                                    onclick="attivaTab('calendario');setTimeout(function(){apriModalNuovoApp('{{ c.id }}');},100)">
-                                &#128197;
+                                    onclick="invitaCalendly({{ c.id }}, '{{ c.nome }} {{ c.cognome }}')"
+                                    title="Invita con Calendly">
+                                &#128197; Invita
                             </button>
                             <button class="btn btn-danger btn-xs"
                                     onclick="eliminaCandidato({{ c.id }}, '{{ c.nome }} {{ c.cognome }}')">
@@ -184,6 +185,17 @@
         <p class="page-subtitle" style="margin:0;">Appuntamenti con i candidati</p>
     </div>
     <button class="btn btn-primary" onclick="apriModalNuovoApp('')">+ Nuovo Appuntamento</button>
+</div>
+
+<!-- Calendly Banner -->
+<div id="calendly-banner" class="card" style="margin-bottom:1.25rem;border-left:3px solid var(--azzurro);display:none;">
+    <div class="card-body" style="display:flex;align-items:center;justify-content:space-between;gap:1rem;padding:.85rem 1.25rem;">
+        <div style="font-size:.88rem;">
+            <strong>Calendly collegato</strong>
+            <span id="calendly-banner-url" style="color:var(--grigio-testo);margin-left:.5rem;font-size:.82rem;"></span>
+        </div>
+        <a href="/impostazioni#account" class="btn btn-outline btn-sm" style="white-space:nowrap;">Modifica</a>
+    </div>
 </div>
 
 <!-- Calendario mensile -->
@@ -576,6 +588,39 @@
                 </button>
                 <button class="btn btn-outline" onclick="chiudiModalApp()">Annulla</button>
                 <button id="app-btn-elimina" class="btn btn-danger hidden" onclick="eliminaAppuntamentoDaModal()">Elimina</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal Invita Calendly -->
+<div id="modal-calendly" class="modal-overlay hidden" onclick="if(event.target===this)nascondi('modal-calendly')">
+    <div class="modal" style="max-width:480px;">
+        <div class="modal-header">
+            <h3 id="calendly-titolo">Invita candidato</h3>
+            <button class="modal-close" onclick="nascondi('modal-calendly')">&times;</button>
+        </div>
+        <div class="modal-body">
+            <div id="calendly-no-url" class="hidden" style="text-align:center;padding:1rem;">
+                <p style="font-size:.9rem;color:var(--grigio-testo);margin-bottom:1rem;">
+                    Non hai ancora configurato il tuo link Calendly.
+                </p>
+                <a href="/impostazioni#account" class="btn btn-primary btn-sm">Configura nelle Impostazioni</a>
+            </div>
+            <div id="calendly-form" class="hidden">
+                <input type="hidden" id="calendly-candidato-id">
+                <div class="form-group" style="margin-bottom:1rem;">
+                    <label class="form-label">Email del candidato</label>
+                    <input type="email" id="calendly-email" class="form-input" placeholder="candidato@email.com">
+                    <small style="color:var(--grigio-testo);font-size:.78rem;">L'email viene salvata automaticamente sul candidato.</small>
+                </div>
+                <div class="form-group" style="margin-bottom:1.25rem;">
+                    <label class="form-label">Link Calendly</label>
+                    <input type="text" id="calendly-link" class="form-input" readonly style="background:var(--grigio-bg);cursor:default;">
+                </div>
+                <button class="btn btn-primary" onclick="inviaCalendly()" style="width:100%;">
+                    Apri email con invito Calendly
+                </button>
             </div>
         </div>
     </div>
@@ -1392,5 +1437,83 @@ function filtraListaCal() {
 }
 
 function padCal(n) { return String(n).padStart(2, '0'); }
+
+/* ────────────────────────────────────────────────────────── */
+/* CALENDLY — Invita candidato                               */
+/* ────────────────────────────────────────────────────────── */
+async function invitaCalendly(candidatoId, nomeCandidato) {
+    document.getElementById('calendly-titolo').textContent = 'Invita: ' + nomeCandidato;
+    document.getElementById('calendly-candidato-id').value = candidatoId;
+    nascondi('calendly-no-url');
+    nascondi('calendly-form');
+    mostra('modal-calendly');
+
+    try {
+        var resp = await fetch('/candidati/get-calendly-info?candidato_id=' + candidatoId);
+        var dati = await resp.json();
+        if (!dati.calendly_url) {
+            mostra('calendly-no-url');
+            return;
+        }
+        document.getElementById('calendly-link').value = dati.calendly_url;
+        document.getElementById('calendly-email').value = dati.email_candidato || '';
+        mostra('calendly-form');
+    } catch(e) {
+        document.getElementById('calendly-no-url').innerHTML =
+            '<p style="color:#ef4444;">Errore nel caricamento. Riprova.</p>';
+        mostra('calendly-no-url');
+    }
+}
+
+async function inviaCalendly() {
+    var candidatoId = document.getElementById('calendly-candidato-id').value;
+    var email = document.getElementById('calendly-email').value.trim();
+    var calendlyUrl = document.getElementById('calendly-link').value;
+
+    if (!email || email.indexOf('@') < 0) {
+        alert('Inserisci un indirizzo email valido per il candidato.');
+        document.getElementById('calendly-email').focus();
+        return;
+    }
+
+    // Salva email sul candidato
+    try {
+        await fetch('/candidati/salva-email', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ candidato_id: parseInt(candidatoId), email: email })
+        });
+        // Aggiorna in-memory
+        var idx = candidatiData.findIndex(function(x) { return x.id === parseInt(candidatoId); });
+        if (idx >= 0) candidatiData[idx].email = email;
+    } catch(e) { /* non bloccare il flusso */ }
+
+    // Componi mailto
+    var c = candidatiData.find(function(x) { return x.id === parseInt(candidatoId); });
+    var nome = c ? ((c.nome || '') + ' ' + (c.cognome || '')).trim() : '';
+    var subject = encodeURIComponent('Fissiamo un colloquio' + (nome ? ' — ' + nome : ''));
+    var body = encodeURIComponent(
+        'Ciao' + (c && c.nome ? ' ' + c.nome : '') + ',\n\n' +
+        'Ti scrivo per fissare un colloquio conoscitivo.\n' +
+        'Puoi scegliere il giorno e l\'orario che preferisci dal mio calendario:\n\n' +
+        calendlyUrl + '\n\n' +
+        'A presto!'
+    );
+    window.open('mailto:' + encodeURIComponent(email) + '?subject=' + subject + '&body=' + body, '_blank');
+    nascondi('modal-calendly');
+}
+
+/* Calendly banner in Calendario tab */
+(function() {
+    fetch('/candidati/get-calendly-info')
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            if (d.calendly_url) {
+                document.getElementById('calendly-banner').style.display = '';
+                document.getElementById('calendly-banner-url').textContent = d.calendly_url;
+            }
+        })
+        .catch(function() {});
+})();
 </script>
 {% endblock %}

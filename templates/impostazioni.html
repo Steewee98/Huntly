@@ -108,6 +108,22 @@
         </div>
     </div>
 
+    <div class="card" style="margin-bottom:1.25rem;">
+        <div class="card-body">
+            <p style="font-size:.85rem;color:var(--grigio-testo);margin-bottom:1.1rem;">
+                Collega il tuo link Calendly per invitare i candidati a fissare un colloquio con un click.
+            </p>
+            <div class="form-group" style="margin-bottom:1.25rem;">
+                <label class="form-label">Link Calendly</label>
+                <input type="url" id="acc-calendly" class="form-input"
+                       value="{{ utente.get('calendly_url','') or '' }}"
+                       placeholder="https://calendly.com/tuo-nome/30min">
+            </div>
+            <button class="btn btn-primary" onclick="salvaCalendly()">Salva Calendly</button>
+            <span id="calendly-msg" style="margin-left:.75rem;font-size:.85rem;display:none;"></span>
+        </div>
+    </div>
+
     <div class="card">
         <div class="card-body">
             <p style="font-size:.85rem;color:var(--grigio-testo);margin-bottom:1.1rem;">Cambia la password del tuo account.</p>
@@ -461,6 +477,14 @@ async function cambiaPassword() {
         ['pw-attuale','pw-nuova','pw-conferma'].forEach(id => document.getElementById(id).value = '');
     }
     mostraMsg('pw-msg', res.ok ? 'Password aggiornata ✓' : (res.errore || 'Errore'), !!res.ok);
+}
+
+// ── Salva Calendly ───────────────────────────
+async function salvaCalendly() {
+    const res = await postJSON('/impostazioni/salva-calendly', {
+        calendly_url: document.getElementById('acc-calendly').value.trim(),
+    });
+    mostraMsg('calendly-msg', res.ok ? 'Salvato ✓' : (res.errore || 'Errore'), !!res.ok);
 }
 
 // ── Salva organizzazione ─────────────────────

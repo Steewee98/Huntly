@@ -4,7 +4,7 @@ Form per aggiungere candidati al database.
 """
 
 import json
-from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify
+from flask import Blueprint, render_template, request, redirect, url_for, flash, jsonify, session
 from database import get_db
 from dedup import is_duplicate
 from routes.auth import get_org_id
@@ -12,6 +12,52 @@ from datetime import datetime
 
 # Blueprint per il modulo inserimento candidati
 candidati_bp = Blueprint("candidati", __name__)
+
+
+@candidati_bp.route("/candidati/get-calendly-info")
+def get_calendly_info():
+    """Restituisce calendly_url dell'utente corrente e email del candidato."""
+    candidato_id = request.args.get("candidato_id")
+    user_id = session.get("user_id")
+    org_id = get_org_id()
+    db = get_db()
+    utente = db.execute("SELECT calendly_url FROM utenti WHERE id = ?", (user_id,)).fetchone()
+    calendly_url = (utente["calendly_url"] if utente and utente["calendly_url"] else "") or ""
+    email_candidato = ""
+    nome_candidato = ""
+    if candidato_id:
+        c = db.execute(
+            "SELECT nome, cognome, email FROM candidati WHERE id = ? AND organizzazione_id = ?",
+            (candidato_id, org_id)
+        ).fetchone()
+        if c:
+            email_candidato = c["email"] or ""
+            nome_candidato = ((c["nome"] or "") + " " + (c["cognome"] or "")).strip()
+    db.close()
+    return jsonify({
+        "calendly_url": calendly_url,
+        "email_candidato": email_candidato,
+        "nome_candidato": nome_candidato,
+    })
+
+
+@candidati_bp.route("/candidati/salva-email", methods=["POST"])
+def salva_email():
+    """Salva l'email di un candidato."""
+    dati = request.get_json() or {}
+    candidato_id = dati.get("candidato_id")
+    email = (dati.get("email") or "").strip()
+    if not candidato_id:
+        return jsonify({"errore": "candidato_id mancante"}), 400
+    org_id = get_org_id()
+    db = get_db()
+    db.execute(
+        "UPDATE candidati SET email = ?, data_aggiornamento = CURRENT_TIMESTAMP WHERE id = ? AND organizzazione_id = ?",
+        (email or None, candidato_id, org_id)
+    )
+    db.commit()
+    db.close()
+    return jsonify({"ok": True})
 
 
 @candidati_bp.route("/candidati")

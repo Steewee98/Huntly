@@ -489,6 +489,10 @@ WHERE NOT EXISTS (SELECT 1 FROM profili_target WHERE nome = 'Profilo Junior')"""
     creato_il         TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 )""",
 
+        # ── Calendly + email candidato ────────────────────────────────────
+        "ALTER TABLE utenti ADD COLUMN IF NOT EXISTS calendly_url TEXT",
+        "ALTER TABLE candidati ADD COLUMN IF NOT EXISTS email TEXT",
+
         # ── Indici per performance query ───────────────────────────────────
         "CREATE INDEX IF NOT EXISTS idx_candidati_tipo_profilo  ON candidati(tipo_profilo)",
         "CREATE INDEX IF NOT EXISTS idx_candidati_stato          ON candidati(stato)",

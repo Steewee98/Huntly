@@ -58,6 +58,18 @@ def _piano_org(db, org_id: int) -> dict:
 # GET /impostazioni
 # ─────────────────────────────────────────────
 
+@impostazioni_bp.route("/impostazioni/salva-calendly", methods=["POST"])
+def salva_calendly():
+    user_id = session.get("user_id")
+    dati = request.get_json() or {}
+    url = (dati.get("calendly_url") or "").strip()
+    db = get_db()
+    db.execute("UPDATE utenti SET calendly_url = ? WHERE id = ?", (url or None, user_id))
+    db.commit()
+    db.close()
+    return jsonify({"ok": True})
+
+
 @impostazioni_bp.route("/impostazioni")
 def index():
     org_id   = get_org_id()
