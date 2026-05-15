@@ -788,7 +788,7 @@ document.getElementById('modal-import').addEventListener('click', function(e) {
 /* ------------------------------------------------------------------ */
 function avviaAnalisiDiretta(persona) {
     personaInAnalisi       = persona;
-    tipoAnalisiSelezionato = tipoCercaSelezionato;
+    tipoAnalisiSelezionato = 'A';
 
     var p = persona;
     var nomeCompleto = [p.nome, p.cognome].filter(Boolean).join(' ') || 'candidato';
