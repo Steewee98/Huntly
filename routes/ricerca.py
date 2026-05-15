@@ -1219,7 +1219,7 @@ def profili_ricerca(ricerca_id):
     profili = db.execute("""
         SELECT pr.id, pr.nome, pr.cognome, pr.ruolo, pr.azienda,
                pr.location, pr.linkedin_url, pr.source, pr.candidato_id,
-               c.punteggio_ai, c.punteggio, c.stato, c.analisi,
+               c.punteggio, c.stato, c.analisi,
                c.messaggio_outreach
         FROM profili_ricerca pr
         LEFT JOIN candidati c ON c.id = pr.candidato_id
