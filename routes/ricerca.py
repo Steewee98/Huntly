@@ -1047,47 +1047,13 @@ def _esegui_ricerca_background(job_id, tipo_profilo, max_profili, imp, org_id=1)
 
         for p in items_da_importare:
             testo = _costruisci_testo_profilo(p)
-            _gestore = "Admin" if tipo_profilo == "A" else ("Recruiter" if tipo_profilo == "B" else "Non assegnato")
-            cur = db.execute(
-                "INSERT INTO candidati (nome, cognome, ruolo_attuale, azienda, profilo_linkedin, tipo_profilo, stato, note, ricerca_id, gestore, organizzazione_id) VALUES (?, ?, ?, ?, ?, ?, 'Da valutare', ?, ?, ?, ?)",
-                (p["nome"], p["cognome"], p["ruolo"], p["azienda"], p["linkedin"], tipo_profilo, p["headline"], ricerca_id, _gestore, org_id)
-            )
-            db.commit()
-            candidato_id = cur.lastrowid
-            importati += 1
 
             db.execute(
-                "INSERT INTO profili_ricerca (ricerca_id, nome, cognome, ruolo, azienda, location, linkedin_url, testo_profilo, candidato_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (ricerca_id, p["nome"], p["cognome"], p["ruolo"], p["azienda"], p["location"], p["linkedin"], testo, candidato_id)
+                "INSERT INTO profili_ricerca (ricerca_id, nome, cognome, ruolo, azienda, location, linkedin_url, testo_profilo, source, organizzazione_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (ricerca_id, p["nome"], p["cognome"], p["ruolo"], p["azienda"], p["location"], p["linkedin"], testo, p.get("source", "linkedin"), org_id)
             )
             db.commit()
-
-            if valutati < 10:
-                _ai_total = min(len(items_da_importare), 10)
-                aggiorna(step=f'Salvataggio database — analisi AI candidato {valutati + 1}/{_ai_total}...', pct=90)
-                try:
-                    risultato     = analizza_profilo_linkedin(testo, tipo_profilo, imp)
-                    punteggio     = int(risultato.get("punteggio") or 0) or None
-                    spunti_raw    = risultato.get("spunti_contatto", [])
-                    spunti_json   = json.dumps(spunti_raw if isinstance(spunti_raw, list) else [], ensure_ascii=False)
-                    analisi_str   = str(risultato.get("analisi_percorso") or "")
-                    messaggio_str = str(risultato.get("messaggio_outreach") or "")
-                    db.execute(
-                        "UPDATE candidati SET punteggio=?, analisi=?, spunti=?, messaggio_outreach=?, stato='Da contattare', data_aggiornamento=CURRENT_TIMESTAMP WHERE id=?",
-                        (punteggio, analisi_str, spunti_json, messaggio_str, candidato_id)
-                    )
-                    nome_completo = f"{p['nome']} {p['cognome']}".strip() or None
-                    anteprima     = f"{p['nome']} {p['cognome']} — {p['ruolo']}".strip()[:120]
-                    db.execute(
-                        "INSERT INTO valutazioni (nome_contatto, ruolo_attuale, azienda, tipo_profilo, anteprima_testo, punteggio, analisi, spunti, messaggio_outreach, candidato_id, fonte, organizzazione_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                        (nome_completo, p['ruolo'] or None, p['azienda'] or None, tipo_profilo, anteprima, punteggio, analisi_str, spunti_json, messaggio_str, candidato_id, 'ricerca_automatica', org_id)
-                    )
-                    db.commit()
-                    valutati += 1
-                    if punteggio:
-                        punteggi.append(punteggio)
-                except Exception:
-                    log.exception("Errore analisi AI per %s %s", p.get('nome'), p.get('cognome'))
+            importati += 1
 
         punteggio_medio = round(sum(punteggi) / len(punteggi), 1) if punteggi else None
         db.execute(
@@ -1097,6 +1063,7 @@ def _esegui_ricerca_background(job_id, tipo_profilo, max_profili, imp, org_id=1)
         db.commit()
 
         risultati_json = json.dumps({
+            "ricerca_id":       ricerca_id,           # ID ricerca per espandere cronologia
             # ── 4 numeri principali del riepilogo ─────────────────────────────
             "trovati_apify":    trovati_apify,       # Trovati da Apify
             "gia_presenti":     gia_presenti,         # Già presenti (scartati)
@@ -1242,6 +1209,87 @@ def export_csv():
         mimetype='text/csv; charset=utf-8',
         headers={'Content-Disposition': 'attachment; filename=cronologia_ricerche.csv'}
     )
+
+
+@ricerca_bp.route("/ricerca/profili/<int:ricerca_id>")
+def profili_ricerca(ricerca_id):
+    """API JSON: lista profili trovati in una ricerca specifica."""
+    org_id = get_org_id()
+    db = get_db()
+    profili = db.execute("""
+        SELECT pr.id, pr.nome, pr.cognome, pr.ruolo, pr.azienda,
+               pr.location, pr.linkedin_url, pr.source, pr.candidato_id,
+               c.punteggio_ai, c.punteggio, c.stato, c.analisi,
+               c.messaggio_outreach
+        FROM profili_ricerca pr
+        LEFT JOIN candidati c ON c.id = pr.candidato_id
+            AND c.organizzazione_id = ?
+        WHERE pr.ricerca_id = ?
+        ORDER BY c.punteggio DESC NULLS LAST, pr.id
+    """, (org_id, ricerca_id)).fetchall()
+    db.close()
+    return jsonify([dict(p) for p in profili])
+
+
+@ricerca_bp.route("/ricerca/profili-singolo/<int:profilo_id>")
+def profilo_singolo(profilo_id):
+    """API JSON: singolo profilo_ricerca."""
+    db = get_db()
+    p = db.execute("SELECT * FROM profili_ricerca WHERE id = ?", (profilo_id,)).fetchone()
+    db.close()
+    if not p:
+        return jsonify({"errore": "Profilo non trovato"}), 404
+    return jsonify(dict(p))
+
+
+@ricerca_bp.route("/ricerca/aggiungi-pipeline", methods=["POST"])
+def aggiungi_pipeline():
+    """Aggiunge un profilo_ricerca alla pipeline (tabella candidati)."""
+    dati = request.get_json()
+    profilo_ricerca_id = dati.get("profilo_ricerca_id")
+    if not profilo_ricerca_id:
+        return jsonify({"errore": "profilo_ricerca_id mancante"}), 400
+
+    org_id = get_org_id()
+    db = get_db()
+
+    pr = db.execute("SELECT * FROM profili_ricerca WHERE id = ?", (profilo_ricerca_id,)).fetchone()
+    if not pr:
+        db.close()
+        return jsonify({"errore": "Profilo non trovato"}), 404
+
+    if pr["candidato_id"]:
+        db.close()
+        return jsonify({"errore": "Già in pipeline", "candidato_id": pr["candidato_id"]}), 409
+
+    # Dedup check
+    profilo_check = {
+        "nome": pr["nome"], "cognome": pr["cognome"],
+        "azienda": pr["azienda"], "ruolo": pr["ruolo"],
+        "linkedin": pr["linkedin_url"],
+    }
+    dup, motivo_dup, cand_id = is_duplicate(db, profilo_check)
+    if dup:
+        db.execute("UPDATE profili_ricerca SET candidato_id = ? WHERE id = ?", (cand_id, profilo_ricerca_id))
+        db.commit()
+        db.close()
+        return jsonify({"errore": "Già in pipeline", "candidato_id": cand_id}), 409
+
+    tipo_profilo = "A"
+    cur = db.execute(
+        """INSERT INTO candidati
+           (nome, cognome, ruolo_attuale, azienda, profilo_linkedin,
+            tipo_profilo, stato, ricerca_id, organizzazione_id)
+           VALUES (?, ?, ?, ?, ?, ?, 'Da valutare', ?, ?)""",
+        (pr["nome"], pr["cognome"], pr["ruolo"], pr["azienda"],
+         pr["linkedin_url"], tipo_profilo, pr["ricerca_id"], org_id)
+    )
+    candidato_id = cur.lastrowid
+    db.execute("UPDATE profili_ricerca SET candidato_id = ? WHERE id = ?", (candidato_id, profilo_ricerca_id))
+    db.commit()
+    db.close()
+
+    return jsonify({"ok": True, "candidato_id": candidato_id})
 
 
 @ricerca_bp.route("/ricerca/analizza_candidato", methods=["POST"])

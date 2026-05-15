@@ -354,6 +354,7 @@ def init_db():
 
         # Multi-source: sorgente di provenienza del profilo
         "ALTER TABLE profili_ricerca ADD COLUMN IF NOT EXISTS source VARCHAR(50) DEFAULT 'linkedin'",
+        "ALTER TABLE profili_ricerca ADD COLUMN IF NOT EXISTS organizzazione_id INTEGER",
         "ALTER TABLE candidati       ADD COLUMN IF NOT EXISTS source VARCHAR(50) DEFAULT 'linkedin'",
 
         # Arricchimento Proxycurl

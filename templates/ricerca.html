@@ -28,6 +28,18 @@
     0%   { background: rgba(79,110,247,0.15); }
     100% { background: rgba(79,110,247,0.04); }
 }
+.cronologia-dettaglio.hidden { display: none; }
+.cronologia-row.expanded { background: rgba(79,110,247,0.04); }
+.btn-espandi { font-size: 0.75rem; white-space: nowrap; }
+.profilo-card {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 1rem; padding: 0.6rem 0; border-bottom: 1px solid #e5e7eb;
+}
+.profilo-card:last-child { border-bottom: none; }
+.profilo-card-info { flex: 1; min-width: 0; }
+.profilo-card-info .nome { font-weight: 600; font-size: 0.88rem; }
+.profilo-card-info .meta { font-size: 0.78rem; color: var(--grigio-testo); }
+.profilo-card-actions { display: flex; gap: 0.4rem; flex-shrink: 0; }
 </style>
 
 <div class="page-header" style="text-align:center;">
@@ -150,43 +162,6 @@
 
 <!-- ═══════════════ BOX PROGRESSO / RIEPILOGO (sotto la griglia) ═══════════════ -->
 
-<!-- Box riepilogo risultati ricerca automatica -->
-<div id="auto-risultato" class="hidden" style="margin-top:1.5rem;padding:1rem 1.25rem;max-width:1100px;margin-left:auto;margin-right:auto;
-     background:var(--azzurro-light);border-radius:var(--radius);border:1px solid #c5deff;">
-    <h4 style="margin-bottom:0.75rem;color:var(--azzurro);">Riepilogo ricerca</h4>
-    <div style="display:flex;gap:1.5rem;flex-wrap:wrap;margin-bottom:0.5rem;">
-        <div style="text-align:center;">
-            <span style="font-size:1.5rem;font-weight:700;" id="auto-trovati-apify">—</span>
-            <div style="font-size:0.78rem;color:var(--grigio-testo);">Trovati da Apify</div>
-        </div>
-        <div style="text-align:center;">
-            <span style="font-size:1.5rem;font-weight:700;color:#2563eb;" id="auto-filtrati">—</span>
-            <div style="font-size:0.78rem;color:var(--grigio-testo);">Passati il filtro</div>
-        </div>
-        <div style="text-align:center;">
-            <span style="font-size:1.5rem;font-weight:700;color:#d97706;" id="auto-presenti">—</span>
-            <div style="font-size:0.78rem;color:var(--grigio-testo);">Già presenti</div>
-        </div>
-        <div style="text-align:center;">
-            <span style="font-size:1.5rem;font-weight:700;color:#16a34a;" id="auto-importati">—</span>
-            <div style="font-size:0.78rem;color:var(--grigio-testo);">Importati</div>
-        </div>
-        <div style="text-align:center;">
-            <span style="font-size:1.5rem;font-weight:700;" id="auto-valutati">—</span>
-            <div style="font-size:0.78rem;color:var(--grigio-testo);">Valutati AI</div>
-        </div>
-        <div style="text-align:center;">
-            <span style="font-size:1.5rem;font-weight:700;" id="auto-punteggio">—</span>
-            <div style="font-size:0.78rem;color:var(--grigio-testo);">Punteggio medio</div>
-        </div>
-    </div>
-    <div id="auto-motivi" class="hidden"
-         style="margin-top:0.5rem;font-size:0.82rem;color:#dc2626;"></div>
-    <div style="margin-top:0.75rem;">
-        <a href="/pipeline" class="btn btn-primary btn-sm">&#9776; Vai alla Pipeline</a>
-    </div>
-</div>
-
 <!-- Box progresso ricerca asincrona -->
 <div id="auto-progresso" class="hidden" style="margin-top:1.5rem;padding:1rem 1.25rem;max-width:1100px;margin-left:auto;margin-right:auto;
      background:#f0f7ff;border-radius:var(--radius);border:1px solid #bfdbfe;">
@@ -284,13 +259,13 @@
                     <th>Importati</th>
                     <th>Punteggio Medio</th>
                     <th>Stato</th>
+                    <th></th>
                 </tr>
             </thead>
             <tbody id="cronologia-tbody">
                 {% for r in cronologia %}
-                <tr style="cursor:pointer;"
-                    onclick="window.location.href='/ricerca/dettaglio/{{ r.id }}'"
-                    title="Clicca per vedere i candidati trovati">
+                <tr class="cronologia-row" data-ricerca-id="{{ r.id }}" style="cursor:pointer;"
+                    onclick="toggleDettaglio({{ r.id }}, this)">
                     <td style="white-space:nowrap;">
                         <div>{{ r.data_ricerca[:10] }}</div>
                         <div class="candidato-meta">{{ r.data_ricerca[11:16] }}</div>
@@ -318,7 +293,7 @@
                         <span class="score-badge score-badge-{{ 'alto' if r.punteggio_medio >= 8 else ('medio' if r.punteggio_medio >= 5 else 'basso') }}">
                             {{ '%.1f'|format(r.punteggio_medio) }}/10
                         </span>
-                        {% else %}—{% endif %}
+                        {% else %}&mdash;{% endif %}
                     </td>
                     <td>
                         {% if r.stato == 'completata' %}
@@ -328,6 +303,22 @@
                         {% else %}
                         <span style="color:#dc2626;font-size:0.85rem;">&#10005; Errore</span>
                         {% endif %}
+                    </td>
+                    <td>
+                        <button class="btn btn-outline btn-xs btn-espandi" data-id="{{ r.id }}"
+                                onclick="event.stopPropagation(); toggleDettaglio({{ r.id }}, this.closest('tr'))">
+                            &#9660; Vedi profili
+                        </button>
+                    </td>
+                </tr>
+                <tr class="cronologia-dettaglio hidden" id="dettaglio-{{ r.id }}">
+                    <td colspan="8" style="padding:0;">
+                        <div class="profili-ricerca-list" id="profili-list-{{ r.id }}"
+                             style="padding:1rem;background:#f8fafc;border-top:1px solid #e5e7eb;">
+                            <div style="text-align:center;color:var(--grigio-testo);font-size:0.85rem;">
+                                <span class="spinner"></span> Caricamento profili...
+                            </div>
+                        </div>
                     </td>
                 </tr>
                 {% endfor %}
@@ -346,6 +337,7 @@
                     <th>Importati</th>
                     <th>Punteggio Medio</th>
                     <th>Stato</th>
+                    <th></th>
                 </tr>
             </thead>
             <tbody id="cronologia-tbody"></tbody>
@@ -422,7 +414,6 @@ function ricercaAutomatica(profiloId, btn) {
     _btnInCorso = btn;
     _btnLabelInCorso = btn.innerHTML;
     btn.innerHTML = '<span class="spinner"></span> Avvio ricerca...';
-    document.getElementById('auto-risultato').classList.add('hidden');
     document.getElementById('auto-progresso').classList.remove('hidden');
     document.getElementById('auto-step-msg').textContent = 'Preparazione ricerca...';
     document.getElementById('auto-step-msg').style.color = 'var(--blu-scuro)';
@@ -471,8 +462,9 @@ function _avviaPolling(jobId) {
                 _ripristinaBtn();
                 document.getElementById('auto-progresso').classList.add('hidden');
                 var ris = data.risultati || {};
-                _mostraRiepilogo(ris);
+                var ricId = ris.ricerca_id || data.ricerca_id || null;
                 aggiungiRigaCronologia({
+                    ricerca_id: ricId,
                     totale: ris.trovati_apify || ris.filtrati || 0,
                     nuovi: ris.importati || 0,
                     punteggio_medio: ris.punteggio_medio || null,
@@ -504,43 +496,6 @@ function _ripristinaBtn() {
     _btnLabelInCorso = null;
 }
 
-function _mostraRiepilogo(data) {
-    document.getElementById('auto-trovati-apify').textContent = data.trovati_apify ?? '—';
-    document.getElementById('auto-filtrati').textContent      = data.filtrati ?? '—';
-    document.getElementById('auto-presenti').textContent      = data.gia_presenti ?? '0';
-    document.getElementById('auto-importati').textContent     = data.importati ?? '—';
-    document.getElementById('auto-valutati').textContent      = data.valutati ?? '—';
-    document.getElementById('auto-punteggio').textContent     = data.punteggio_medio != null
-        ? data.punteggio_medio + '/10' : '—';
-
-    var motiviEl = document.getElementById('auto-motivi');
-    var righe = [];
-
-    // Motivi scarto qualità
-    if (data.scartati_qualita > 0 && data.motivi_qualita && Object.keys(data.motivi_qualita).length) {
-        righe.push('Scartati qualità (' + data.scartati_qualita + '): ' +
-            Object.entries(data.motivi_qualita)
-                .map(function(e) { return e[0] + ' (' + e[1] + ')'; }).join(' · '));
-    }
-    // Motivi scarto filtro locale
-    if (data.scartati_filtro > 0 && data.motivi_filtro && Object.keys(data.motivi_filtro).length) {
-        righe.push('Scartati filtro (' + data.scartati_filtro + '): ' +
-            Object.entries(data.motivi_filtro)
-                .map(function(e) { return e[0] + ' (' + e[1] + ')'; }).join(' · '));
-    }
-    // AI limit
-    if (data.importati > data.valutati) {
-        righe.push('Analisi AI sui primi 10. I restanti ' +
-            (data.importati - data.valutati) + ' sono in pipeline con stato "Da valutare".');
-    }
-    if (righe.length) {
-        motiviEl.innerHTML = righe.map(function(r) { return '• ' + r; }).join('<br>');
-        motiviEl.classList.remove('hidden');
-    } else {
-        motiviEl.classList.add('hidden');
-    }
-    document.getElementById('auto-risultato').classList.remove('hidden');
-}
 
 
 /* ------------------------------------------------------------------ */
@@ -600,6 +555,7 @@ function cercaFigure() {
         renderRisultati(data.persone, data.totale, data.tentativi_fatti || 1, data.messaggio || '', data.source_summary || '');
         var nuovi = data.persone.filter(function(p) { return !p.gia_in_pipeline; });
         aggiungiRigaCronologia({
+            ricerca_id: data.ricerca_id || null,
             totale: data.totale || data.persone.length,
             nuovi: nuovi.length,
             punteggio_medio: null,
@@ -749,6 +705,7 @@ function cercaPerUrl() {
         }
         renderRisultati(data.persone, data.totale, 1, data.messaggio || '', data.source_summary || '');
         aggiungiRigaCronologia({
+            ricerca_id: data.ricerca_id || null,
             totale: data.totale || data.persone.length,
             nuovi: data.persone.filter(function(p) { return !p.gia_in_pipeline; }).length,
             punteggio_medio: null,
@@ -918,10 +875,9 @@ function avviaAnalisiDiretta(persona) {
 }
 
 /* ------------------------------------------------------------------ */
-/* Cronologia — riga appena fatta                                      */
+/* Cronologia — riga appena fatta + espandibile                        */
 /* ------------------------------------------------------------------ */
 function aggiungiRigaCronologia(data) {
-    // Se la tabella era nascosta (empty state), mostrala
     var wrap = document.getElementById('cronologia-table-wrap');
     if (wrap) { wrap.style.display = ''; }
     var empty = document.getElementById('cronologia-empty');
@@ -933,9 +889,13 @@ function aggiungiRigaCronologia(data) {
     var oggi = new Date();
     var dataStr = oggi.toLocaleDateString('it-IT') + '\n' +
                   oggi.toTimeString().slice(0,5);
+    var rid = data.ricerca_id || ('new_' + Date.now());
 
     var riga = document.createElement('tr');
-    riga.className = 'ricerca-appena-fatta';
+    riga.className = 'ricerca-appena-fatta cronologia-row';
+    riga.setAttribute('data-ricerca-id', rid);
+    riga.style.cursor = 'pointer';
+    riga.onclick = function() { toggleDettaglio(rid, riga); };
     riga.innerHTML =
         '<td style="white-space:pre-line;">' + dataStr + '</td>' +
         '<td><span class="badge badge-profilo-a">Profilo attivo</span></td>' +
@@ -943,8 +903,16 @@ function aggiungiRigaCronologia(data) {
         '<td><strong>' + (data.totale || 0) + '</strong></td>' +
         '<td>' + (data.nuovi || 0) + '</td>' +
         '<td>' + (data.punteggio_medio ? data.punteggio_medio + '/10' : '&mdash;') + '</td>' +
-        '<td><span style="color:#10b981;">&#10003; Completata</span></td>';
+        '<td><span style="color:#10b981;">&#10003; Completata</span></td>' +
+        '<td><button class="btn btn-outline btn-xs btn-espandi" onclick="event.stopPropagation(); toggleDettaglio(\'' + rid + '\', this.closest(\'tr\'))">&#9660; Vedi profili</button></td>';
     tbody.insertBefore(riga, tbody.firstChild);
+
+    // Riga dettaglio espandibile
+    var dettaglio = document.createElement('tr');
+    dettaglio.className = 'cronologia-dettaglio hidden';
+    dettaglio.id = 'dettaglio-' + rid;
+    dettaglio.innerHTML = '<td colspan="8" style="padding:0;"><div class="profili-ricerca-list" id="profili-list-' + rid + '" style="padding:1rem;background:#f8fafc;border-top:1px solid #e5e7eb;"></div></td>';
+    tbody.insertBefore(dettaglio, riga.nextSibling);
 
     // Banner
     var banner = document.getElementById('ricerca-recente-banner');
@@ -953,11 +921,170 @@ function aggiungiRigaCronologia(data) {
         setTimeout(function() { banner.style.display = 'none'; }, 5000);
     }
 
-    // Scroll alla cronologia dopo 1.5s
+    // Scroll + auto-expand dopo 1.5s
     setTimeout(function() {
         var sez = document.getElementById('cronologia-section');
         if (sez) sez.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        // Auto-expand la riga appena aggiunta
+        if (data.ricerca_id) {
+            toggleDettaglio(rid, riga);
+        }
     }, 1500);
+}
+
+/* ------------------------------------------------------------------ */
+/* Cronologia — espandi/comprimi dettaglio                             */
+/* ------------------------------------------------------------------ */
+var _profiliCache = {};
+
+function toggleDettaglio(ricercaId, rowEl) {
+    var dettaglio = document.getElementById('dettaglio-' + ricercaId);
+    if (!dettaglio) return;
+
+    var isHidden = dettaglio.classList.contains('hidden');
+    // Chiudi tutti gli altri
+    document.querySelectorAll('.cronologia-dettaglio').forEach(function(d) { d.classList.add('hidden'); });
+    document.querySelectorAll('.cronologia-row').forEach(function(r) { r.classList.remove('expanded'); });
+    document.querySelectorAll('.btn-espandi').forEach(function(b) { b.innerHTML = '&#9660; Vedi profili'; });
+
+    if (isHidden) {
+        dettaglio.classList.remove('hidden');
+        if (rowEl) rowEl.classList.add('expanded');
+        var btn = rowEl ? rowEl.querySelector('.btn-espandi') : null;
+        if (btn) btn.innerHTML = '&#9650; Chiudi';
+        caricaProfiliRicerca(ricercaId);
+    }
+}
+
+function caricaProfiliRicerca(ricercaId) {
+    var container = document.getElementById('profili-list-' + ricercaId);
+    if (!container) return;
+
+    // Se è un ID temporaneo (new_...) non abbiamo dati
+    if (String(ricercaId).startsWith('new_')) {
+        container.innerHTML = '<div style="text-align:center;color:var(--grigio-testo);font-size:0.85rem;padding:1rem;">Ricarica la pagina per vedere i profili di questa ricerca.</div>';
+        return;
+    }
+
+    if (_profiliCache[ricercaId]) {
+        _renderProfiliRicerca(container, _profiliCache[ricercaId], ricercaId);
+        return;
+    }
+
+    container.innerHTML = '<div style="text-align:center;color:var(--grigio-testo);font-size:0.85rem;"><span class="spinner"></span> Caricamento profili...</div>';
+
+    fetch('/ricerca/profili/' + ricercaId)
+        .then(function(r) { return r.json(); })
+        .then(function(profili) {
+            _profiliCache[ricercaId] = profili;
+            _renderProfiliRicerca(container, profili, ricercaId);
+        })
+        .catch(function(e) {
+            container.innerHTML = '<div style="color:#dc2626;font-size:0.85rem;">Errore caricamento: ' + e + '</div>';
+        });
+}
+
+function _renderProfiliRicerca(container, profili, ricercaId) {
+    if (!profili || profili.length === 0) {
+        container.innerHTML = '<div style="text-align:center;color:var(--grigio-testo);font-size:0.85rem;padding:1rem;">Nessun profilo trovato per questa ricerca.</div>';
+        return;
+    }
+
+    var html = '';
+    profili.forEach(function(p) {
+        var nome = [p.nome, p.cognome].filter(Boolean).join(' ') || '—';
+        var punteggio = p.punteggio || p.punteggio_ai;
+        var inPipeline = !!p.candidato_id;
+        var analizzato = !!punteggio;
+        var sourceBadge = _sourceBadgeHtml(p.source || 'linkedin');
+
+        var scoreHtml = '';
+        if (analizzato) {
+            var scoreClass = punteggio >= 8 ? 'alto' : (punteggio >= 5 ? 'medio' : 'basso');
+            scoreHtml = '<span class="score-badge score-badge-' + scoreClass + '">' + punteggio + '/10</span>';
+        } else {
+            scoreHtml = '<span style="font-size:0.78rem;color:var(--grigio-testo);">Non analizzato</span>';
+        }
+
+        var azioniHtml = '';
+        if (inPipeline) {
+            azioniHtml = '<span style="font-size:0.75rem;padding:2px 8px;border-radius:10px;background:#dcfce7;color:#16a34a;font-weight:600;">In pipeline</span>';
+        } else if (analizzato) {
+            azioniHtml = '<button class="btn btn-primary btn-xs" onclick="event.stopPropagation(); aggiungiAPipeline(' + p.id + ', this)">&#43; Pipeline</button>';
+        } else {
+            azioniHtml = '<button class="btn btn-primary btn-xs" onclick="event.stopPropagation(); avviaAnalisiDaRicerca(' + p.id + ', this)">' +
+                '&#11088; Analizza</button>' +
+                '<button class="btn btn-outline btn-xs" disabled title="Analizza prima" style="opacity:0.5;cursor:not-allowed;">&#43; Pipeline</button>';
+        }
+
+        var linkedinHtml = p.linkedin_url
+            ? '<a href="' + escHtml(p.linkedin_url) + '" target="_blank" class="btn btn-outline btn-xs" onclick="event.stopPropagation();">LI</a>'
+            : '';
+
+        html += '<div class="profilo-card">' +
+            '<div class="profilo-card-info">' +
+                '<div class="nome">' + escHtml(nome) + '</div>' +
+                '<div class="meta">' + escHtml(p.ruolo || '') + (p.azienda ? ' — ' + escHtml(p.azienda) : '') +
+                    (p.location ? ' · ' + escHtml(p.location) : '') + '</div>' +
+                '<div style="margin-top:3px;">' + sourceBadge + ' ' + scoreHtml + '</div>' +
+            '</div>' +
+            '<div class="profilo-card-actions">' + linkedinHtml + ' ' + azioniHtml + '</div>' +
+        '</div>';
+    });
+
+    container.innerHTML = html;
+}
+
+function aggiungiAPipeline(profiloRicercaId, btn) {
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>';
+    fetch('/ricerca/aggiungi-pipeline', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({profilo_ricerca_id: profiloRicercaId})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.ok || data.candidato_id) {
+            btn.outerHTML = '<span style="font-size:0.75rem;padding:2px 8px;border-radius:10px;background:#dcfce7;color:#16a34a;font-weight:600;">In pipeline</span>';
+            // Invalida cache
+            _profiliCache = {};
+        } else {
+            btn.disabled = false;
+            btn.textContent = '+ Pipeline';
+            alert(data.errore || 'Errore');
+        }
+    })
+    .catch(function(e) {
+        btn.disabled = false;
+        btn.textContent = '+ Pipeline';
+        alert('Errore: ' + e);
+    });
+}
+
+function avviaAnalisiDaRicerca(profiloRicercaId, btn) {
+    // Carica dati profilo e avvia analisi AI
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span>';
+    fetch('/ricerca/profili-singolo/' + profiloRicercaId)
+        .then(function(r) { return r.json(); })
+        .then(function(p) {
+            if (p.errore) { alert(p.errore); btn.disabled = false; btn.innerHTML = '&#11088; Analizza'; return; }
+            var persona = {
+                nome: p.nome, cognome: p.cognome, ruolo: p.ruolo,
+                azienda: p.azienda, location: p.location,
+                linkedin: p.linkedin_url, sommario: '',
+                profilo_ricerca_id: p.id
+            };
+            avviaAnalisiDiretta(persona);
+            btn.disabled = false;
+            btn.innerHTML = '&#11088; Analizza';
+        })
+        .catch(function(e) {
+            btn.disabled = false;
+            btn.innerHTML = '&#11088; Analizza';
+            alert('Errore: ' + e);
+        });
 }
 
 
