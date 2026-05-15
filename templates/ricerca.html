@@ -18,6 +18,16 @@
 .ricerca-grid .form-label { font-size: 0.82rem; }
 .ricerca-grid .form-input,
 .ricerca-grid .form-select { font-size: 0.85rem; padding: 0.45rem 0.65rem; }
+
+.ricerca-appena-fatta {
+    background: rgba(79, 110, 247, 0.08);
+    border-left: 3px solid #4F6EF7;
+    animation: highlightFade 3s ease forwards;
+}
+@keyframes highlightFade {
+    0%   { background: rgba(79,110,247,0.15); }
+    100% { background: rgba(79,110,247,0.04); }
+}
 </style>
 
 <div class="page-header" style="text-align:center;">
@@ -247,14 +257,24 @@
 <!-- Panel analisi inline (appare dopo aver cliccato "Analizza") -->
 
 <!-- Cronologia Ricerche -->
-<div class="card" style="margin-top:2rem;max-width:1100px;margin-left:auto;margin-right:auto;">
+<div id="cronologia-section" class="card" style="margin-top:2rem;max-width:1100px;margin-left:auto;margin-right:auto;">
     <div class="card-header">
         <h3>&#128203; Cronologia Ricerche</h3>
         <a href="/ricerca/export_csv" class="btn btn-outline btn-sm">&#8595; Esporta CSV</a>
     </div>
+    <div id="ricerca-recente-banner" style="display:none;
+        background:rgba(79,110,247,0.08);
+        border:1px solid rgba(79,110,247,0.2);
+        border-radius:8px;
+        padding:10px 16px;
+        margin:0 1rem 12px;
+        font-size:0.85rem;
+        color:#4F6EF7;">
+        &uarr; La ricerca appena completata è evidenziata in cima
+    </div>
     {% if cronologia %}
     <div class="table-responsive">
-        <table class="data-table">
+        <table class="data-table" id="cronologia-table">
             <thead>
                 <tr>
                     <th>Data</th>
@@ -266,7 +286,7 @@
                     <th>Stato</th>
                 </tr>
             </thead>
-            <tbody>
+            <tbody id="cronologia-tbody">
                 {% for r in cronologia %}
                 <tr style="cursor:pointer;"
                     onclick="window.location.href='/ricerca/dettaglio/{{ r.id }}'"
@@ -315,7 +335,23 @@
         </table>
     </div>
     {% else %}
-    <div class="card-body">
+    <div class="table-responsive" id="cronologia-table-wrap" style="display:none;">
+        <table class="data-table" id="cronologia-table">
+            <thead>
+                <tr>
+                    <th>Data</th>
+                    <th>Tipo</th>
+                    <th>Fonte</th>
+                    <th>Trovati</th>
+                    <th>Importati</th>
+                    <th>Punteggio Medio</th>
+                    <th>Stato</th>
+                </tr>
+            </thead>
+            <tbody id="cronologia-tbody"></tbody>
+        </table>
+    </div>
+    <div class="card-body" id="cronologia-empty">
         <div class="empty-state" style="padding:2rem;">
             <div class="empty-icon">&#128269;</div>
             <p>Nessuna ricerca ancora. Le ricerche automatiche e gli inserimenti manuali appariranno qui.</p>
@@ -434,7 +470,14 @@ function _avviaPolling(jobId) {
                 _pollingTimer = null;
                 _ripristinaBtn();
                 document.getElementById('auto-progresso').classList.add('hidden');
-                _mostraRiepilogo(data.risultati || {});
+                var ris = data.risultati || {};
+                _mostraRiepilogo(ris);
+                aggiungiRigaCronologia({
+                    totale: ris.trovati_apify || ris.filtrati || 0,
+                    nuovi: ris.importati || 0,
+                    punteggio_medio: ris.punteggio_medio || null,
+                    fonte: '&#9889; Automatica'
+                });
             } else if (data.status === 'errore') {
                 clearInterval(_pollingTimer);
                 _pollingTimer = null;
@@ -555,6 +598,13 @@ function cercaFigure() {
             return;
         }
         renderRisultati(data.persone, data.totale, data.tentativi_fatti || 1, data.messaggio || '', data.source_summary || '');
+        var nuovi = data.persone.filter(function(p) { return !p.gia_in_pipeline; });
+        aggiungiRigaCronologia({
+            totale: data.totale || data.persone.length,
+            nuovi: nuovi.length,
+            punteggio_medio: null,
+            fonte: '&#128203; Manuale'
+        });
     })
     .catch(function(err) {
         btn.disabled = false;
@@ -698,6 +748,12 @@ function cercaPerUrl() {
             return;
         }
         renderRisultati(data.persone, data.totale, 1, data.messaggio || '', data.source_summary || '');
+        aggiungiRigaCronologia({
+            totale: data.totale || data.persone.length,
+            nuovi: data.persone.filter(function(p) { return !p.gia_in_pipeline; }).length,
+            punteggio_medio: null,
+            fonte: '&#128100; LinkedIn Direct'
+        });
     })
     .catch(function(err) {
         btn.disabled = false;
@@ -860,6 +916,50 @@ function avviaAnalisiDiretta(persona) {
         document.getElementById('modal-report-status').textContent = 'Errore di connessione: ' + err;
     });
 }
+
+/* ------------------------------------------------------------------ */
+/* Cronologia — riga appena fatta                                      */
+/* ------------------------------------------------------------------ */
+function aggiungiRigaCronologia(data) {
+    // Se la tabella era nascosta (empty state), mostrala
+    var wrap = document.getElementById('cronologia-table-wrap');
+    if (wrap) { wrap.style.display = ''; }
+    var empty = document.getElementById('cronologia-empty');
+    if (empty) { empty.style.display = 'none'; }
+
+    var tbody = document.getElementById('cronologia-tbody');
+    if (!tbody) return;
+
+    var oggi = new Date();
+    var dataStr = oggi.toLocaleDateString('it-IT') + '\n' +
+                  oggi.toTimeString().slice(0,5);
+
+    var riga = document.createElement('tr');
+    riga.className = 'ricerca-appena-fatta';
+    riga.innerHTML =
+        '<td style="white-space:pre-line;">' + dataStr + '</td>' +
+        '<td><span class="badge badge-profilo-a">Profilo attivo</span></td>' +
+        '<td>' + (data.fonte || 'Manuale') + '</td>' +
+        '<td><strong>' + (data.totale || 0) + '</strong></td>' +
+        '<td>' + (data.nuovi || 0) + '</td>' +
+        '<td>' + (data.punteggio_medio ? data.punteggio_medio + '/10' : '&mdash;') + '</td>' +
+        '<td><span style="color:#10b981;">&#10003; Completata</span></td>';
+    tbody.insertBefore(riga, tbody.firstChild);
+
+    // Banner
+    var banner = document.getElementById('ricerca-recente-banner');
+    if (banner) {
+        banner.style.display = '';
+        setTimeout(function() { banner.style.display = 'none'; }, 5000);
+    }
+
+    // Scroll alla cronologia dopo 1.5s
+    setTimeout(function() {
+        var sez = document.getElementById('cronologia-section');
+        if (sez) sez.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 1500);
+}
+
 
 function _salvaAnalisiRicerca(dati, p) {
     var testo = [
