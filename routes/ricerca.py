@@ -1219,13 +1219,15 @@ def profili_ricerca(ricerca_id):
     profili = db.execute("""
         SELECT pr.id, pr.nome, pr.cognome, pr.ruolo, pr.azienda,
                pr.location, pr.linkedin_url, pr.source, pr.candidato_id,
-               c.punteggio, c.stato, c.analisi,
-               c.messaggio_outreach
+               COALESCE(c.punteggio, pr.punteggio) AS punteggio,
+               c.stato,
+               COALESCE(c.analisi, pr.analisi) AS analisi,
+               COALESCE(c.messaggio_outreach, pr.messaggio_outreach) AS messaggio_outreach
         FROM profili_ricerca pr
         LEFT JOIN candidati c ON c.id = pr.candidato_id
             AND c.organizzazione_id = ?
         WHERE pr.ricerca_id = ?
-        ORDER BY c.punteggio DESC NULLS LAST, pr.id
+        ORDER BY COALESCE(c.punteggio, pr.punteggio) DESC NULLS LAST, pr.id
     """, (org_id, ricerca_id)).fetchall()
     db.close()
     return jsonify([dict(p) for p in profili])
@@ -1276,13 +1278,18 @@ def aggiungi_pipeline():
         return jsonify({"errore": "Già in pipeline", "candidato_id": cand_id}), 409
 
     tipo_profilo = "A"
+    ha_analisi = bool(pr.get("punteggio"))
+    stato = "Da contattare" if ha_analisi else "Da valutare"
     cur = db.execute(
         """INSERT INTO candidati
            (nome, cognome, ruolo_attuale, azienda, profilo_linkedin,
-            tipo_profilo, stato, ricerca_id, organizzazione_id)
-           VALUES (?, ?, ?, ?, ?, ?, 'Da valutare', ?, ?)""",
+            tipo_profilo, stato, punteggio, analisi, spunti, messaggio_outreach,
+            ricerca_id, organizzazione_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (pr["nome"], pr["cognome"], pr["ruolo"], pr["azienda"],
-         pr["linkedin_url"], tipo_profilo, pr["ricerca_id"], org_id)
+         pr["linkedin_url"], tipo_profilo, stato,
+         pr.get("punteggio"), pr.get("analisi"), pr.get("spunti"), pr.get("messaggio_outreach"),
+         pr["ricerca_id"], org_id)
     )
     candidato_id = cur.lastrowid
     db.execute("UPDATE profili_ricerca SET candidato_id = ? WHERE id = ?", (candidato_id, profilo_ricerca_id))
@@ -1295,11 +1302,11 @@ def aggiungi_pipeline():
 @ricerca_bp.route("/ricerca/analizza_candidato", methods=["POST"])
 def analizza_candidato():
     """
-    Esegue analisi AI su un candidato. Gestisce tre casi:
-    1. candidato_id → candidato già in pipeline (re-analisi o prima analisi)
-    2. profilo_ricerca_id → profilo salvato in profili_ricerca ma non ancora in pipeline
-    3. dati testuali diretti → candidato completamente nuovo
-    Salva automaticamente in candidati (pipeline) e valutazioni (cronologia).
+    Esegue analisi AI su un profilo. Gestisce tre casi:
+    1. candidato_id → candidato già in pipeline (re-analisi, aggiorna candidati)
+    2. profilo_ricerca_id → profilo in profili_ricerca, salva analisi lì
+    3. dati testuali diretti → crea record in profili_ricerca con analisi
+    NON inserisce mai in candidati — il profilo va in pipeline solo via /aggiungi-pipeline.
     """
     print(f"=== ROUTE HIT: {request.path} ===")
     dati = request.get_json()
@@ -1418,27 +1425,8 @@ def analizza_candidato():
     messaggio_str = _s(risultato.get("messaggio_outreach"), "") or ""
     anteprima     = testo_profilo[:120].replace("\n", " ").strip()
 
-    e_candidato_nuovo = not candidato_id  # True se stiamo creando un nuovo record
-
-    # Deduplicazione: blocca inserimento se il profilo è già in pipeline
-    if e_candidato_nuovo:
-        profilo_check = {
-            "nome": nome, "cognome": cognome,
-            "azienda": azienda_ai or azienda,
-            "ruolo": ruolo_ai or ruolo,
-            "linkedin": linkedin,
-        }
-        dup, motivo_dup, cand_id_esistente = is_duplicate(db, profilo_check)
-        if dup:
-            db.close()
-            return jsonify({
-                "duplicato": True,
-                "motivo": motivo_dup,
-                "candidato_id": cand_id_esistente,
-            }), 409
-
     if candidato_id:
-        # Aggiorna candidato esistente con analisi e stato pipeline
+        # Caso 1: candidato già in pipeline → aggiorna analisi su candidati
         db.execute(
             """UPDATE candidati SET
                punteggio=?, analisi=?, spunti=?, messaggio_outreach=?,
@@ -1446,32 +1434,38 @@ def analizza_candidato():
                WHERE id=? AND organizzazione_id=?""",
             (punteggio, analisi_str, spunti_json, messaggio_str, candidato_id, org_id)
         )
+        if dati_arricchiti_json:
+            db.execute(
+                "UPDATE candidati SET dati_arricchiti = ? WHERE id = ? AND organizzazione_id = ?",
+                (dati_arricchiti_json, candidato_id, org_id)
+            )
     else:
-        # Crea nuovo candidato direttamente in pipeline come "Da contattare"
-        _gestore = "Admin" if tipo_profilo == "A" else ("Recruiter" if tipo_profilo == "B" else "Non assegnato")
-        cur = db.execute(
-            """INSERT INTO candidati
-               (nome, cognome, ruolo_attuale, azienda, profilo_linkedin,
-                tipo_profilo, stato, punteggio, analisi, spunti,
-                messaggio_outreach, ricerca_id, gestore, organizzazione_id)
-               VALUES (?, ?, ?, ?, ?, ?, 'Da contattare', ?, ?, ?, ?, ?, ?, ?)""",
-            (nome, cognome, ruolo_ai, azienda_ai, linkedin,
-             tipo_profilo, punteggio, analisi_str,
-             spunti_json, messaggio_str, ricerca_id, _gestore, org_id)
-        )
-        candidato_id = cur.lastrowid
-
-    # Salva dati arricchiti se presenti (analisi SSE con EnrichLayer)
-    if dati_arricchiti_json and candidato_id:
-        db.execute(
-            "UPDATE candidati SET dati_arricchiti = ? WHERE id = ? AND organizzazione_id = ?",
-            (dati_arricchiti_json, candidato_id, org_id)
-        )
+        # Caso 2/3: profilo NON ancora in pipeline → salva analisi solo su profili_ricerca
+        # Il profilo andrà in candidati SOLO quando l'utente clicca "+ Pipeline"
+        if profilo_ricerca_id:
+            db.execute(
+                """UPDATE profili_ricerca SET
+                   punteggio=?, analisi=?, spunti=?, messaggio_outreach=?
+                   WHERE id=?""",
+                (punteggio, analisi_str, spunti_json, messaggio_str, profilo_ricerca_id)
+            )
+        else:
+            # Caso 3: dati diretti senza profilo_ricerca — crea record in profili_ricerca
+            cur_pr = db.execute(
+                """INSERT INTO profili_ricerca
+                   (ricerca_id, nome, cognome, ruolo, azienda, linkedin_url,
+                    testo_profilo, punteggio, analisi, spunti, messaggio_outreach,
+                    organizzazione_id)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (ricerca_id, nome, cognome, ruolo, azienda, linkedin,
+                 testo_profilo, punteggio, analisi_str, spunti_json, messaggio_str, org_id)
+            )
+            profilo_ricerca_id = cur_pr.lastrowid
 
     # Fonte nella cronologia: "ricerca_[id]" se viene da una ricerca, "ricerca_manuale" altrimenti
     fonte = f"ricerca_{ricerca_id}" if ricerca_id else "ricerca_manuale"
 
-    # Salva sempre nella cronologia valutazioni
+    # Salva nella cronologia valutazioni
     db.execute(
         """INSERT INTO valutazioni
            (nome_contatto, ruolo_attuale, azienda, tipo_profilo,
@@ -1482,35 +1476,11 @@ def analizza_candidato():
          punteggio, analisi_str, spunti_json, messaggio_str, candidato_id, fonte, org_id)
     )
 
-    # Incrementa profili_importati solo per nuovi candidati, non per ri-analisi
-    if ricerca_id and e_candidato_nuovo:
-        db.execute(
-            """UPDATE ricerche_automatiche
-               SET profili_importati = COALESCE(profili_importati, 0) + 1
-               WHERE id = ?""",
-            (ricerca_id,)
-        )
-
-    # Collega profili_ricerca al candidato appena creato/aggiornato
-    if profilo_ricerca_id:
-        db.execute(
-            "UPDATE profili_ricerca SET candidato_id = ? WHERE id = ?",
-            (candidato_id, profilo_ricerca_id)
-        )
-    elif ricerca_id and e_candidato_nuovo:
-        # Per nuovi candidati senza profilo_ricerca_id, cerca per corrispondenza nome+ricerca
-        db.execute(
-            """UPDATE profili_ricerca SET candidato_id = ?
-               WHERE ricerca_id = ? AND candidato_id IS NULL
-               AND nome = ? AND cognome = ?""",
-            (candidato_id, ricerca_id, nome, cognome)
-        )
-
     db.commit()
     db.close()
     _incrementa_analisi(org_id)
 
-    return jsonify({**risultato, "candidato_id": candidato_id})
+    return jsonify({**risultato, "candidato_id": candidato_id, "profilo_ricerca_id": profilo_ricerca_id})
 
 
 @ricerca_bp.route("/ricerca/dettaglio/<int:ricerca_id>")
@@ -1537,13 +1507,15 @@ def dettaglio_ricerca(ricerca_id):
                   pr.location,    pr.linkedin_url,
                   pr.testo_profilo,
                   pr.candidato_id,
-                  c.punteggio,    c.analisi,
-                  c.spunti,       c.messaggio_outreach,
+                  COALESCE(c.punteggio, pr.punteggio)             AS punteggio,
+                  COALESCE(c.analisi, pr.analisi)                 AS analisi,
+                  COALESCE(c.spunti, pr.spunti)                   AS spunti,
+                  COALESCE(c.messaggio_outreach, pr.messaggio_outreach) AS messaggio_outreach,
                   c.stato
            FROM profili_ricerca pr
            LEFT JOIN candidati c ON pr.candidato_id = c.id
            WHERE pr.ricerca_id = ?
-           ORDER BY c.punteggio DESC NULLS LAST, pr.id""",
+           ORDER BY COALESCE(c.punteggio, pr.punteggio) DESC NULLS LAST, pr.id""",
         (ricerca_id,)
     ).fetchall()
 
