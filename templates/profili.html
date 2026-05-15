@@ -72,6 +72,18 @@
         <div class="modal-body">
             <input type="hidden" id="edit-id">
 
+            <div class="form-group" style="margin-bottom:1rem;background:var(--azzurro-bg, #eef2ff);padding:0.75rem;border-radius:8px;">
+                <label class="form-label">Descrivi il profilo che stai cercando</label>
+                <textarea id="descrizione-libera" class="form-input" rows="3"
+                    placeholder="Es: Cerco recruiter e HR manager che lavorano in aziende con piu di 10 dipendenti, che fanno selezione attiva e potrebbero beneficiare di un tool AI per automatizzare la ricerca candidati"></textarea>
+                <button type="button" onclick="autoCompila()" class="btn btn-secondary" style="margin-top:8px;">
+                    &#10024; Compila automaticamente
+                </button>
+                <div id="autocompila-loading" style="display:none;font-size:0.85rem;color:#6b7280;margin-top:6px;">
+                    Analisi in corso...
+                </div>
+            </div>
+
             <div class="form-group" style="margin-bottom:1rem;">
                 <label class="form-label">Nome profilo *</label>
                 <input type="text" id="edit-nome" class="form-input" placeholder="es. Senior Finance, Tech Junior...">
@@ -178,6 +190,8 @@ function aggiornaScopo() {
 
 function aprireModale(dati) {
     document.getElementById('modal-titolo').textContent = dati ? 'Modifica Profilo' : 'Nuovo Profilo Target';
+    document.getElementById('descrizione-libera').value = '';
+    document.getElementById('autocompila-loading').style.display = 'none';
     document.getElementById('edit-id').value        = dati ? dati.id : '';
     document.getElementById('edit-nome').value      = dati ? (dati.nome || '') : '';
     document.getElementById('edit-descrizione').value = dati ? (dati.descrizione || '') : '';
@@ -265,6 +279,36 @@ function eliminaProfilo(id, nome) {
             else { alert('Errore: ' + (d.errore || 'sconosciuto')); }
         })
         .catch(function(e) { alert('Errore: ' + e); });
+}
+
+async function autoCompila() {
+    var descrizione = document.getElementById('descrizione-libera').value.trim();
+    if (!descrizione) { alert('Inserisci una descrizione prima'); return; }
+    document.getElementById('autocompila-loading').style.display = 'block';
+    try {
+        var res = await fetch('/profili/auto-compila', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({descrizione: descrizione})
+        });
+        var dati = await res.json();
+        if (dati.errore) { alert(dati.errore); return; }
+        if (dati.nome) document.getElementById('edit-nome').value = dati.nome;
+        if (dati.ruoli_target) document.getElementById('edit-ruoli').value = dati.ruoli_target;
+        if (dati.settori) document.getElementById('edit-settori').value = dati.settori;
+        if (dati.anni_esperienza_min) document.getElementById('edit-esp-min').value = dati.anni_esperienza_min;
+        if (dati.keyword_positive) document.getElementById('edit-kw-pos').value = dati.keyword_positive;
+        if (dati.keyword_negative) document.getElementById('edit-kw-neg').value = dati.keyword_negative;
+        if (dati.scopo) {
+            document.getElementById('edit-scopo').value = dati.scopo;
+            aggiornaScopo();
+        }
+        if (dati.scopo_dettaglio) document.getElementById('edit-scopo-dettaglio').value = dati.scopo_dettaglio;
+    } catch(e) {
+        alert('Errore durante la compilazione automatica');
+    } finally {
+        document.getElementById('autocompila-loading').style.display = 'none';
+    }
 }
 </script>
 {% endblock %}

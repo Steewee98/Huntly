@@ -3,9 +3,11 @@ Modulo Profili Target — gestione CRUD dei profili di ricerca configurabili.
 Sostituisce il sistema fisso Profilo A / Profilo B con profili personalizzabili.
 """
 
+import json
+
 from flask import Blueprint, jsonify, render_template, request
 from database import get_db
-from routes.auth import get_org_id
+from routes.auth import get_org_id, login_required
 
 profili_bp = Blueprint("profili", __name__)
 
@@ -115,6 +117,46 @@ def modifica(pid):
     db.commit()
     db.close()
     return jsonify({"ok": True})
+
+
+@profili_bp.route("/profili/auto-compila", methods=["POST"])
+@login_required
+def auto_compila():
+    dati = request.get_json()
+    descrizione = (dati.get("descrizione") or "").strip()
+    if not descrizione:
+        return jsonify({"errore": "Descrizione vuota"}), 400
+
+    prompt = f"""Analizza questa descrizione di un profilo target per una ricerca professionale e estrai i parametri strutturati.
+
+Descrizione: {descrizione}
+
+Restituisci SOLO un JSON valido con questi campi:
+{{
+  "nome": "nome breve del profilo (3-5 parole)",
+  "ruoli_target": "lista ruoli separati da virgola",
+  "settori": "lista settori separati da virgola",
+  "anni_esperienza_min": numero intero (0 se non specificato),
+  "keyword_positive": "keyword rilevanti separate da virgola",
+  "keyword_negative": "keyword da escludere separate da virgola (vuoto se non specificato)",
+  "scopo": "recruiting|sales|partnership|network",
+  "scopo_dettaglio": "descrizione dettagliata dello scopo"
+}}
+
+Sii preciso e conciso. Solo JSON, nessun testo aggiuntivo."""
+
+    import anthropic
+    client = anthropic.Anthropic()
+    response = client.messages.create(
+        model="claude-sonnet-4-5",
+        max_tokens=500,
+        messages=[{"role": "user", "content": prompt}]
+    )
+
+    testo = response.content[0].text.strip()
+    testo = testo.replace('```json', '').replace('```', '').strip()
+    risultato = json.loads(testo)
+    return jsonify(risultato)
 
 
 @profili_bp.route("/profili/<int:pid>", methods=["DELETE"])

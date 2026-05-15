@@ -185,11 +185,28 @@ def analizza_profilo_linkedin(testo_profilo: str, tipo_profilo: str, impostazion
 
     scopo_prompt = _build_scopo_prompt(scopo, scopo_dettaglio)
 
+    # Sezione profilo target esplicita per evitare analisi generiche
+    profilo_target_prompt = ""
+    if impostazioni:
+        profilo_target_prompt = (
+            "\nPROFILO TARGET CERCATO:\n"
+            f"- Scopo: {impostazioni.get('scopo', 'recruiting')}\n"
+            f"- Dettaglio scopo: {impostazioni.get('scopo_dettaglio', '')}\n"
+            f"- Ruoli cercati: {impostazioni.get('ruoli_target', '')}\n"
+            f"- Settori: {impostazioni.get('settori', '')}\n"
+            f"- Anni esperienza minimi: {impostazioni.get('anni_esperienza_min', 0)}\n"
+            f"- Keyword positive: {impostazioni.get('keyword_positive', '')}\n"
+            f"- Keyword negative: {impostazioni.get('keyword_negative', '')}\n\n"
+            "Valuta ESCLUSIVAMENTE quanto questo profilo corrisponde ai criteri sopra.\n"
+            "Non fare riferimento a criteri generici o settori non specificati.\n"
+        )
+
     prompt = (
         "Sei un esperto recruiter e business developer italiano.\n"
         "Analizza il seguente profilo LinkedIn per valutarne la compatibilita con questo target:\n\n"
         f"{descrizione_profilo}{istr_punteggio}\n"
         f"{scopo_prompt}\n"
+        f"{profilo_target_prompt}"
         "PROFILO LINKEDIN:\n"
         f"{testo_profilo}\n\n"
         "Fornisci la tua analisi ESCLUSIVAMENTE nel seguente formato JSON valido, senza testo aggiuntivo:\n"
@@ -351,11 +368,28 @@ def analizza_profilo_linkedin_stream(
 
     scopo_prompt_s = _build_scopo_prompt(scopo_s, scopo_dettaglio_s)
 
+    # Sezione profilo target esplicita per evitare analisi generiche
+    profilo_target_prompt = ""
+    if impostazioni:
+        profilo_target_prompt = (
+            "\nPROFILO TARGET CERCATO:\n"
+            f"- Scopo: {impostazioni.get('scopo', 'recruiting')}\n"
+            f"- Dettaglio scopo: {impostazioni.get('scopo_dettaglio', '')}\n"
+            f"- Ruoli cercati: {impostazioni.get('ruoli_target', '')}\n"
+            f"- Settori: {impostazioni.get('settori', '')}\n"
+            f"- Anni esperienza minimi: {impostazioni.get('anni_esperienza_min', 0)}\n"
+            f"- Keyword positive: {impostazioni.get('keyword_positive', '')}\n"
+            f"- Keyword negative: {impostazioni.get('keyword_negative', '')}\n\n"
+            "Valuta ESCLUSIVAMENTE quanto questo profilo corrisponde ai criteri sopra.\n"
+            "Non fare riferimento a criteri generici o settori non specificati.\n"
+        )
+
     prompt = (
         "Sei un esperto recruiter e business developer italiano.\n"
         "Analizza il seguente profilo LinkedIn per valutarne la compatibilita con questo target:\n\n"
         f"{descrizione_profilo}{istr_punteggio}\n"
         f"{scopo_prompt_s}\n"
+        f"{profilo_target_prompt}"
         "PROFILO LINKEDIN:\n"
         f"{testo_profilo}\n\n"
         "Fornisci la tua analisi ESCLUSIVAMENTE nel seguente formato JSON valido, senza testo aggiuntivo:\n"
