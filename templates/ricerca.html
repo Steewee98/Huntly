@@ -40,6 +40,19 @@
 .profilo-card-info .nome { font-weight: 600; font-size: 0.88rem; }
 .profilo-card-info .meta { font-size: 0.78rem; color: var(--grigio-testo); }
 .profilo-card-actions { display: flex; gap: 0.4rem; flex-shrink: 0; }
+
+.consiglio-tooltip { position: relative; cursor: pointer; margin-left: 6px; }
+.consiglio-tooltip .tooltip-box {
+    display: none; position: absolute; right: 0; top: 100%; margin-top: 6px;
+    background: #1a1a2e; color: #e8ecf1; border-radius: 8px; padding: 12px 16px;
+    font-size: 0.8rem; width: 280px; z-index: 100;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.2); line-height: 1.6;
+}
+.consiglio-tooltip .tooltip-box ul { padding-left: 1rem; margin: 6px 0; }
+.consiglio-tooltip .tooltip-box li { margin-bottom: 2px; }
+.consiglio-tooltip .tooltip-box a { color: #4F6EF7; text-decoration: none; display: block; margin-top: 8px; }
+.consiglio-tooltip .tooltip-box a:hover { text-decoration: underline; }
+.consiglio-tooltip:hover .tooltip-box { display: block; }
 </style>
 
 <div class="page-header" style="text-align:center;">
@@ -293,6 +306,21 @@
                         <span class="score-badge score-badge-{{ 'alto' if r.punteggio_medio >= 8 else ('medio' if r.punteggio_medio >= 5 else 'basso') }}">
                             {{ '%.1f'|format(r.punteggio_medio) }}/10
                         </span>
+                        {% if r.punteggio_medio < 5 %}
+                        <span class="consiglio-tooltip">
+                            &#128161;
+                            <div class="tooltip-box">
+                                <strong>Punteggio basso &mdash; cosa fare:</strong>
+                                <ul>
+                                    <li>Amplia i ruoli target nel Profilo Target</li>
+                                    <li>Rimuovi alcune keyword negative troppo restrittive</li>
+                                    <li>Prova una citta diversa o piu grande</li>
+                                    <li>Verifica che lo scopo del profilo sia corretto (recruiting vs sales)</li>
+                                </ul>
+                                <a href="/profili">Modifica il Profilo Target &rarr;</a>
+                            </div>
+                        </span>
+                        {% endif %}
                         {% else %}&mdash;{% endif %}
                     </td>
                     <td>
@@ -902,7 +930,7 @@ function aggiungiRigaCronologia(data) {
         '<td>' + (data.fonte || 'Manuale') + '</td>' +
         '<td><strong>' + (data.totale || 0) + '</strong></td>' +
         '<td>' + (data.nuovi || 0) + '</td>' +
-        '<td>' + (data.punteggio_medio ? data.punteggio_medio + '/10' : '&mdash;') + '</td>' +
+        '<td>' + (data.punteggio_medio ? data.punteggio_medio + '/10' + (parseFloat(data.punteggio_medio) < 5 ? ' <span class="consiglio-tooltip">&#128161;<div class="tooltip-box"><strong>Punteggio basso &mdash; cosa fare:</strong><ul><li>Amplia i ruoli target nel Profilo Target</li><li>Rimuovi alcune keyword negative troppo restrittive</li><li>Prova una citta diversa o piu grande</li><li>Verifica che lo scopo del profilo sia corretto</li></ul><a href="/profili">Modifica il Profilo Target &rarr;</a></div></span>' : '') : '&mdash;') + '</td>' +
         '<td><span style="color:#10b981;">&#10003; Completata</span></td>' +
         '<td><button class="btn btn-outline btn-xs btn-espandi" onclick="event.stopPropagation(); toggleDettaglio(\'' + rid + '\', this.closest(\'tr\'))">&#9660; Vedi profili</button></td>';
     tbody.insertBefore(riga, tbody.firstChild);
