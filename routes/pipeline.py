@@ -69,10 +69,6 @@ def index():
 @pipeline_bp.route("/pipeline/profilo/<int:profilo_id>")
 def profilo_detail(profilo_id):
     """Pipeline filtrata per un profilo target specifico."""
-    tab = request.args.get("tab", "pipeline")
-    if tab not in ("pipeline", "calendario", "cronologia"):
-        tab = "pipeline"
-
     org_id = get_org_id()
     db = get_db()
 
@@ -120,24 +116,6 @@ def profilo_detail(profilo_id):
     except Exception:
         pass
 
-    # Cronologia valutazioni
-    cronologia = db.execute(
-        "SELECT * FROM valutazioni WHERE organizzazione_id = ? ORDER BY data_valutazione DESC",
-        (org_id,)
-    ).fetchall()
-    cronologia = [dict(r) for r in cronologia]
-
-    # Appuntamenti
-    appuntamenti = db.execute("""
-        SELECT a.*,
-               COALESCE(c.nome || ' ' || c.cognome, 'Candidato rimosso') AS candidato_nome
-        FROM appuntamenti a
-        LEFT JOIN candidati c ON a.candidato_id = c.id
-        WHERE a.organizzazione_id = ?
-        ORDER BY a.data_ora ASC
-    """, (org_id,)).fetchall()
-    appuntamenti = [dict(a) for a in appuntamenti]
-
     db.close()
 
     return render_template(
@@ -146,12 +124,6 @@ def profilo_detail(profilo_id):
         stati=STATI_VALIDI,
         gestori=GESTORI_VALIDI,
         prossimi_app=prossimi_app,
-        cronologia=cronologia,
-        appuntamenti=appuntamenti,
-        tipi_app=TIPI_APPUNTAMENTO,
-        gestori_cal=GESTORI_CAL,
-        stati_app=STATI_APPUNTAMENTO,
-        tab_attivo=tab,
         profilo_target=profilo_target,
         profilo_id=profilo_id,
     )
