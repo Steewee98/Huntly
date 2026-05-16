@@ -1,198 +1,319 @@
 {% extends "base.html" %}
-{% block title %}Il mio profilo — Huntly{% endblock %}
+{% block title %}Analisi Profilo — Huntly{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h1 class="page-title">&#128100; Il mio profilo LinkedIn</h1>
-    <p class="page-subtitle">Analizza il tuo profilo e ricevi suggerimenti concreti per attrarre candidati migliori</p>
+    <div>
+        <h1 class="page-title">Analisi Profilo</h1>
+        <p class="page-subtitle">Analisi approfondita del tuo profilo LinkedIn con suggerimenti concreti</p>
+    </div>
 </div>
 
-<!-- ===== FORM INPUT ===== -->
-<div id="sezione-form">
-    <div class="card" style="max-width:640px;">
-        <div class="card-body">
-            <div class="form-group" style="margin-bottom:1rem;">
-                <label class="form-label">URL del tuo profilo LinkedIn</label>
-                <input type="text" id="linkedin-url" class="form-input"
-                       placeholder="https://www.linkedin.com/in/nomeutente"
-                       style="font-family:monospace;">
-            </div>
-
-            <!-- Fallback textarea (hidden by default) -->
-            <div id="fallback-wrapper" class="hidden">
-                <div style="margin-bottom:0.75rem;padding:0.75rem;background:#fefce8;border:1px solid #fde68a;border-radius:var(--radius);font-size:0.85rem;color:#92400e;">
-                    &#9888; EnrichLayer non ha potuto estrarre i dati automaticamente.
-                    Incolla manualmente il testo del tuo profilo LinkedIn (copia da About, esperienze, ecc.).
-                </div>
-                <div class="form-group" style="margin-bottom:1rem;">
-                    <label class="form-label">Testo del profilo <span class="required">*</span></label>
-                    <textarea id="testo-manuale" class="form-input" rows="8"
-                              placeholder="Incolla qui headline, about, esperienze principali..."
-                              style="resize:vertical;min-height:150px;"></textarea>
-                </div>
-            </div>
-
-            <div style="display:flex;gap:0.75rem;align-items:center;flex-wrap:wrap;">
-                <button id="btn-analizza" class="btn btn-primary btn-lg" onclick="avviaAnalisi()">
-                    <span id="btn-testo">&#128269; Analizza profilo</span>
-                    <span id="btn-loading" class="hidden"><span class="spinner"></span> Analisi in corso...</span>
+<!-- ===== FORM ANALISI ===== -->
+<div class="card pp-form-card">
+    <div class="card-body">
+        <div class="form-group" style="margin-bottom:1rem;">
+            <label class="form-label">URL del tuo profilo LinkedIn</label>
+            <div style="display:flex;gap:0.75rem;">
+                <input type="text" id="linkedin-url" class="form-input" style="flex:1;font-family:monospace;"
+                       placeholder="https://www.linkedin.com/in/nomeutente">
+                <button id="btn-analizza" class="btn btn-primary" onclick="avviaAnalisi()">
+                    <span id="btn-testo">Analizza</span>
+                    <span id="btn-loading" class="hidden"><span class="spinner"></span></span>
                 </button>
-                <span id="analisi-errore" style="color:#dc2626;font-size:0.88rem;"></span>
             </div>
         </div>
+        <div id="fallback-wrapper" class="hidden">
+            <div style="margin-bottom:0.75rem;padding:0.65rem 0.85rem;background:#fefce8;border:1px solid #fde68a;border-radius:var(--radius);font-size:0.84rem;color:#92400e;">
+                EnrichLayer non ha potuto estrarre i dati. Incolla manualmente il testo del profilo.
+            </div>
+            <div class="form-group" style="margin-bottom:1rem;">
+                <textarea id="testo-manuale" class="form-input" rows="6"
+                          placeholder="Incolla qui headline, about, esperienze..."
+                          style="resize:vertical;min-height:120px;"></textarea>
+            </div>
+        </div>
+        <div id="analisi-errore" style="color:#dc2626;font-size:0.85rem;margin-top:0.5rem;"></div>
     </div>
+</div>
 
-    <!-- Storico analisi precedenti -->
-    {% if storico %}
-    <div style="margin-top:1.5rem;max-width:640px;">
-        <h3 style="font-size:0.9rem;color:var(--grigio-testo);margin-bottom:0.75rem;text-transform:uppercase;letter-spacing:0.05em;">Analisi precedenti</h3>
-        <div style="display:flex;flex-direction:column;gap:0.5rem;">
-            {% for s in storico %}
-            <div style="display:flex;align-items:center;justify-content:space-between;padding:0.6rem 0.9rem;
-                        background:#fff;border:1px solid var(--grigio-bordo);border-radius:var(--radius);
-                        cursor:pointer;" onclick="caricaAnalisi({{ s.id }})">
-                <div style="font-size:0.84rem;">
-                    <span style="font-weight:600;">{{ s.linkedin_url or 'Profilo manuale' }}</span>
-                    <span style="color:var(--grigio-testo);margin-left:0.5rem;">{{ s.creato_il[:10] }}</span>
-                </div>
-                {% if s.punteggio %}
-                <span style="font-weight:700;font-size:0.9rem;
-                      color:{% if s.punteggio >= 8 %}#16a34a{% elif s.punteggio >= 5 %}#d97706{% else %}#dc2626{% endif %};">
-                    {{ s.punteggio }}/10
-                </span>
+<!-- ===== GRIGLIA PROFILI ANALIZZATI ===== -->
+{% if profili %}
+<div class="pp-grid">
+    {% for p in profili %}
+    <div class="pp-card">
+        <div class="pp-card-header">
+            <div class="pp-avatar">
+                {% if p.foto_url %}
+                <img src="{{ p.foto_url }}" alt="{{ p.nome }}">
+                {% else %}
+                <span>{{ (p.nome or 'U')[0] }}{{ (p.cognome or '')[0] }}</span>
                 {% endif %}
             </div>
-            {% endfor %}
+            <div class="pp-info">
+                <div class="pp-nome">{{ p.nome or '' }} {{ p.cognome or '' }}</div>
+                <div class="pp-headline">{{ p.headline or p.linkedin_url }}</div>
+                {% if p.settore %}<div class="pp-settore">{{ p.settore }}</div>{% endif %}
+            </div>
+            {% if p.ultima and p.ultima.punteggio %}
+            <div class="pp-score-ring">
+                {% set pct = (p.ultima.punteggio / 10 * 100)|int %}
+                {% set colore = '#16a34a' if p.ultima.punteggio >= 8 else ('#d97706' if p.ultima.punteggio >= 5 else '#dc2626') %}
+                <svg width="56" height="56" viewBox="0 0 56 56">
+                    <circle cx="28" cy="28" r="24" fill="none" stroke="#e5e7eb" stroke-width="4"/>
+                    <circle cx="28" cy="28" r="24" fill="none" stroke="{{ colore }}" stroke-width="4"
+                            stroke-dasharray="{{ 150.8 }}" stroke-dashoffset="{{ 150.8 - (150.8 * pct / 100) }}"
+                            stroke-linecap="round" transform="rotate(-90 28 28)"/>
+                </svg>
+                <span class="pp-score-num" style="color:{{ colore }};">{{ p.ultima.punteggio }}</span>
+            </div>
+            {% endif %}
+        </div>
+
+        {% if p.ultima %}
+        <div class="pp-badges">
+            {% if p.ultima.headline_suggerita %}
+                {% if p.ultima.get('headline_suggerita','') == p.ultima.get('headline_attuale','') %}
+                <span class="pp-badge pp-badge-verde">Headline OK</span>
+                {% else %}
+                <span class="pp-badge pp-badge-arancione">Headline migliorabile</span>
+                {% endif %}
+            {% endif %}
+            {% if p.ultima.keyword_mancanti and p.ultima.keyword_mancanti|length > 3 %}
+            <span class="pp-badge pp-badge-rosso">{{ p.ultima.keyword_mancanti|length }} keyword mancanti</span>
+            {% elif p.ultima.keyword_mancanti and p.ultima.keyword_mancanti|length > 0 %}
+            <span class="pp-badge pp-badge-arancione">{{ p.ultima.keyword_mancanti|length }} keyword mancanti</span>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <div class="pp-card-footer">
+            <div class="pp-dates">
+                {% if p.ultima_analisi %}
+                <span>Analizzato il {{ p.ultima_analisi[:10] }}</span>
+                {% endif %}
+                {% if p.prossima_analisi %}
+                <span>Prossima: {{ p.prossima_analisi[:10] }}</span>
+                {% endif %}
+            </div>
+            <div class="pp-card-actions">
+                {% if p.ultima %}
+                <a href="{{ url_for('profilo_personale.dettaglio_analisi', analisi_id=p.ultima.id) }}" class="btn btn-outline btn-sm">Vedi analisi</a>
+                {% endif %}
+                <button class="btn btn-secondary btn-sm" onclick="analizzaOra('{{ p.linkedin_url }}')">Analizza ora</button>
+            </div>
         </div>
     </div>
-    {% endif %}
+    {% endfor %}
 </div>
+{% elif not storico %}
+<div class="empty-state" style="margin-top:2rem;">
+    <div class="empty-icon">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:#9ca3af;">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+        </svg>
+    </div>
+    <h3>Analizza il tuo profilo LinkedIn</h3>
+    <p>Inserisci il tuo URL LinkedIn qui sopra per ricevere un'analisi approfondita con suggerimenti concreti per migliorare visibilita e attrattivita.</p>
+</div>
+{% endif %}
 
-<!-- ===== RISULTATI ANALISI ===== -->
-<div id="sezione-risultati" class="hidden">
+<!-- ===== STORICO (se no profili salvati ma ci sono analisi) ===== -->
+{% if storico and not profili %}
+<div style="margin-top:1.5rem;max-width:640px;">
+    <h3 style="font-size:0.88rem;color:var(--grigio-testo);margin-bottom:0.75rem;text-transform:uppercase;letter-spacing:0.05em;">Analisi precedenti</h3>
+    <div style="display:flex;flex-direction:column;gap:0.5rem;">
+        {% for s in storico %}
+        <a href="{{ url_for('profilo_personale.dettaglio_analisi', analisi_id=s.id) }}"
+           style="display:flex;align-items:center;justify-content:space-between;padding:0.6rem 0.9rem;
+                  background:#fff;border:1px solid var(--grigio-bordo);border-radius:var(--radius);
+                  cursor:pointer;text-decoration:none;color:inherit;">
+            <div style="font-size:0.84rem;">
+                <span style="font-weight:600;">{{ s.linkedin_url or 'Profilo manuale' }}</span>
+                <span style="color:var(--grigio-testo);margin-left:0.5rem;">{{ s.creato_il[:10] }}</span>
+            </div>
+            {% if s.punteggio %}
+            <span style="font-weight:700;font-size:0.9rem;
+                  color:{% if s.punteggio >= 8 %}#16a34a{% elif s.punteggio >= 5 %}#d97706{% else %}#dc2626{% endif %};">
+                {{ s.punteggio }}/10
+            </span>
+            {% endif %}
+        </a>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
 
-    <!-- Header risultati + azioni -->
+<!-- ===== RISULTATI INLINE (analisi appena eseguita) ===== -->
+<div id="sezione-risultati" class="hidden" style="margin-top:2rem;">
     <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:1rem;margin-bottom:1.5rem;">
-        <button class="btn btn-outline btn-sm" onclick="tornaAlForm()">&#8592; Nuova analisi</button>
+        <h2 style="margin:0;font-size:1.1rem;">Risultati analisi</h2>
         <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
-            <button class="btn btn-outline btn-sm" onclick="avviaAnalisi()">&#8635; Rigenera analisi</button>
-            <button id="btn-salva-voce" class="btn btn-primary btn-sm" onclick="salvaProfiloVoce()">
-                ⭐ Salva come profilo voce
-            </button>
+            <button id="btn-vedi-dettaglio" class="btn btn-primary btn-sm hidden" onclick="vaiADettaglio()">Vedi analisi completa</button>
+            <button id="btn-salva-voce" class="btn btn-outline btn-sm" onclick="salvaProfiloVoce()">Salva come profilo voce</button>
         </div>
     </div>
 
-    <!-- Score + motivazione -->
     <div style="display:flex;align-items:center;gap:2rem;margin-bottom:1.5rem;flex-wrap:wrap;">
         <div style="text-align:center;flex-shrink:0;">
             <div id="score-circle"
-                 style="width:100px;height:100px;border-radius:50%;display:flex;align-items:center;
-                        justify-content:center;font-size:2rem;font-weight:800;color:#fff;
-                        background:conic-gradient(#16a34a 0%, #16a34a 70%, #e5e7eb 70%);
-                        box-shadow:0 4px 12px rgba(0,0,0,0.12);">
-                <span id="score-num" style="position:relative;z-index:1;">—</span>
+                 style="width:90px;height:90px;border-radius:50%;display:flex;align-items:center;
+                        justify-content:center;position:relative;
+                        background:conic-gradient(#16a34a 0%, #16a34a 70%, #e5e7eb 70%);">
+                <div style="width:66px;height:66px;border-radius:50%;background:#fff;display:flex;align-items:center;justify-content:center;">
+                    <span id="score-num" style="font-size:1.5rem;font-weight:800;">--</span>
+                </div>
             </div>
-            <div style="font-size:0.8rem;color:var(--grigio-testo);margin-top:0.4rem;">Punteggio</div>
         </div>
         <div>
-            <h2 style="margin:0 0 0.4rem;font-size:1.1rem;">Valutazione del profilo</h2>
             <p id="score-motivazione" style="color:var(--grigio-testo);font-size:0.88rem;line-height:1.55;margin:0;"></p>
         </div>
     </div>
 
-    <!-- Headline: attuale vs suggerita -->
-    <div class="card" style="margin-bottom:1rem;">
-        <div class="card-header"><h3>&#9993; Headline</h3></div>
-        <div class="card-body" style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
-            <div>
-                <div style="font-size:0.75rem;font-weight:600;color:var(--grigio-testo);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.4rem;">Attuale</div>
-                <p id="headline-attuale" style="font-size:0.88rem;color:#1e293b;background:#f8fafc;padding:0.75rem;border-radius:var(--radius);margin:0;"></p>
-            </div>
-            <div>
-                <div style="font-size:0.75rem;font-weight:600;color:#16a34a;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.4rem;">Suggerita &#10003;</div>
-                <p id="headline-suggerita" style="font-size:0.88rem;color:#1e293b;background:#f0fdf4;padding:0.75rem;border-radius:var(--radius);border:1px solid #bbf7d0;margin:0;"></p>
-            </div>
-        </div>
-    </div>
-
-    <!-- About: attuale vs suggerita -->
-    <div class="card" style="margin-bottom:1rem;">
-        <div class="card-header"><h3>&#128203; About / Summary</h3></div>
-        <div class="card-body" style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
-            <div>
-                <div style="font-size:0.75rem;font-weight:600;color:var(--grigio-testo);text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.4rem;">Attuale</div>
-                <p id="about-attuale" style="font-size:0.84rem;color:#1e293b;background:#f8fafc;padding:0.75rem;border-radius:var(--radius);margin:0;white-space:pre-line;"></p>
-            </div>
-            <div>
-                <div style="font-size:0.75rem;font-weight:600;color:#16a34a;text-transform:uppercase;letter-spacing:0.05em;margin-bottom:0.4rem;">Suggerito &#10003;</div>
-                <p id="about-suggerito" style="font-size:0.84rem;color:#1e293b;background:#f0fdf4;padding:0.75rem;border-radius:var(--radius);border:1px solid #bbf7d0;margin:0;white-space:pre-line;"></p>
-            </div>
-        </div>
-    </div>
-
-    <!-- Punti di forza + Aree di miglioramento -->
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1rem;">
         <div class="card">
-            <div class="card-header"><h3>&#127942; Punti di forza</h3></div>
+            <div class="card-header"><h3>Headline</h3></div>
             <div class="card-body">
-                <ul id="punti-forza" style="margin:0;padding-left:1.25rem;display:flex;flex-direction:column;gap:0.5rem;"></ul>
+                <div style="font-size:0.72rem;font-weight:600;color:var(--grigio-testo);text-transform:uppercase;margin-bottom:0.3rem;">Attuale</div>
+                <p id="headline-attuale" style="font-size:0.85rem;background:#f8fafc;padding:0.6rem;border-radius:var(--radius);margin:0 0 0.75rem;"></p>
+                <div style="font-size:0.72rem;font-weight:600;color:#16a34a;text-transform:uppercase;margin-bottom:0.3rem;">Suggerita</div>
+                <p id="headline-suggerita" style="font-size:0.85rem;background:#f0fdf4;padding:0.6rem;border-radius:var(--radius);border:1px solid #bbf7d0;margin:0;"></p>
             </div>
         </div>
         <div class="card">
-            <div class="card-header"><h3>&#128161; Aree di miglioramento</h3></div>
+            <div class="card-header"><h3>About</h3></div>
             <div class="card-body">
-                <ul id="aree-miglioramento" style="margin:0;padding-left:1.25rem;display:flex;flex-direction:column;gap:0.5rem;"></ul>
+                <div style="font-size:0.72rem;font-weight:600;color:var(--grigio-testo);text-transform:uppercase;margin-bottom:0.3rem;">Attuale</div>
+                <p id="about-attuale" style="font-size:0.82rem;background:#f8fafc;padding:0.6rem;border-radius:var(--radius);margin:0 0 0.75rem;white-space:pre-line;max-height:100px;overflow:auto;"></p>
+                <div style="font-size:0.72rem;font-weight:600;color:#16a34a;text-transform:uppercase;margin-bottom:0.3rem;">Suggerito</div>
+                <p id="about-suggerito" style="font-size:0.82rem;background:#f0fdf4;padding:0.6rem;border-radius:var(--radius);border:1px solid #bbf7d0;margin:0;white-space:pre-line;"></p>
             </div>
         </div>
     </div>
 
-    <!-- Keyword mancanti -->
     <div class="card" style="margin-bottom:1rem;">
-        <div class="card-header"><h3>&#128269; Parole chiave mancanti</h3></div>
+        <div class="card-header"><h3>Keyword mancanti</h3></div>
         <div class="card-body">
             <div id="keyword-mancanti" style="display:flex;flex-wrap:wrap;gap:0.4rem;"></div>
         </div>
     </div>
 
-    <!-- Conferma salvataggio profilo voce -->
     <div id="salva-conferma" class="hidden"
-         style="padding:1rem 1.25rem;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:var(--radius);
+         style="padding:0.85rem 1.1rem;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:var(--radius);
                 display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:0.75rem;">
         <div>
-            <strong style="color:#16a34a;">&#10003; Profilo salvato come profilo voce!</strong>
-            <div style="font-size:0.84rem;color:var(--grigio-testo);margin-top:0.2rem;">
-                Puoi usarlo nella sezione Contenuti LinkedIn per generare post personalizzati.
-            </div>
+            <strong style="color:#16a34a;">Profilo salvato come profilo voce!</strong>
+            <div style="font-size:0.82rem;color:var(--grigio-testo);margin-top:0.15rem;">Puoi usarlo nella sezione Contenuti.</div>
         </div>
-        <a href="{{ url_for('contenuti.index') }}" class="btn btn-primary btn-sm">&#9998; Vai ai Contenuti</a>
+        <a href="{{ url_for('contenuti.index') }}" class="btn btn-primary btn-sm">Vai ai Contenuti</a>
     </div>
-
 </div>
-
 {% endblock %}
 
 {% block scripts %}
 <style>
+.pp-form-card { max-width:700px; margin-bottom:1.5rem; }
+
+.pp-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1.25rem;
+    margin-top: 1.5rem;
+}
+
+.pp-card {
+    background: #fff;
+    border: 1px solid var(--grigio-bordo);
+    border-radius: 12px;
+    padding: 1.25rem;
+    transition: box-shadow 0.2s;
+}
+.pp-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.06); }
+
+.pp-card-header {
+    display: flex;
+    align-items: center;
+    gap: 0.85rem;
+    margin-bottom: 0.85rem;
+}
+
+.pp-avatar {
+    width: 48px; height: 48px; border-radius: 50%;
+    background: var(--azzurro); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 0.9rem; flex-shrink: 0;
+    overflow: hidden;
+}
+.pp-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+.pp-info { flex: 1; min-width: 0; }
+.pp-nome { font-weight: 700; font-size: 0.95rem; color: var(--testo); }
+.pp-headline { font-size: 0.8rem; color: var(--grigio-testo); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pp-settore { font-size: 0.72rem; color: var(--grigio-testo); margin-top: 0.1rem; }
+
+.pp-score-ring {
+    position: relative;
+    width: 56px; height: 56px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+}
+.pp-score-num {
+    position: absolute;
+    font-size: 1.1rem; font-weight: 800;
+}
+
+.pp-badges {
+    display: flex; flex-wrap: wrap; gap: 0.35rem;
+    margin-bottom: 0.85rem;
+}
+.pp-badge {
+    font-size: 0.7rem; font-weight: 600;
+    padding: 0.2rem 0.55rem; border-radius: 20px;
+}
+.pp-badge-verde { background: #f0fdf4; color: #16a34a; border: 1px solid #bbf7d0; }
+.pp-badge-arancione { background: #fffbeb; color: #d97706; border: 1px solid #fde68a; }
+.pp-badge-rosso { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+
+.pp-card-footer {
+    border-top: 1px solid var(--grigio-bordo);
+    padding-top: 0.75rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+.pp-dates {
+    font-size: 0.72rem;
+    color: var(--grigio-testo);
+    display: flex; flex-direction: column; gap: 0.1rem;
+}
+.pp-card-actions { display: flex; gap: 0.4rem; }
+
 @media (max-width: 768px) {
-    #sezione-risultati .card-body[style*="grid-template-columns:1fr 1fr"] {
-        display: flex !important;
-        flex-direction: column !important;
-    }
-    #sezione-risultati > div[style*="grid-template-columns:1fr 1fr"] {
-        display: flex !important;
-        flex-direction: column !important;
+    .pp-grid { grid-template-columns: 1fr; }
+    #sezione-risultati .card-body { }
+    #sezione-risultati > div[style*="grid-template-columns"] {
+        display: flex !important; flex-direction: column !important;
     }
 }
 </style>
+
 <script>
 var _analisiCorrente = null;
+var _analisiId = null;
+
+function analizzaOra(url) {
+    document.getElementById('linkedin-url').value = url;
+    avviaAnalisi();
+}
 
 async function avviaAnalisi() {
     var url   = document.getElementById('linkedin-url').value.trim();
-    var testo = document.getElementById('testo-manuale').value.trim();
+    var testoEl = document.getElementById('testo-manuale');
+    var testo = testoEl ? testoEl.value.trim() : '';
 
     if (!url && !testo) {
-        document.getElementById('analisi-errore').textContent = 'Inserisci l\'URL LinkedIn o incolla il testo del profilo.';
+        document.getElementById('analisi-errore').textContent = 'Inserisci l\'URL LinkedIn.';
         return;
     }
 
@@ -210,18 +331,17 @@ async function avviaAnalisi() {
             body: JSON.stringify({ linkedin_url: url, testo_manuale: testo })
         });
 
-        var dati = await jsonSicuro(resp);
+        var dati = await resp.json();
 
         if (resp.status === 422 && dati.errore === 'non_disponibile') {
-            // Mostra fallback textarea
             document.getElementById('fallback-wrapper').classList.remove('hidden');
             document.getElementById('analisi-errore').textContent = dati.messaggio;
             return;
         }
-
         if (dati.errore) throw new Error(dati.errore);
 
         _analisiCorrente = dati;
+        _analisiId = dati.analisi_id;
         mostraRisultati(dati);
 
     } catch(e) {
@@ -234,115 +354,71 @@ async function avviaAnalisi() {
 }
 
 function mostraRisultati(dati) {
-    // Score
-    var punteggio = dati.punteggio || 0;
-    var colore    = punteggio >= 8 ? '#16a34a' : (punteggio >= 5 ? '#d97706' : '#dc2626');
-    var pct       = (punteggio / 10) * 100;
-    var circle    = document.getElementById('score-circle');
-    circle.style.background = `conic-gradient(${colore} 0%, ${colore} ${pct}%, #e5e7eb ${pct}%)`;
-    // Inner white circle for doughnut effect
-    circle.style.position = 'relative';
-    circle.innerHTML = `<div style="width:74px;height:74px;border-radius:50%;background:#fff;
-        position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);
-        display:flex;align-items:center;justify-content:center;
-        font-size:1.6rem;font-weight:800;color:${colore};">${punteggio}/10</div>`;
+    var p = dati.punteggio || 0;
+    var colore = p >= 8 ? '#16a34a' : (p >= 5 ? '#d97706' : '#dc2626');
+    var pct = (p / 10) * 100;
+    var circle = document.getElementById('score-circle');
+    circle.style.background = 'conic-gradient(' + colore + ' 0%, ' + colore + ' ' + pct + '%, #e5e7eb ' + pct + '%)';
+    document.getElementById('score-num').style.color = colore;
+    document.getElementById('score-num').textContent = p + '/10';
 
     document.getElementById('score-motivazione').textContent = dati.punteggio_motivazione || '';
-
-    // Headline / About
-    document.getElementById('headline-attuale').textContent  = dati.headline_attuale   || '(non rilevata)';
+    document.getElementById('headline-attuale').textContent = dati.headline_attuale || '(non rilevata)';
     document.getElementById('headline-suggerita').textContent = dati.headline_suggerita || '';
-    document.getElementById('about-attuale').textContent     = dati.about_attuale      || '(non presente)';
-    document.getElementById('about-suggerito').textContent   = dati.about_suggerito    || '';
+    document.getElementById('about-attuale').textContent = dati.about_attuale || '(non presente)';
+    document.getElementById('about-suggerito').textContent = dati.about_suggerito || '';
 
-    // Punti di forza
-    var pfEl = document.getElementById('punti-forza');
-    pfEl.innerHTML = '';
-    (dati.punti_forza || []).forEach(function(p) {
-        var li = document.createElement('li');
-        li.style.cssText = 'font-size:0.85rem;color:#1e293b;';
-        li.textContent = p;
-        pfEl.appendChild(li);
-    });
-
-    // Aree di miglioramento
-    var amEl = document.getElementById('aree-miglioramento');
-    amEl.innerHTML = '';
-    (dati.aree_miglioramento || []).forEach(function(a) {
-        var li = document.createElement('li');
-        li.style.cssText = 'font-size:0.85rem;color:#1e293b;';
-        li.textContent = a;
-        amEl.appendChild(li);
-    });
-
-    // Keyword mancanti
     var kwEl = document.getElementById('keyword-mancanti');
     kwEl.innerHTML = '';
     (dati.keyword_mancanti || []).forEach(function(k) {
         var span = document.createElement('span');
-        span.style.cssText = 'padding:0.25rem 0.6rem;background:#eff6ff;color:#2563eb;border:1px solid #bfdbfe;border-radius:20px;font-size:0.8rem;font-weight:500;';
+        span.style.cssText = 'padding:0.22rem 0.55rem;background:#fef2f2;color:#dc2626;border:1px solid #fecaca;border-radius:20px;font-size:0.78rem;font-weight:500;';
         span.textContent = k;
         kwEl.appendChild(span);
     });
+
+    if (_analisiId) {
+        var btn = document.getElementById('btn-vedi-dettaglio');
+        btn.classList.remove('hidden');
+    }
 
     document.getElementById('sezione-risultati').classList.remove('hidden');
     document.getElementById('sezione-risultati').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-async function caricaAnalisi(id) {
-    try {
-        var resp = await fetch('/profilo-personale/' + id);
-        var dati = await jsonSicuro(resp);
-        if (dati.errore) { alert(dati.errore); return; }
-        // dati_raw contiene l'oggetto completo
-        var analisi = dati.dati_raw || dati;
-        if (typeof analisi === 'string') analisi = JSON.parse(analisi);
-        _analisiCorrente = analisi;
-        mostraRisultati(analisi);
-    } catch(e) {
-        alert('Errore caricamento analisi: ' + e);
-    }
+function vaiADettaglio() {
+    if (_analisiId) location.href = '/profilo-personale/analisi/' + _analisiId;
 }
 
 async function salvaProfiloVoce() {
     if (!_analisiCorrente) return;
-    var url   = document.getElementById('linkedin-url').value.trim();
-    var nome  = prompt('Come ti chiami? (verrà usato come nome del profilo voce)', '');
+    var url = document.getElementById('linkedin-url').value.trim();
+    var nome = prompt('Come ti chiami? (nome del profilo voce)', '');
     if (nome === null) return;
-    if (!nome.trim()) { alert('Il nome è obbligatorio.'); return; }
+    if (!nome.trim()) { alert('Il nome e obbligatorio.'); return; }
 
     var btn = document.getElementById('btn-salva-voce');
-    btn.disabled = true;
-    btn.textContent = 'Salvataggio...';
+    btn.disabled = true; btn.textContent = 'Salvataggio...';
 
     try {
         var resp = await fetch('/profilo-personale/salva-profilo-voce', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
-                nome:            nome.trim(),
-                linkedin_url:    url,
-                bio_breve:       _analisiCorrente.bio_breve       || '',
+                nome: nome.trim(), linkedin_url: url,
+                bio_breve: _analisiCorrente.bio_breve || '',
                 tono_prevalente: _analisiCorrente.tono_prevalente || '',
-                settore:         _analisiCorrente.settore         || '',
+                settore: _analisiCorrente.settore || ''
             })
         });
-        var dati = await jsonSicuro(resp);
+        var dati = await resp.json();
         if (dati.errore) throw new Error(dati.errore);
-
         document.getElementById('salva-conferma').classList.remove('hidden');
-        btn.textContent = '✓ Salvato';
-
+        btn.textContent = 'Salvato';
     } catch(e) {
-        alert('Errore salvataggio: ' + e.message);
-        btn.disabled = false;
-        btn.textContent = '⭐ Salva come profilo voce';
+        alert('Errore: ' + e.message);
+        btn.disabled = false; btn.textContent = 'Salva come profilo voce';
     }
-}
-
-function tornaAlForm() {
-    document.getElementById('sezione-risultati').classList.add('hidden');
-    document.getElementById('sezione-form').scrollIntoView({ behavior: 'smooth' });
 }
 </script>
 {% endblock %}

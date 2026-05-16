@@ -767,3 +767,83 @@ def analizza_profilo_personale(testo_profilo: str) -> dict:
     except Exception as e:
         logger.error("[AI] analizza_profilo_personale fallita: %s", e)
         raise
+
+
+def analizza_profilo_completo(dati_profilo: dict, post_linkedin: list) -> dict:
+    """
+    Analisi completa del profilo LinkedIn + contenuti postati.
+    Restituisce JSON strutturato con tutti i campi.
+    """
+    nome = f"{dati_profilo.get('first_name','')} {dati_profilo.get('last_name','')}".strip()
+    headline = dati_profilo.get('headline') or dati_profilo.get('title') or ''
+    summary = dati_profilo.get('summary') or dati_profilo.get('about') or ''
+    esperienze = (dati_profilo.get('experiences') or dati_profilo.get('experience') or [])[:3]
+    skills_raw = dati_profilo.get('skills') or []
+    if skills_raw and isinstance(skills_raw[0], dict):
+        skills = [s.get('name', '') for s in skills_raw[:10]]
+    else:
+        skills = [str(s) for s in skills_raw[:10]]
+
+    testo_post = ""
+    if post_linkedin:
+        testo_post = "\n\n".join([
+            f"Post {i+1} ({p.get('like',0)} like, {p.get('commenti',0)} commenti):\n{p.get('testo','')}"
+            for i, p in enumerate(post_linkedin[:10])
+        ])
+
+    esperienze_str = ', '.join([
+        (e.get('title', '') + ' @ ' + (e.get('company', '') or e.get('company_name', '')))
+        for e in esperienze if isinstance(e, dict)
+    ])
+
+    prompt = f"""Sei un esperto di personal branding LinkedIn per professionisti italiani.
+
+PROFILO DA ANALIZZARE:
+Nome: {nome}
+Headline attuale: {headline}
+About attuale: {summary[:800]}
+Esperienze: {esperienze_str}
+Skills: {', '.join(skills)}
+
+{"ULTIMI POST PUBBLICATI:" + chr(10) + testo_post if testo_post else "Nessun post disponibile per l'analisi dei contenuti."}
+
+Analizza in modo approfondito e restituisci SOLO un JSON con questa struttura:
+{{
+    "punteggio": <numero 1-10>,
+    "punteggio_motivazione": "<2 righe che spiegano il punteggio>",
+    "headline_attuale": "{headline[:120]}",
+    "headline_suggerita": "<headline migliorata, max 120 caratteri>",
+    "about_attuale": "<prime 200 caratteri dell'about attuale>",
+    "about_suggerito": "<riscrittura completa dell'about, max 400 caratteri, tono professionale italiano>",
+    "punti_forza": ["<punto 1>", "<punto 2>", "<punto 3>"],
+    "aree_miglioramento": [
+        {{"priorita": "alta", "area": "<area>", "consiglio": "<azione concreta>"}},
+        {{"priorita": "alta", "area": "<area>", "consiglio": "<azione concreta>"}},
+        {{"priorita": "media", "area": "<area>", "consiglio": "<azione concreta>"}}
+    ],
+    "keyword_mancanti": ["<keyword 1>", "<keyword 2>", "<keyword 3>", "<keyword 4>", "<keyword 5>"],
+    "analisi_contenuti": {{"valutazione": "<analisi tono e qualita dei post, 2-3 righe>", "frequenza": "<commento sulla frequenza di pubblicazione>", "engagement_medio": "<commento sull'engagement>"}},
+    "consigli_contenuti": ["<consiglio concreto 1>", "<consiglio concreto 2>", "<consiglio concreto 3>"],
+    "tono_prevalente": "<3-5 aggettivi che descrivono lo stile>",
+    "settore": "<settore professionale principale>",
+    "bio_breve": "<2-3 frasi in prima persona per presentarsi>"
+}}
+
+Solo JSON valido, nessun testo aggiuntivo."""
+
+    payload = {
+        "model":      CLAUDE_MODEL,
+        "max_tokens": 2000,
+        "messages":   [{"role": "user", "content": clean_text(prompt)}],
+    }
+    try:
+        risposta = _chiama_api("analizza_profilo_completo", payload)
+        testo = risposta.content[0].text.strip()
+        if testo.startswith("```"):
+            testo = testo.split("```")[1]
+            if testo.startswith("json"):
+                testo = testo[4:]
+        return json.loads(testo)
+    except Exception as e:
+        logger.error("[AI] analizza_profilo_completo fallita: %s", e)
+        raise

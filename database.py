@@ -453,6 +453,29 @@ def init_db():
         "UPDATE contenuti_linkedin   SET organizzazione_id = 1 WHERE organizzazione_id IS NULL",
         "UPDATE impostazioni_profilo SET organizzazione_id = 1 WHERE organizzazione_id IS NULL",
 
+        # ── Analisi profilo personale: nuovi campi + tabella profili_personali ──
+        "ALTER TABLE analisi_profilo ADD COLUMN IF NOT EXISTS analisi_contenuti TEXT",
+        "ALTER TABLE analisi_profilo ADD COLUMN IF NOT EXISTS consigli_contenuti TEXT",
+        "ALTER TABLE analisi_profilo ADD COLUMN IF NOT EXISTS post_analizzati INTEGER DEFAULT 0",
+        "ALTER TABLE analisi_profilo ADD COLUMN IF NOT EXISTS prossima_analisi TIMESTAMP",
+        "ALTER TABLE analisi_profilo ADD COLUMN IF NOT EXISTS utente_id INTEGER",
+
+        """CREATE TABLE IF NOT EXISTS profili_personali (
+    id                  SERIAL PRIMARY KEY,
+    utente_id           INTEGER,
+    organizzazione_id   INTEGER,
+    linkedin_url        TEXT NOT NULL,
+    nome                TEXT,
+    cognome             TEXT,
+    headline            TEXT,
+    foto_url            TEXT,
+    settore             TEXT,
+    connessioni         INTEGER,
+    ultima_analisi      TIMESTAMP,
+    prossima_analisi    TIMESTAMP,
+    creato_il           TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)""",
+
         # ── Tabella profili target configurabili ───────────────────────────
         """CREATE TABLE IF NOT EXISTS profili_target (
     id                    SERIAL PRIMARY KEY,

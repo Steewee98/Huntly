@@ -1,0 +1,313 @@
+{% extends "base.html" %}
+{% block title %}Analisi #{{ analisi.id }} — Huntly{% endblock %}
+
+{% block content %}
+<div class="pipeline-breadcrumb">
+    <a href="{{ url_for('profilo_personale.index') }}">&#8592; Analisi Profilo</a>
+    <span class="breadcrumb-sep">/</span>
+    <span class="breadcrumb-current">Analisi del {{ analisi.creato_il[:10] if analisi.creato_il else '' }}</span>
+</div>
+
+<!-- ═══ Sezione 1 — Punteggio ═══ -->
+<div class="ppd-score-section">
+    {% set p = analisi.punteggio or 0 %}
+    {% set colore = '#16a34a' if p >= 8 else ('#d97706' if p >= 5 else '#dc2626') %}
+    {% set pct = (p / 10 * 100)|int %}
+    <div class="ppd-score-ring">
+        <svg width="100" height="100" viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="42" fill="none" stroke="#e5e7eb" stroke-width="6"/>
+            <circle cx="50" cy="50" r="42" fill="none" stroke="{{ colore }}" stroke-width="6"
+                    stroke-dasharray="263.9" stroke-dashoffset="{{ 263.9 - (263.9 * pct / 100) }}"
+                    stroke-linecap="round" transform="rotate(-90 50 50)"
+                    style="transition:stroke-dashoffset 1s ease;"/>
+        </svg>
+        <span class="ppd-score-num" style="color:{{ colore }};">{{ p }}/10</span>
+    </div>
+    <div class="ppd-score-text">
+        <h2>Valutazione del profilo</h2>
+        {% if analisi.dati_raw and analisi.dati_raw.punteggio_motivazione %}
+        <p>{{ analisi.dati_raw.punteggio_motivazione }}</p>
+        {% endif %}
+        <div class="ppd-meta">
+            <span>{{ analisi.linkedin_url or 'Profilo manuale' }}</span>
+            {% if analisi.post_analizzati %}<span>{{ analisi.post_analizzati }} post analizzati</span>{% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- ═══ Sezione 2 — Headline ═══ -->
+<div class="card ppd-section">
+    <div class="card-header"><h3>Headline</h3></div>
+    <div class="card-body ppd-compare">
+        <div class="ppd-compare-box ppd-compare-old">
+            <div class="ppd-compare-label">Attuale</div>
+            <p>{{ analisi.headline_attuale or '(non rilevata)' }}</p>
+        </div>
+        <div class="ppd-compare-box ppd-compare-new">
+            <div class="ppd-compare-label ppd-compare-label-new">Suggerita</div>
+            <p>{{ analisi.headline_suggerita or '' }}</p>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ Sezione 3 — About ═══ -->
+<div class="card ppd-section">
+    <div class="card-header">
+        <h3>About / Summary</h3>
+        <button class="btn btn-outline btn-xs" onclick="copiaTestoSuggerito()">Copia suggerito</button>
+    </div>
+    <div class="card-body ppd-compare">
+        <div class="ppd-compare-box ppd-compare-old">
+            <div class="ppd-compare-label">Attuale</div>
+            <p style="white-space:pre-line;">{{ analisi.about_attuale or '(non presente)' }}</p>
+        </div>
+        <div class="ppd-compare-box ppd-compare-new">
+            <div class="ppd-compare-label ppd-compare-label-new">Suggerito</div>
+            <p id="about-suggerito-testo" style="white-space:pre-line;">{{ analisi.about_suggerito or '' }}</p>
+        </div>
+    </div>
+</div>
+
+<!-- ═══ Sezione 4 — Punti di forza ═══ -->
+{% if analisi.punti_forza %}
+<div class="card ppd-section">
+    <div class="card-header"><h3>Punti di forza</h3></div>
+    <div class="card-body">
+        <div class="ppd-forza-grid">
+            {% for punto in analisi.punti_forza %}
+            <div class="ppd-forza-card">
+                <span class="ppd-forza-icon">&#10003;</span>
+                <span>{{ punto }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- ═══ Sezione 5 — Aree di miglioramento ═══ -->
+{% if analisi.aree_miglioramento %}
+<div class="card ppd-section">
+    <div class="card-header"><h3>Aree di miglioramento</h3></div>
+    <div class="card-body">
+        <div class="ppd-migliora-list">
+            {% for area in analisi.aree_miglioramento %}
+            <div class="ppd-migliora-card">
+                {% if area is mapping %}
+                <span class="ppd-priorita ppd-priorita-{{ area.priorita|default('media')|lower }}">{{ area.priorita|default('media') }}</span>
+                <div>
+                    <strong>{{ area.area }}</strong>
+                    <p>{{ area.consiglio }}</p>
+                </div>
+                {% else %}
+                <span class="ppd-priorita ppd-priorita-media">Suggerimento</span>
+                <div><p>{{ area }}</p></div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- ═══ Sezione 6 — Keyword mancanti ═══ -->
+{% if analisi.keyword_mancanti %}
+<div class="card ppd-section">
+    <div class="card-header"><h3>Keyword mancanti</h3></div>
+    <div class="card-body">
+        <div class="ppd-keyword-chips">
+            {% for kw in analisi.keyword_mancanti %}
+            <span class="ppd-keyword-chip">{{ kw }}</span>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- ═══ Sezione 7 — Analisi contenuti ═══ -->
+{% if analisi.analisi_contenuti or analisi.consigli_contenuti %}
+<div class="card ppd-section">
+    <div class="card-header"><h3>Analisi contenuti LinkedIn</h3></div>
+    <div class="card-body">
+        {% if analisi.analisi_contenuti %}
+        {% set ac = analisi.analisi_contenuti %}
+        <div class="ppd-contenuti-grid">
+            {% if ac.valutazione %}
+            <div class="ppd-contenuti-box">
+                <div class="ppd-contenuti-label">Qualita dei post</div>
+                <p>{{ ac.valutazione }}</p>
+            </div>
+            {% endif %}
+            {% if ac.frequenza %}
+            <div class="ppd-contenuti-box">
+                <div class="ppd-contenuti-label">Frequenza</div>
+                <p>{{ ac.frequenza }}</p>
+            </div>
+            {% endif %}
+            {% if ac.engagement_medio %}
+            <div class="ppd-contenuti-box">
+                <div class="ppd-contenuti-label">Engagement</div>
+                <p>{{ ac.engagement_medio }}</p>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        {% if analisi.consigli_contenuti %}
+        <div style="margin-top:1rem;">
+            <div class="ppd-contenuti-label" style="margin-bottom:0.5rem;">Consigli per migliorare</div>
+            <ul class="ppd-consigli-list">
+                {% for c in analisi.consigli_contenuti %}
+                <li>{{ c }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endif %}
+
+<!-- ═══ Sezione 8 — Storico punteggi ═══ -->
+{% if storico_punteggi and storico_punteggi|length > 1 %}
+<div class="card ppd-section">
+    <div class="card-header"><h3>Trend punteggio</h3></div>
+    <div class="card-body">
+        <div class="ppd-trend">
+            {% set max_p = 10 %}
+            {% for s in storico_punteggi %}
+            <div class="ppd-trend-bar-wrap">
+                <div class="ppd-trend-bar"
+                     style="height:{{ ((s.punteggio or 0) / max_p * 100)|int }}%;
+                            background:{% if s.punteggio >= 8 %}#16a34a{% elif s.punteggio >= 5 %}#d97706{% else %}#dc2626{% endif %};">
+                </div>
+                <span class="ppd-trend-val">{{ s.punteggio or 0 }}</span>
+                <span class="ppd-trend-date">{{ s.data[:5] if s.data else '' }}</span>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}
+
+{% block scripts %}
+<style>
+.ppd-score-section {
+    display: flex; align-items: center; gap: 2rem;
+    margin-bottom: 1.75rem; flex-wrap: wrap;
+}
+.ppd-score-ring {
+    position: relative; width: 100px; height: 100px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+}
+.ppd-score-num {
+    position: absolute; font-size: 1.6rem; font-weight: 800;
+}
+.ppd-score-text h2 { margin: 0 0 0.3rem; font-size: 1.1rem; }
+.ppd-score-text p { margin: 0; font-size: 0.88rem; color: var(--grigio-testo); line-height: 1.55; }
+.ppd-meta {
+    display: flex; gap: 1rem; margin-top: 0.5rem;
+    font-size: 0.78rem; color: var(--grigio-testo);
+}
+
+.ppd-section { margin-bottom: 1rem; }
+
+.ppd-compare { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+.ppd-compare-box { padding: 0.75rem; border-radius: var(--radius); }
+.ppd-compare-old { background: #f8fafc; }
+.ppd-compare-new { background: #f0fdf4; border: 1px solid #bbf7d0; }
+.ppd-compare-label {
+    font-size: 0.7rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.05em; color: var(--grigio-testo); margin-bottom: 0.3rem;
+}
+.ppd-compare-label-new { color: #16a34a; }
+.ppd-compare-box p { margin: 0; font-size: 0.85rem; color: #1e293b; }
+
+.ppd-forza-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; }
+.ppd-forza-card {
+    background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: var(--radius);
+    padding: 0.75rem; font-size: 0.84rem; color: #1e293b;
+    display: flex; align-items: flex-start; gap: 0.5rem;
+}
+.ppd-forza-icon { color: #16a34a; font-weight: 700; flex-shrink: 0; }
+
+.ppd-migliora-list { display: flex; flex-direction: column; gap: 0.65rem; }
+.ppd-migliora-card {
+    display: flex; align-items: flex-start; gap: 0.75rem;
+    padding: 0.75rem; background: #f8fafc; border-radius: var(--radius);
+    border: 1px solid var(--grigio-bordo);
+}
+.ppd-migliora-card strong { font-size: 0.88rem; display: block; margin-bottom: 0.15rem; }
+.ppd-migliora-card p { margin: 0; font-size: 0.82rem; color: var(--grigio-testo); }
+.ppd-priorita {
+    font-size: 0.65rem; font-weight: 700; text-transform: uppercase;
+    padding: 0.15rem 0.5rem; border-radius: 20px; white-space: nowrap; flex-shrink: 0;
+}
+.ppd-priorita-alta { background: #fef2f2; color: #dc2626; }
+.ppd-priorita-media { background: #fffbeb; color: #d97706; }
+.ppd-priorita-bassa { background: #f0fdf4; color: #16a34a; }
+
+.ppd-keyword-chips { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.ppd-keyword-chip {
+    padding: 0.25rem 0.6rem; background: #fef2f2; color: #dc2626;
+    border: 1px solid #fecaca; border-radius: 20px;
+    font-size: 0.8rem; font-weight: 500;
+}
+
+.ppd-contenuti-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0.75rem; }
+.ppd-contenuti-box {
+    background: #f8fafc; border-radius: var(--radius); padding: 0.75rem;
+    border: 1px solid var(--grigio-bordo);
+}
+.ppd-contenuti-label {
+    font-size: 0.72rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.05em; color: var(--grigio-testo); margin-bottom: 0.3rem;
+}
+.ppd-contenuti-box p { margin: 0; font-size: 0.82rem; color: #1e293b; line-height: 1.5; }
+.ppd-consigli-list {
+    margin: 0; padding-left: 1.1rem;
+    display: flex; flex-direction: column; gap: 0.35rem;
+}
+.ppd-consigli-list li { font-size: 0.84rem; color: #1e293b; line-height: 1.5; }
+
+.ppd-trend {
+    display: flex; align-items: flex-end; gap: 0.75rem;
+    height: 120px; padding-bottom: 1.5rem; position: relative;
+}
+.ppd-trend-bar-wrap {
+    flex: 1; display: flex; flex-direction: column; align-items: center;
+    height: 100%; justify-content: flex-end; position: relative;
+}
+.ppd-trend-bar {
+    width: 100%; max-width: 32px; border-radius: 4px 4px 0 0;
+    min-height: 4px; transition: height 0.6s ease;
+}
+.ppd-trend-val {
+    font-size: 0.72rem; font-weight: 700; color: var(--testo);
+    margin-top: 0.25rem;
+}
+.ppd-trend-date {
+    font-size: 0.6rem; color: var(--grigio-testo);
+    position: absolute; bottom: -1.2rem; white-space: nowrap;
+}
+
+@media (max-width: 768px) {
+    .ppd-compare { grid-template-columns: 1fr; }
+    .ppd-forza-grid { grid-template-columns: 1fr; }
+    .ppd-contenuti-grid { grid-template-columns: 1fr; }
+    .ppd-score-section { gap: 1rem; }
+}
+</style>
+
+<script>
+function copiaTestoSuggerito() {
+    var testo = document.getElementById('about-suggerito-testo').textContent;
+    navigator.clipboard.writeText(testo).then(function() {
+        var btn = event.target;
+        btn.textContent = 'Copiato!';
+        setTimeout(function() { btn.textContent = 'Copia suggerito'; }, 2000);
+    });
+}
+</script>
+{% endblock %}
