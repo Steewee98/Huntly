@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block title %}Pipeline — Huntly{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1 class="page-title">Pipeline</h1>
+        <p class="page-subtitle">Seleziona un profilo target per vedere i candidati</p>
+    </div>
+</div>
+
+{% if not pipeline and senza_profilo == 0 %}
+<div class="empty-state">
+    <div class="empty-icon">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="color:#9ca3af;">
+            <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+            <rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+        </svg>
+    </div>
+    <h3>Nessun candidato in pipeline</h3>
+    <p>Cerca candidati e aggiungili alla pipeline per vederli qui.</p>
+    <a href="{{ url_for('ricerca.index') }}" class="btn btn-primary">Cerca Candidati</a>
+</div>
+{% else %}
+
+<div class="pipeline-grid">
+    {% for p in pipeline %}
+    <a href="{{ url_for('pipeline.profilo_detail', profilo_id=p.id) }}" class="pipeline-card">
+        <div class="pipeline-card-header" style="border-top: 3px solid {{ p.colore or '#6366f1' }};">
+            <div class="pipeline-card-nome">{{ p.nome }}</div>
+            {% if p.scopo %}
+            <div class="pipeline-card-scopo">{{ p.scopo }}</div>
+            {% endif %}
+        </div>
+        <div class="pipeline-card-stats">
+            <div class="stat">
+                <span class="stat-numero">{{ p.totale_candidati }}</span>
+                <span class="stat-label">Totale</span>
+            </div>
+            <div class="stat">
+                <span class="stat-numero" style="color:#f59e0b;">{{ p.da_contattare }}</span>
+                <span class="stat-label">Da contattare</span>
+            </div>
+            <div class="stat">
+                <span class="stat-numero" style="color:#10b981;">{{ p.risposto }}</span>
+                <span class="stat-label">Risposto</span>
+            </div>
+            <div class="stat">
+                <span class="stat-numero" style="color:#6366f1;">{{ p.in_valutazione }}</span>
+                <span class="stat-label">In valutazione</span>
+            </div>
+        </div>
+        <div class="pipeline-card-footer">
+            <span class="punteggio-medio">
+                {% if p.punteggio_medio %}
+                    {{ "%.1f"|format(p.punteggio_medio) }}/10 medio
+                {% else %}
+                    Non valutati
+                {% endif %}
+            </span>
+            <span class="ultimo-agg">
+                {% if p.ultimo_aggiornamento %}
+                    {{ p.ultimo_aggiornamento[:10] }}
+                {% endif %}
+            </span>
+        </div>
+    </a>
+    {% endfor %}
+
+    {% if senza_profilo > 0 %}
+    <a href="{{ url_for('pipeline.profilo_detail', profilo_id=0) }}" class="pipeline-card pipeline-card-generica">
+        <div class="pipeline-card-header" style="border-top: 3px solid #9ca3af;">
+            <div class="pipeline-card-nome">Senza profilo target</div>
+        </div>
+        <div class="pipeline-card-stats" style="grid-template-columns: 1fr;">
+            <div class="stat">
+                <span class="stat-numero">{{ senza_profilo }}</span>
+                <span class="stat-label">Candidati</span>
+            </div>
+        </div>
+        <div class="pipeline-card-footer">
+            <span class="ultimo-agg">Da assegnare</span>
+        </div>
+    </a>
+    {% endif %}
+</div>
+
+{% endif %}
+{% endblock %}

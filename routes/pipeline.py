@@ -27,22 +27,78 @@ STATI_APPUNTAMENTO = ['Da fare', 'Completato', 'Annullato']
 
 @pipeline_bp.route("/pipeline")
 def index():
-    """Pagina principale della pipeline con tab: Pipeline, Calendario, Cronologia."""
+    """Vista griglia — una card per ogni profilo target che ha candidati."""
+    org_id = get_org_id()
+    db = get_db()
+
+    pipeline_per_profilo = db.execute("""
+        SELECT
+            pt.id,
+            pt.nome,
+            pt.colore,
+            pt.scopo,
+            COUNT(c.id)                                          AS totale_candidati,
+            COUNT(CASE WHEN c.stato = 'Da contattare' THEN 1 END) AS da_contattare,
+            COUNT(CASE WHEN c.stato = 'Risposto' THEN 1 END)      AS risposto,
+            COUNT(CASE WHEN c.stato = 'In valutazione' THEN 1 END) AS in_valutazione,
+            AVG(c.punteggio)                                     AS punteggio_medio,
+            MAX(c.data_aggiornamento)                            AS ultimo_aggiornamento
+        FROM profili_target pt
+        JOIN candidati c ON c.profilo_target_id = pt.id
+            AND c.organizzazione_id = ?
+        WHERE pt.organizzazione_id = ?
+        GROUP BY pt.id
+        ORDER BY MAX(c.data_aggiornamento) DESC
+    """, (org_id, org_id)).fetchall()
+
+    candidati_senza_profilo = db.execute("""
+        SELECT COUNT(*) AS totale FROM candidati
+        WHERE organizzazione_id = ?
+          AND (profilo_target_id IS NULL OR profilo_target_id = 0)
+    """, (org_id,)).fetchone()
+
+    db.close()
+
+    return render_template(
+        "pipeline_grid.html",
+        pipeline=pipeline_per_profilo,
+        senza_profilo=candidati_senza_profilo["totale"] if candidati_senza_profilo else 0,
+    )
+
+
+@pipeline_bp.route("/pipeline/profilo/<int:profilo_id>")
+def profilo_detail(profilo_id):
+    """Pipeline filtrata per un profilo target specifico."""
     tab = request.args.get("tab", "pipeline")
     if tab not in ("pipeline", "calendario", "cronologia"):
         tab = "pipeline"
 
     org_id = get_org_id()
     db = get_db()
-    candidati = db.execute(
-        "SELECT * FROM candidati WHERE organizzazione_id = ? ORDER BY data_aggiornamento DESC",
-        (org_id,)
-    ).fetchall()
 
-    # Converti Row in dizionari per passarli al template
+    # Info profilo target (0 = senza profilo)
+    profilo_target = None
+    if profilo_id > 0:
+        profilo_target = db.execute(
+            "SELECT * FROM profili_target WHERE id = ? AND organizzazione_id = ?",
+            (profilo_id, org_id)
+        ).fetchone()
+        if profilo_target:
+            profilo_target = dict(profilo_target)
+
+    # Candidati filtrati per profilo_target_id
+    if profilo_id > 0:
+        candidati = db.execute(
+            "SELECT * FROM candidati WHERE organizzazione_id = ? AND profilo_target_id = ? ORDER BY data_aggiornamento DESC",
+            (org_id, profilo_id)
+        ).fetchall()
+    else:
+        candidati = db.execute(
+            "SELECT * FROM candidati WHERE organizzazione_id = ? AND (profilo_target_id IS NULL OR profilo_target_id = 0) ORDER BY data_aggiornamento DESC",
+            (org_id,)
+        ).fetchall()
+
     candidati_lista = [dict(c) for c in candidati]
-
-    # Deserializza gli spunti JSON per ogni candidato
     for c in candidati_lista:
         if c.get("spunti"):
             try:
@@ -64,14 +120,14 @@ def index():
     except Exception:
         pass
 
-    # Cronologia valutazioni (tab Valutazione + tab Cronologia)
+    # Cronologia valutazioni
     cronologia = db.execute(
         "SELECT * FROM valutazioni WHERE organizzazione_id = ? ORDER BY data_valutazione DESC",
         (org_id,)
     ).fetchall()
     cronologia = [dict(r) for r in cronologia]
 
-    # Appuntamenti (tab Calendario)
+    # Appuntamenti
     appuntamenti = db.execute("""
         SELECT a.*,
                COALESCE(c.nome || ' ' || c.cognome, 'Candidato rimosso') AS candidato_nome
@@ -96,6 +152,8 @@ def index():
         gestori_cal=GESTORI_CAL,
         stati_app=STATI_APPUNTAMENTO,
         tab_attivo=tab,
+        profilo_target=profilo_target,
+        profilo_id=profilo_id,
     )
 
 

@@ -1455,3 +1455,138 @@ body {
     .page-title { font-size: 1.15rem; }
     .btn { font-size: 0.8rem; padding: 0.45rem 0.85rem; }
 }
+
+
+/* =============================================
+   Pipeline Grid — Vista selezione profilo
+   ============================================= */
+.pipeline-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.5rem;
+    margin-top: 1.5rem;
+}
+
+.pipeline-card {
+    display: block;
+    background: #fff;
+    border: 1px solid var(--grigio-bordo);
+    border-radius: 12px;
+    padding: 1.5rem;
+    cursor: pointer;
+    transition: box-shadow 0.2s, transform 0.2s;
+    text-decoration: none;
+    color: inherit;
+}
+
+.pipeline-card:hover {
+    box-shadow: 0 4px 20px rgba(0,0,0,0.08);
+    transform: translateY(-2px);
+}
+
+.pipeline-card-header {
+    padding-top: 0.75rem;
+}
+
+.pipeline-card-nome {
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: var(--testo);
+    margin-bottom: 0.15rem;
+}
+
+.pipeline-card-scopo {
+    font-size: 0.78rem;
+    color: var(--grigio-testo);
+    text-transform: capitalize;
+}
+
+.pipeline-card-stats {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 0.5rem;
+    margin: 1.25rem 0 0.75rem;
+    text-align: center;
+}
+
+.pipeline-card-stats .stat-numero {
+    display: block;
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--testo);
+    line-height: 1.2;
+}
+
+.pipeline-card-stats .stat-label {
+    display: block;
+    font-size: 0.65rem;
+    color: #9ca3af;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-top: 0.15rem;
+}
+
+.pipeline-card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.78rem;
+    color: #9ca3af;
+    border-top: 1px solid var(--grigio-bordo);
+    padding-top: 0.75rem;
+    margin-top: 0.5rem;
+}
+
+.pipeline-card-generica {
+    border-style: dashed;
+}
+
+.pipeline-card-generica:hover {
+    border-style: solid;
+}
+
+/* Breadcrumb pipeline */
+.pipeline-breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.85rem;
+    margin-bottom: 0.75rem;
+}
+
+.pipeline-breadcrumb a {
+    color: var(--azzurro);
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.pipeline-breadcrumb a:hover {
+    text-decoration: underline;
+}
+
+.breadcrumb-sep {
+    color: #d1d5db;
+}
+
+.breadcrumb-current {
+    color: var(--testo);
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+}
+
+.breadcrumb-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+}
+
+@media (max-width: 1024px) {
+    .pipeline-grid { grid-template-columns: repeat(2, 1fr); }
+}
+
+@media (max-width: 768px) {
+    .pipeline-grid { grid-template-columns: 1fr; }
+}

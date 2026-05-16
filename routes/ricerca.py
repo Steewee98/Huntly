@@ -1277,19 +1277,31 @@ def aggiungi_pipeline():
         db.close()
         return jsonify({"errore": "Già in pipeline", "candidato_id": cand_id}), 409
 
-    tipo_profilo = "A"
+    # Determina profilo_target_id dalla ricerca collegata
+    profilo_target_id = None
+    if pr["ricerca_id"]:
+        ric = db.execute(
+            "SELECT tipo_profilo FROM ricerche_automatiche WHERE id = ?", (pr["ricerca_id"],)
+        ).fetchone()
+        if ric and ric["tipo_profilo"] and ric["tipo_profilo"].startswith("pt_"):
+            try:
+                profilo_target_id = int(ric["tipo_profilo"][3:])
+            except (ValueError, TypeError):
+                pass
+
+    tipo_profilo = ric["tipo_profilo"] if (pr["ricerca_id"] and ric) else "A"
     ha_analisi = bool(pr.get("punteggio"))
     stato = "Da contattare" if ha_analisi else "Da valutare"
     cur = db.execute(
         """INSERT INTO candidati
            (nome, cognome, ruolo_attuale, azienda, profilo_linkedin,
             tipo_profilo, stato, punteggio, analisi, spunti, messaggio_outreach,
-            ricerca_id, organizzazione_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            ricerca_id, profilo_target_id, organizzazione_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (pr["nome"], pr["cognome"], pr["ruolo"], pr["azienda"],
          pr["linkedin_url"], tipo_profilo, stato,
          pr.get("punteggio"), pr.get("analisi"), pr.get("spunti"), pr.get("messaggio_outreach"),
-         pr["ricerca_id"], org_id)
+         pr["ricerca_id"], profilo_target_id, org_id)
     )
     candidato_id = cur.lastrowid
     db.execute("UPDATE profili_ricerca SET candidato_id = ? WHERE id = ?", (candidato_id, profilo_ricerca_id))
@@ -1638,14 +1650,22 @@ def importa():
     if not nome and not cognome:
         return jsonify({"errore": "Nome o cognome mancante"}), 400
 
+    # Determina profilo_target_id da tipo_profilo (es. "pt_3" → 3)
+    profilo_target_id = None
+    if tipo_profilo and tipo_profilo.startswith("pt_"):
+        try:
+            profilo_target_id = int(tipo_profilo[3:])
+        except (ValueError, TypeError):
+            pass
+
     _gestore = "Admin" if tipo_profilo == "A" else ("Recruiter" if tipo_profilo == "B" else "Non assegnato")
     org_id = get_org_id()
     db = get_db()
     cur = db.execute(
         """INSERT INTO candidati
-           (nome, cognome, ruolo_attuale, azienda, profilo_linkedin, tipo_profilo, note, gestore, organizzazione_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (nome, cognome, ruolo_attuale, azienda, linkedin, tipo_profilo, note, _gestore, org_id),
+           (nome, cognome, ruolo_attuale, azienda, profilo_linkedin, tipo_profilo, note, gestore, profilo_target_id, organizzazione_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        (nome, cognome, ruolo_attuale, azienda, linkedin, tipo_profilo, note, _gestore, profilo_target_id, org_id),
     )
     db.commit()
     nuovo_id = cur.lastrowid

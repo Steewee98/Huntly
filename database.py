@@ -363,6 +363,12 @@ def init_db():
         "ALTER TABLE profili_ricerca ADD COLUMN IF NOT EXISTS messaggio_outreach TEXT",
         "ALTER TABLE candidati       ADD COLUMN IF NOT EXISTS source VARCHAR(50) DEFAULT 'linkedin'",
 
+        # FK profilo target su candidati (per pipeline per profilo)
+        "ALTER TABLE candidati ADD COLUMN IF NOT EXISTS profilo_target_id INTEGER",
+        # Backfill: tipo_profilo = 'pt_N' → profilo_target_id = N
+        """UPDATE candidati SET profilo_target_id = CAST(SUBSTRING(tipo_profilo FROM 4) AS INTEGER)
+           WHERE LEFT(tipo_profilo, 3) = 'pt_' AND profilo_target_id IS NULL""",
+
         # Arricchimento Proxycurl
         "ALTER TABLE candidati   ADD COLUMN IF NOT EXISTS dati_proxycurl TEXT",
         "ALTER TABLE candidati   ADD COLUMN IF NOT EXISTS dati_arricchiti TEXT",

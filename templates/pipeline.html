@@ -2,10 +2,33 @@
 {% block title %}Pipeline Candidati — Huntly{% endblock %}
 
 {% block content %}
+<div class="pipeline-breadcrumb">
+    <a href="{{ url_for('pipeline.index') }}">&#8592; Tutte le pipeline</a>
+    <span class="breadcrumb-sep">/</span>
+    <span class="breadcrumb-current">
+        {% if profilo_target %}
+            <span class="breadcrumb-dot" style="background:{{ profilo_target.colore or '#6366f1' }};"></span>
+            {{ profilo_target.nome }}
+        {% elif profilo_id == 0 %}
+            Senza profilo target
+        {% else %}
+            Pipeline
+        {% endif %}
+    </span>
+</div>
+
 <div class="page-header">
     <div>
-        <h1 class="page-title">Pipeline Candidati</h1>
-        <p class="page-subtitle">{{ candidati|length }} candidati nel database</p>
+        <h1 class="page-title">
+            {% if profilo_target %}
+                {{ profilo_target.nome }}
+            {% elif profilo_id == 0 %}
+                Senza profilo target
+            {% else %}
+                Pipeline Candidati
+            {% endif %}
+        </h1>
+        <p class="page-subtitle">{{ candidati|length }} candidati</p>
     </div>
 </div>
 
