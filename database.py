@@ -561,6 +561,35 @@ WHERE NOT EXISTS (SELECT 1 FROM profili_target WHERE nome = 'Profilo Junior')"""
         "CREATE INDEX IF NOT EXISTS idx_ricerche_tipo            ON ricerche_automatiche(tipo_profilo)",
         "CREATE INDEX IF NOT EXISTS idx_profili_ricerca_id       ON profili_ricerca(ricerca_id)",
         "CREATE INDEX IF NOT EXISTS idx_profili_candidato_id     ON profili_ricerca(candidato_id)",
+
+        # ── Piani editoriali LinkedIn ────────────────────────────────────
+        """CREATE TABLE IF NOT EXISTS piani_editoriali (
+    id                  SERIAL PRIMARY KEY,
+    utente_id           INTEGER,
+    organizzazione_id   INTEGER,
+    analisi_profilo_id  INTEGER,
+    settimane           INTEGER DEFAULT 4,
+    post_settimana      INTEGER DEFAULT 3,
+    obiettivi           TEXT,
+    creato_il           TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)""",
+
+        """CREATE TABLE IF NOT EXISTS piano_post (
+    id                  SERIAL PRIMARY KEY,
+    piano_id            INTEGER REFERENCES piani_editoriali(id) ON DELETE CASCADE,
+    settimana           INTEGER NOT NULL,
+    giorno_settimana    VARCHAR(20),
+    tipo_contenuto      VARCHAR(50),
+    formato             VARCHAR(50),
+    tema                TEXT,
+    hook_suggerito      TEXT,
+    obiettivo           VARCHAR(50),
+    perche              TEXT,
+    emoji               VARCHAR(10),
+    testo_generato      TEXT,
+    generato            BOOLEAN DEFAULT FALSE,
+    creato_il           TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+)""",
     ]
 
     for i, sql in enumerate(statements):

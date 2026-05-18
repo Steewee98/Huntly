@@ -1,0 +1,423 @@
+{% extends "base.html" %}
+{% block title %}Piano Editoriale — Huntly{% endblock %}
+
+{% block content %}
+<div class="pipeline-breadcrumb">
+    {% if analisi %}
+    <a href="{{ url_for('profilo_personale.dettaglio_analisi', analisi_id=analisi.id) }}">&#8592; Analisi profilo</a>
+    {% else %}
+    <a href="{{ url_for('profilo_personale.index') }}">&#8592; Analisi Profilo</a>
+    {% endif %}
+    <span class="breadcrumb-sep">/</span>
+    <span class="breadcrumb-current">Piano Editoriale</span>
+</div>
+
+<!-- Header -->
+<div class="pe-header">
+    <div class="pe-header-text">
+        <h1>Piano Editoriale LinkedIn</h1>
+        <div class="pe-meta">
+            {{ piano.settimane }} settimane &middot; {{ piano.post_settimana }} post/settimana &middot; {{ totale_post }} post totali
+            &middot; <span id="generati-count">{{ post_generati }}</span>/{{ totale_post }} generati
+        </div>
+    </div>
+    <div class="pe-adjust">
+        <div class="pe-adjust-control">
+            <button class="pe-adj-btn" onclick="adjVal('sett',-1)">&#8722;</button>
+            <span id="adj-sett">{{ piano.settimane }}</span> sett.
+            <button class="pe-adj-btn" onclick="adjVal('sett',+1)">+</button>
+        </div>
+        <div class="pe-adjust-control">
+            <button class="pe-adj-btn" onclick="adjVal('pps',-1)">&#8722;</button>
+            <span id="adj-pps">{{ piano.post_settimana }}</span> post/sett.
+            <button class="pe-adj-btn" onclick="adjVal('pps',+1)">+</button>
+        </div>
+        <button class="btn btn-outline btn-sm" id="btn-rigenera" onclick="rigeneraPiano()">
+            <span id="rigenera-testo">Rigenera piano</span>
+            <span id="rigenera-loading" class="hidden"><span class="spinner"></span></span>
+        </button>
+    </div>
+</div>
+
+<!-- Settimane -->
+{% for num_sett in settimane|sort %}
+<div class="pe-settimana">
+    <div class="pe-settimana-header">
+        <h2>Settimana {{ num_sett }}</h2>
+        {% set gen = settimane[num_sett]|selectattr('generato')|list|length %}
+        <span class="pe-settimana-progress">{{ gen }}/{{ settimane[num_sett]|length }} post generati</span>
+    </div>
+
+    <div class="pe-posts-grid">
+        {% for post in settimane[num_sett] %}
+        <div class="pe-post-card" id="post-card-{{ post.id }}">
+            <div class="pe-post-top">
+                <span class="pe-post-emoji">{{ post.emoji or '' }}</span>
+                <div class="pe-post-meta">
+                    <span class="pe-post-giorno">{{ post.giorno_settimana or '' }}</span>
+                    <span class="pe-badge pe-badge-formato-{{ post.formato or 'post_testo' }}">{{ post.formato or 'post_testo' }}</span>
+                    <span class="pe-badge pe-badge-obiettivo-{{ post.obiettivo or '' }}">{{ post.obiettivo or '' }}</span>
+                </div>
+                <div class="pe-post-actions">
+                    {% if not post.generato %}
+                    <button class="btn btn-primary btn-sm pe-btn-genera" onclick="generaPost({{ post.id }})">
+                        <span class="pe-gen-label">Genera post</span>
+                        <span class="pe-gen-loading hidden"><span class="spinner"></span></span>
+                    </button>
+                    {% else %}
+                    <button class="btn btn-outline btn-sm" onclick="toggleTesto({{ post.id }})">Vedi/Nascondi</button>
+                    <button class="btn btn-outline btn-sm" onclick="copiaPost({{ post.id }})">Copia</button>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="pe-post-tema">{{ post.tema or '' }}</div>
+            <div class="pe-post-hook">"{{ post.hook_suggerito or '' }}"</div>
+            {% if post.perche %}
+            <div class="pe-post-perche">{{ post.perche }}</div>
+            {% endif %}
+
+            {% if post.generato and post.testo_generato %}
+            <div class="pe-post-testo" id="testo-{{ post.id }}">
+                <div class="pe-post-testo-content">{{ post.testo_generato }}</div>
+                <div class="pe-post-testo-actions">
+                    <button class="btn btn-outline btn-sm" onclick="copiaPost({{ post.id }})">Copia</button>
+                    <a href="/contenuti?tema={{ post.tema|urlencode }}" class="btn btn-outline btn-sm">Modifica in Contenuti</a>
+                </div>
+            </div>
+            {% else %}
+            <div class="pe-post-testo hidden" id="testo-{{ post.id }}">
+                <div class="pe-post-testo-content" id="testo-content-{{ post.id }}"></div>
+                <div class="pe-post-testo-actions">
+                    <button class="btn btn-outline btn-sm" onclick="copiaPost({{ post.id }})">Copia</button>
+                    <a href="/contenuti?tema={{ (post.tema or '')|urlencode }}" class="btn btn-outline btn-sm">Modifica in Contenuti</a>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endfor %}
+
+{% endblock %}
+
+{% block scripts %}
+<style>
+/* Header */
+.pe-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+}
+.pe-header h1 {
+    margin: 0 0 0.25rem;
+    font-size: 1.35rem;
+    font-weight: 800;
+    color: #1a1a2e;
+}
+.pe-meta {
+    font-size: 0.84rem;
+    color: #6b7280;
+}
+.pe-adjust {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+.pe-adjust-control {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.84rem;
+    font-weight: 600;
+    color: #374151;
+}
+.pe-adj-btn {
+    width: 28px;
+    height: 28px;
+    border: 1px solid #e5e7eb;
+    border-radius: 6px;
+    background: #fff;
+    font-size: 1rem;
+    font-weight: 600;
+    color: #374151;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.15s;
+}
+.pe-adj-btn:hover {
+    border-color: #4F6EF7;
+    color: #4F6EF7;
+}
+
+/* Settimana */
+.pe-settimana {
+    margin-bottom: 2rem;
+}
+.pe-settimana-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid #f3f4f6;
+}
+.pe-settimana-header h2 {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #1e293b;
+}
+.pe-settimana-progress {
+    font-size: 0.78rem;
+    color: #9ca3af;
+    font-weight: 500;
+}
+
+/* Post grid */
+.pe-posts-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+/* Post card */
+.pe-post-card {
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 14px;
+    padding: 1.25rem;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+    transition: box-shadow 0.2s;
+}
+.pe-post-card:hover {
+    box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+}
+
+.pe-post-top {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-bottom: 0.75rem;
+    flex-wrap: wrap;
+}
+.pe-post-emoji {
+    font-size: 1.4rem;
+    flex-shrink: 0;
+}
+.pe-post-meta {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    flex: 1;
+    flex-wrap: wrap;
+}
+.pe-post-giorno {
+    font-weight: 700;
+    font-size: 0.88rem;
+    color: #1e293b;
+    text-transform: capitalize;
+}
+.pe-post-actions {
+    display: flex;
+    gap: 0.4rem;
+    margin-left: auto;
+    flex-shrink: 0;
+}
+
+/* Badges */
+.pe-badge {
+    font-size: 0.7rem;
+    font-weight: 600;
+    padding: 2px 8px;
+    border-radius: 20px;
+    text-transform: capitalize;
+}
+.pe-badge-formato-carosello { background: #dbeafe; color: #1e40af; }
+.pe-badge-formato-video_nativo { background: #fce7f3; color: #9d174d; }
+.pe-badge-formato-sondaggio { background: #d1fae5; color: #065f46; }
+.pe-badge-formato-post_testo { background: #f3f4f6; color: #374151; }
+.pe-badge-formato-documento_pdf { background: #ede9fe; color: #5b21b6; }
+
+.pe-badge-obiettivo-autorevolezza { background: #fef3c7; color: #92400e; }
+.pe-badge-obiettivo-visibilita { background: #dbeafe; color: #1e40af; }
+.pe-badge-obiettivo-engagement { background: #d1fae5; color: #065f46; }
+.pe-badge-obiettivo-conversione { background: #fee2e2; color: #991b1b; }
+
+/* Post content */
+.pe-post-tema {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #1e293b;
+    margin-bottom: 0.35rem;
+}
+.pe-post-hook {
+    font-size: 0.84rem;
+    color: #4F6EF7;
+    font-style: italic;
+    margin-bottom: 0.35rem;
+    line-height: 1.45;
+}
+.pe-post-perche {
+    font-size: 0.78rem;
+    color: #6b7280;
+    line-height: 1.4;
+    padding: 0.4rem 0.6rem;
+    background: #f8fafc;
+    border-radius: 6px;
+    margin-top: 0.35rem;
+}
+
+/* Generated text */
+.pe-post-testo {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid #f3f4f6;
+}
+.pe-post-testo-content {
+    font-size: 0.85rem;
+    line-height: 1.6;
+    color: #1e293b;
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: #f8fafc;
+    padding: 1rem;
+    border-radius: 10px;
+    border: 1px solid #e5e7eb;
+    margin-bottom: 0.75rem;
+}
+.pe-post-testo-actions {
+    display: flex;
+    gap: 0.5rem;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+    .pe-header {
+        flex-direction: column;
+    }
+    .pe-post-top {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+    .pe-post-actions {
+        margin-left: 0;
+        width: 100%;
+    }
+    .pe-post-actions .btn {
+        flex: 1;
+        text-align: center;
+    }
+    .pe-adjust {
+        width: 100%;
+        justify-content: space-between;
+    }
+}
+</style>
+
+<script>
+var _pianoId = {{ piano.id }};
+var _settVal = {{ piano.settimane }};
+var _ppsVal = {{ piano.post_settimana }};
+
+function adjVal(tipo, delta) {
+    if (tipo === 'sett') {
+        _settVal = Math.max(1, Math.min(8, _settVal + delta));
+        document.getElementById('adj-sett').textContent = _settVal;
+    } else {
+        _ppsVal = Math.max(1, Math.min(5, _ppsVal + delta));
+        document.getElementById('adj-pps').textContent = _ppsVal;
+    }
+}
+
+async function rigeneraPiano() {
+    var btn = document.getElementById('btn-rigenera');
+    btn.disabled = true;
+    document.getElementById('rigenera-testo').classList.add('hidden');
+    document.getElementById('rigenera-loading').classList.remove('hidden');
+
+    try {
+        var resp = await fetch('/profilo-personale/piano/' + _pianoId + '/aggiorna', {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ settimane: _settVal, post_settimana: _ppsVal })
+        });
+        var dati = await resp.json();
+        if (dati.errore) throw new Error(dati.errore);
+        location.reload();
+    } catch(e) {
+        alert('Errore: ' + e.message);
+        btn.disabled = false;
+        document.getElementById('rigenera-testo').classList.remove('hidden');
+        document.getElementById('rigenera-loading').classList.add('hidden');
+    }
+}
+
+async function generaPost(postId) {
+    var card = document.getElementById('post-card-' + postId);
+    var btn = card.querySelector('.pe-btn-genera');
+    if (!btn) return;
+
+    btn.disabled = true;
+    btn.querySelector('.pe-gen-label').classList.add('hidden');
+    btn.querySelector('.pe-gen-loading').classList.remove('hidden');
+
+    try {
+        var resp = await fetch('/profilo-personale/piano/' + _pianoId + '/genera-post/' + postId, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'}
+        });
+        var dati = await resp.json();
+        if (dati.errore) throw new Error(dati.errore);
+
+        // Mostra testo generato
+        var testoEl = document.getElementById('testo-' + postId);
+        var contentEl = document.getElementById('testo-content-' + postId);
+        if (contentEl) contentEl.textContent = dati.testo;
+        else {
+            var c = testoEl.querySelector('.pe-post-testo-content');
+            if (c) c.textContent = dati.testo;
+        }
+        testoEl.classList.remove('hidden');
+
+        // Sostituisci bottone
+        btn.outerHTML = '<button class="btn btn-outline btn-sm" onclick="toggleTesto(' + postId + ')">Vedi/Nascondi</button>' +
+                        '<button class="btn btn-outline btn-sm" onclick="copiaPost(' + postId + ')">Copia</button>';
+
+        // Aggiorna contatore
+        var counter = document.getElementById('generati-count');
+        counter.textContent = parseInt(counter.textContent) + 1;
+
+    } catch(e) {
+        alert('Errore: ' + e.message);
+        btn.disabled = false;
+        btn.querySelector('.pe-gen-label').classList.remove('hidden');
+        btn.querySelector('.pe-gen-loading').classList.add('hidden');
+    }
+}
+
+function toggleTesto(postId) {
+    var el = document.getElementById('testo-' + postId);
+    el.classList.toggle('hidden');
+}
+
+function copiaPost(postId) {
+    var el = document.getElementById('testo-' + postId);
+    var content = el.querySelector('.pe-post-testo-content');
+    if (!content) return;
+    navigator.clipboard.writeText(content.textContent).then(function() {
+        var btns = el.parentElement.querySelectorAll('[onclick*="copiaPost"]');
+        btns.forEach(function(b) {
+            b.textContent = 'Copiato!';
+            setTimeout(function() { b.textContent = 'Copia'; }, 2000);
+        });
+    });
+}
+</script>
+{% endblock %}

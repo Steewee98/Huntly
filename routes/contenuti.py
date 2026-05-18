@@ -29,11 +29,34 @@ def index():
         "SELECT * FROM profili_voce WHERE organizzazione_id = ? ORDER BY creato_il DESC",
         (org_id,)
     ).fetchall()
+
+    # Piani editoriali con conteggi
+    piani_raw = db.execute(
+        "SELECT * FROM piani_editoriali WHERE organizzazione_id = ? ORDER BY creato_il DESC LIMIT 10",
+        (org_id,)
+    ).fetchall()
+    piani = []
+    for p in piani_raw:
+        p = dict(p)
+        counts = db.execute(
+            "SELECT COUNT(*) as totale, SUM(CASE WHEN generato THEN 1 ELSE 0 END) as generati FROM piano_post WHERE piano_id = ?",
+            (p["id"],)
+        ).fetchone()
+        p["totale_post"] = counts["totale"] if counts else 0
+        p["post_generati"] = counts["generati"] or 0 if counts else 0
+        piani.append(p)
+
     db.close()
+
+    # Tema pre-caricato da piano editoriale
+    tema_preload = request.args.get("tema", "")
+
     return render_template(
         "contenuti.html",
         storico=[dict(s) for s in storico],
         profili_voce=[dict(p) for p in profili_voce],
+        piani=piani,
+        tema_preload=tema_preload,
     )
 
 

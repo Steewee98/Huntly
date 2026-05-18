@@ -10,7 +10,7 @@ import threading
 from datetime import datetime, timedelta
 from flask import Blueprint, render_template, request, jsonify, session
 from database import get_db
-from ai_helpers import analizza_profilo_completo
+from ai_helpers import analizza_profilo_completo, genera_piano_editoriale, genera_post_da_piano
 from routes.auth import get_org_id
 
 log = logging.getLogger(__name__)
@@ -312,6 +312,278 @@ def dettaglio(analisi_id):
             except Exception:
                 pass
     return jsonify(r)
+
+
+# ── Piano editoriale ──────────────────────────────────────────────────────────
+
+@profilo_personale_bp.route("/profilo-personale/genera-piano", methods=["POST"])
+def genera_piano():
+    """Genera un piano editoriale basato sull'analisi profilo."""
+    dati = request.get_json() or {}
+    analisi_id = dati.get("analisi_id")
+    settimane = int(dati.get("settimane", 4))
+    post_settimana = int(dati.get("post_settimana", 3))
+
+    if not analisi_id:
+        return jsonify({"errore": "analisi_id obbligatorio"}), 400
+
+    org_id = get_org_id()
+    user_id = session.get("user_id")
+    db = get_db()
+
+    row = db.execute(
+        "SELECT * FROM analisi_profilo WHERE id = ? AND organizzazione_id = ?",
+        (analisi_id, org_id)
+    ).fetchone()
+    if not row:
+        db.close()
+        return jsonify({"errore": "Analisi non trovata"}), 404
+
+    analisi = dict(row)
+    for campo in ("punti_forza", "aree_miglioramento", "keyword_mancanti",
+                   "analisi_contenuti", "consigli_contenuti", "dati_raw"):
+        if analisi.get(campo):
+            try:
+                analisi[campo] = json.loads(analisi[campo])
+            except Exception:
+                pass
+
+    # Aggiungi nome dal profilo personale
+    profilo = db.execute(
+        "SELECT nome, cognome FROM profili_personali WHERE linkedin_url = ? AND organizzazione_id = ?",
+        (analisi.get("linkedin_url", ""), org_id)
+    ).fetchone()
+    if profilo:
+        analisi["nome"] = f"{profilo['nome'] or ''} {profilo['cognome'] or ''}".strip()
+
+    # Estrai settore e tono da dati_raw
+    dati_raw = analisi.get("dati_raw") or {}
+    analisi.setdefault("settore", dati_raw.get("settore", ""))
+    analisi.setdefault("tono_prevalente", dati_raw.get("tono_prevalente", ""))
+
+    try:
+        piano_posts = genera_piano_editoriale(analisi, settimane, post_settimana)
+    except Exception as e:
+        db.close()
+        return jsonify({"errore": f"Errore generazione piano: {str(e)}"}), 500
+
+    # Salva piano
+    cur = db.execute(
+        """INSERT INTO piani_editoriali (utente_id, organizzazione_id, analisi_profilo_id, settimane, post_settimana)
+           VALUES (?, ?, ?, ?, ?)""",
+        (user_id, org_id, analisi_id, settimane, post_settimana)
+    )
+    piano_id = cur.lastrowid
+
+    # Salva post
+    for p in piano_posts:
+        db.execute(
+            """INSERT INTO piano_post (piano_id, settimana, giorno_settimana, formato, tema, hook_suggerito, obiettivo, perche, emoji)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (piano_id, p.get("settimana", 1), p.get("giorno", ""),
+             p.get("formato", "post_testo"), p.get("tema", ""),
+             p.get("hook", ""), p.get("obiettivo", ""),
+             p.get("perche", ""), p.get("emoji", ""))
+        )
+
+    db.commit()
+    db.close()
+    return jsonify({"ok": True, "piano_id": piano_id})
+
+
+@profilo_personale_bp.route("/profilo-personale/piano/<int:piano_id>")
+def piano_dettaglio(piano_id):
+    """Pagina piano editoriale."""
+    org_id = get_org_id()
+    db = get_db()
+
+    piano = db.execute(
+        "SELECT * FROM piani_editoriali WHERE id = ? AND organizzazione_id = ?",
+        (piano_id, org_id)
+    ).fetchone()
+    if not piano:
+        db.close()
+        return "Piano non trovato", 404
+
+    piano = dict(piano)
+    posts = db.execute(
+        "SELECT * FROM piano_post WHERE piano_id = ? ORDER BY settimana, id",
+        (piano_id,)
+    ).fetchall()
+    posts = [dict(p) for p in posts]
+
+    # Raggruppa per settimana
+    settimane = {}
+    for p in posts:
+        s = p["settimana"]
+        if s not in settimane:
+            settimane[s] = []
+        settimane[s].append(p)
+
+    # Carica analisi collegata per il breadcrumb
+    analisi = None
+    if piano.get("analisi_profilo_id"):
+        analisi = db.execute(
+            "SELECT id, linkedin_url FROM analisi_profilo WHERE id = ?",
+            (piano["analisi_profilo_id"],)
+        ).fetchone()
+        if analisi:
+            analisi = dict(analisi)
+
+    db.close()
+
+    totale = len(posts)
+    generati = sum(1 for p in posts if p.get("generato"))
+
+    return render_template(
+        "piano_editoriale.html",
+        piano=piano,
+        settimane=settimane,
+        analisi=analisi,
+        totale_post=totale,
+        post_generati=generati,
+    )
+
+
+@profilo_personale_bp.route("/profilo-personale/piano/<int:piano_id>/genera-post/<int:post_id>", methods=["POST"])
+def genera_post(piano_id, post_id):
+    """Genera il testo completo di un post del piano."""
+    org_id = get_org_id()
+    db = get_db()
+
+    piano = db.execute(
+        "SELECT * FROM piani_editoriali WHERE id = ? AND organizzazione_id = ?",
+        (piano_id, org_id)
+    ).fetchone()
+    if not piano:
+        db.close()
+        return jsonify({"errore": "Piano non trovato"}), 404
+
+    post = db.execute(
+        "SELECT * FROM piano_post WHERE id = ? AND piano_id = ?",
+        (post_id, piano_id)
+    ).fetchone()
+    if not post:
+        db.close()
+        return jsonify({"errore": "Post non trovato"}), 404
+
+    post = dict(post)
+
+    # Carica dati profilo dall'analisi
+    profilo_info = {"nome": "", "settore": "", "headline": "", "tono_prevalente": ""}
+    if piano["analisi_profilo_id"]:
+        analisi_row = db.execute(
+            "SELECT dati_raw, linkedin_url FROM analisi_profilo WHERE id = ?",
+            (piano["analisi_profilo_id"],)
+        ).fetchone()
+        if analisi_row:
+            dati_raw = {}
+            if analisi_row["dati_raw"]:
+                try:
+                    dati_raw = json.loads(analisi_row["dati_raw"])
+                except Exception:
+                    pass
+            profilo_info["settore"] = dati_raw.get("settore", "")
+            profilo_info["tono_prevalente"] = dati_raw.get("tono_prevalente", "professionale e diretto")
+
+            pp = db.execute(
+                "SELECT nome, cognome, headline FROM profili_personali WHERE linkedin_url = ? AND organizzazione_id = ?",
+                (analisi_row.get("linkedin_url", ""), org_id)
+            ).fetchone()
+            if pp:
+                profilo_info["nome"] = f"{pp['nome'] or ''} {pp['cognome'] or ''}".strip()
+                profilo_info["headline"] = pp.get("headline", "")
+
+    try:
+        testo = genera_post_da_piano(post, profilo_info)
+    except Exception as e:
+        db.close()
+        return jsonify({"errore": f"Errore generazione: {str(e)}"}), 500
+
+    db.execute(
+        "UPDATE piano_post SET testo_generato = ?, generato = TRUE WHERE id = ?",
+        (testo, post_id)
+    )
+    db.commit()
+    db.close()
+
+    return jsonify({"ok": True, "testo": testo})
+
+
+@profilo_personale_bp.route("/profilo-personale/piano/<int:piano_id>/aggiorna", methods=["PUT"])
+def aggiorna_piano(piano_id):
+    """Aggiorna settimane/post_settimana e rigenera il piano."""
+    dati = request.get_json() or {}
+    settimane = int(dati.get("settimane", 4))
+    post_settimana = int(dati.get("post_settimana", 3))
+
+    org_id = get_org_id()
+    db = get_db()
+
+    piano = db.execute(
+        "SELECT * FROM piani_editoriali WHERE id = ? AND organizzazione_id = ?",
+        (piano_id, org_id)
+    ).fetchone()
+    if not piano:
+        db.close()
+        return jsonify({"errore": "Piano non trovato"}), 404
+
+    piano = dict(piano)
+
+    # Carica analisi
+    analisi_row = db.execute(
+        "SELECT * FROM analisi_profilo WHERE id = ?",
+        (piano["analisi_profilo_id"],)
+    ).fetchone()
+    if not analisi_row:
+        db.close()
+        return jsonify({"errore": "Analisi collegata non trovata"}), 404
+
+    analisi = dict(analisi_row)
+    for campo in ("punti_forza", "aree_miglioramento", "keyword_mancanti",
+                   "analisi_contenuti", "dati_raw"):
+        if analisi.get(campo):
+            try:
+                analisi[campo] = json.loads(analisi[campo])
+            except Exception:
+                pass
+
+    profilo = db.execute(
+        "SELECT nome, cognome FROM profili_personali WHERE linkedin_url = ? AND organizzazione_id = ?",
+        (analisi.get("linkedin_url", ""), org_id)
+    ).fetchone()
+    if profilo:
+        analisi["nome"] = f"{profilo['nome'] or ''} {profilo['cognome'] or ''}".strip()
+
+    dati_raw = analisi.get("dati_raw") or {}
+    analisi.setdefault("settore", dati_raw.get("settore", ""))
+
+    try:
+        piano_posts = genera_piano_editoriale(analisi, settimane, post_settimana)
+    except Exception as e:
+        db.close()
+        return jsonify({"errore": f"Errore rigenerazione: {str(e)}"}), 500
+
+    # Cancella vecchi post e aggiorna piano
+    db.execute("DELETE FROM piano_post WHERE piano_id = ?", (piano_id,))
+    db.execute(
+        "UPDATE piani_editoriali SET settimane = ?, post_settimana = ? WHERE id = ?",
+        (settimane, post_settimana, piano_id)
+    )
+
+    for p in piano_posts:
+        db.execute(
+            """INSERT INTO piano_post (piano_id, settimana, giorno_settimana, formato, tema, hook_suggerito, obiettivo, perche, emoji)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (piano_id, p.get("settimana", 1), p.get("giorno", ""),
+             p.get("formato", "post_testo"), p.get("tema", ""),
+             p.get("hook", ""), p.get("obiettivo", ""),
+             p.get("perche", ""), p.get("emoji", ""))
+        )
+
+    db.commit()
+    db.close()
+    return jsonify({"ok": True, "piano_id": piano_id})
 
 
 # ── Salva profilo voce ────────────────────────────────────────────────────────

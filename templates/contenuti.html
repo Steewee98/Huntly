@@ -7,7 +7,39 @@
     <p class="page-subtitle">Genera post LinkedIn personalizzati con la tua voce</p>
 </div>
 
-<div style="display:flex;flex-direction:column;gap:1.5rem;max-width:720px;margin:0 auto;">
+<!-- Tab navigation -->
+<div class="contenuti-tabs">
+    <button class="contenuti-tab active" data-tab="genera" onclick="switchTab('genera')">Genera post</button>
+    <button class="contenuti-tab" data-tab="piano" onclick="switchTab('piano')">Piano editoriale</button>
+</div>
+
+<!-- Tab piano editoriale -->
+<div class="tab-content hidden" id="tab-piano" style="max-width:720px;margin:0 auto;">
+    {% if piani %}
+    <div style="display:flex;flex-direction:column;gap:0.75rem;">
+        {% for p in piani %}
+        <a href="{{ url_for('profilo_personale.piano_dettaglio', piano_id=p.id) }}" class="piano-mini-card">
+            <div class="piano-mini-info">
+                <span class="piano-mini-title">Piano {{ p.settimane }} sett. &middot; {{ p.post_settimana }} post/sett.</span>
+                <span class="piano-mini-date">{{ p.creato_il[:10] if p.creato_il else '' }}</span>
+            </div>
+            <div class="piano-mini-right">
+                <span class="piano-mini-progress">{{ p.post_generati }}/{{ p.totale_post }} generati</span>
+                <span class="piano-mini-arrow">&rarr;</span>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div style="text-align:center;padding:3rem 1rem;color:#6b7280;">
+        <p style="font-size:0.92rem;margin:0 0 0.5rem;">Nessun piano editoriale ancora.</p>
+        <a href="{{ url_for('profilo_personale.index') }}" class="btn btn-outline btn-sm">Analizza il tuo profilo per crearne uno</a>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Tab genera post -->
+<div class="tab-content" id="tab-genera" style="display:flex;flex-direction:column;gap:1.5rem;max-width:720px;margin:0 auto;">
 
 <!-- ===== FORM ===== -->
 <div>
@@ -112,7 +144,8 @@
         <div class="form-group" style="margin-bottom:1rem;">
             <label class="form-label" for="tema">Di cosa vuoi parlare? <span class="required">*</span></label>
             <input type="text" id="tema" class="form-input"
-                   placeholder="es. Come ho trovato un CFO in 3 settimane, Il mercato del recruiting nel 2025...">
+                   placeholder="es. Come ho trovato un CFO in 3 settimane, Il mercato del recruiting nel 2025..."
+                   value="{{ tema_preload or '' }}">
         </div>
 
         <!-- Contesto -->
@@ -200,8 +233,6 @@
     </div>
 </div><!-- fine varianti -->
 
-</div><!-- fine layout -->
-
 <!-- Storico contenuti generati -->
 {% if storico %}
 <div class="card" style="margin-top:2rem;max-width:720px;margin-left:auto;margin-right:auto;">
@@ -269,6 +300,8 @@
 </div>
 {% endif %}
 
+</div><!-- fine tab-genera -->
+
 {% endblock %}
 
 {% block scripts %}
@@ -288,6 +321,81 @@
 .obiettivo-card:hover { border-color: var(--azzurro); background: #f0f7ff; }
 .obiettivo-card.selected { border-color: var(--azzurro); background: #eff6ff; font-weight: 600; }
 .obiettivo-icon { font-size: 1rem; flex-shrink: 0; }
+
+/* Tab navigation */
+.contenuti-tabs {
+    display: flex;
+    gap: 0;
+    margin-bottom: 1.5rem;
+    max-width: 720px;
+    margin-left: auto;
+    margin-right: auto;
+    border-bottom: 2px solid #e5e7eb;
+}
+.contenuti-tab {
+    padding: 0.65rem 1.25rem;
+    font-size: 0.88rem;
+    font-weight: 600;
+    color: #6b7280;
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -2px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+.contenuti-tab:hover { color: #1e293b; }
+.contenuti-tab.active {
+    color: #4F6EF7;
+    border-bottom-color: #4F6EF7;
+}
+
+/* Piano mini cards */
+.piano-mini-card {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1rem 1.25rem;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-radius: 12px;
+    text-decoration: none;
+    color: inherit;
+    transition: all 0.2s;
+}
+.piano-mini-card:hover {
+    border-color: #4F6EF7;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+}
+.piano-mini-info {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.piano-mini-title {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: #1e293b;
+}
+.piano-mini-date {
+    font-size: 0.78rem;
+    color: #9ca3af;
+}
+.piano-mini-right {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+.piano-mini-progress {
+    font-size: 0.8rem;
+    color: #6b7280;
+    font-weight: 500;
+}
+.piano-mini-arrow {
+    color: #4F6EF7;
+    font-size: 1.1rem;
+    font-weight: 600;
+}
 </style>
 <script>
 var _obiettivo = 'candidati';
@@ -581,6 +689,20 @@ async function generaVisualStorico(btn) {
         card.querySelector('.sv-label').classList.remove('hidden');
         card.querySelector('.sv-loading').classList.add('hidden');
     }
+}
+
+// Tab switching
+function switchTab(tab) {
+    document.querySelectorAll('.contenuti-tab').forEach(function(t) {
+        t.classList.toggle('active', t.dataset.tab === tab);
+    });
+    document.querySelectorAll('.tab-content').forEach(function(c) {
+        c.classList.add('hidden');
+        c.style.display = 'none';
+    });
+    var el = document.getElementById('tab-' + tab);
+    el.classList.remove('hidden');
+    el.style.display = tab === 'genera' ? 'flex' : 'block';
 }
 
 // Helpers

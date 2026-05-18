@@ -189,6 +189,36 @@
 </div>
 {% endif %}
 
+<!-- ═══ Sezione 9 — CTA Piano Editoriale ═══ -->
+<div class="card ppd-section ppd-piano-cta">
+    <div class="ppd-piano-cta-inner">
+        <div class="ppd-piano-cta-icon">&#128197;</div>
+        <div class="ppd-piano-cta-text">
+            <h3>Crea il tuo piano editoriale</h3>
+            <p>Genera un piano personalizzato basato sulla tua analisi profilo, ottimizzato per l'algoritmo LinkedIn.</p>
+        </div>
+        <div class="ppd-piano-controls">
+            <div class="ppd-piano-slider">
+                <label>Settimane: <strong id="settimane-val">4</strong></label>
+                <input type="range" min="1" max="8" value="4"
+                    oninput="document.getElementById('settimane-val').textContent=this.value"
+                    id="settimane-input">
+            </div>
+            <div class="ppd-piano-slider">
+                <label>Post/settimana: <strong id="pps-val">3</strong></label>
+                <input type="range" min="1" max="5" value="3"
+                    oninput="document.getElementById('pps-val').textContent=this.value"
+                    id="pps-input">
+            </div>
+            <button class="btn btn-primary" id="btn-genera-piano" onclick="generaPiano()">
+                <span id="piano-btn-testo">Genera piano editoriale</span>
+                <span id="piano-btn-loading" class="hidden"><span class="spinner"></span> Generazione...</span>
+            </button>
+        </div>
+    </div>
+    <div id="piano-errore" style="color:#dc2626;font-size:0.85rem;margin-top:0.75rem;"></div>
+</div>
+
 {% endblock %}
 
 {% block scripts %}
@@ -292,11 +322,66 @@
     position: absolute; bottom: -1.2rem; white-space: nowrap;
 }
 
+/* Piano CTA */
+.ppd-piano-cta {
+    background: linear-gradient(135deg, #f8faff 0%, #f0f4ff 100%);
+    border: 1.5px solid #c7d2fe;
+}
+.ppd-piano-cta-inner {
+    display: flex;
+    align-items: flex-start;
+    gap: 1.25rem;
+    padding: 1.25rem;
+    flex-wrap: wrap;
+}
+.ppd-piano-cta-icon {
+    font-size: 2rem;
+    flex-shrink: 0;
+    line-height: 1;
+}
+.ppd-piano-cta-text {
+    flex: 1;
+    min-width: 200px;
+}
+.ppd-piano-cta-text h3 {
+    margin: 0 0 0.3rem;
+    font-size: 1rem;
+    color: #1e293b;
+}
+.ppd-piano-cta-text p {
+    margin: 0;
+    font-size: 0.84rem;
+    color: #6b7280;
+    line-height: 1.5;
+}
+.ppd-piano-controls {
+    display: flex;
+    flex-direction: column;
+    gap: 0.6rem;
+    min-width: 200px;
+}
+.ppd-piano-slider {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+.ppd-piano-slider label {
+    font-size: 0.8rem;
+    color: #4b5563;
+    white-space: nowrap;
+}
+.ppd-piano-slider input[type="range"] {
+    width: 100px;
+    accent-color: #4F6EF7;
+}
+
 @media (max-width: 768px) {
     .ppd-compare { grid-template-columns: 1fr; }
     .ppd-forza-grid { grid-template-columns: 1fr; }
     .ppd-contenuti-grid { grid-template-columns: 1fr; }
     .ppd-score-section { gap: 1rem; }
+    .ppd-piano-cta-inner { flex-direction: column; }
 }
 </style>
 
@@ -308,6 +393,34 @@ function copiaTestoSuggerito() {
         btn.textContent = 'Copiato!';
         setTimeout(function() { btn.textContent = 'Copia suggerito'; }, 2000);
     });
+}
+
+async function generaPiano() {
+    var btn = document.getElementById('btn-genera-piano');
+    btn.disabled = true;
+    document.getElementById('piano-btn-testo').classList.add('hidden');
+    document.getElementById('piano-btn-loading').classList.remove('hidden');
+    document.getElementById('piano-errore').textContent = '';
+
+    try {
+        var resp = await fetch('/profilo-personale/genera-piano', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                analisi_id: {{ analisi.id }},
+                settimane: parseInt(document.getElementById('settimane-input').value),
+                post_settimana: parseInt(document.getElementById('pps-input').value)
+            })
+        });
+        var dati = await resp.json();
+        if (dati.errore) throw new Error(dati.errore);
+        location.href = '/profilo-personale/piano/' + dati.piano_id;
+    } catch(e) {
+        document.getElementById('piano-errore').textContent = 'Errore: ' + e.message;
+        btn.disabled = false;
+        document.getElementById('piano-btn-testo').classList.remove('hidden');
+        document.getElementById('piano-btn-loading').classList.add('hidden');
+    }
 }
 </script>
 {% endblock %}

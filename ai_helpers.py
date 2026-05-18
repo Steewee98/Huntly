@@ -724,6 +724,144 @@ def analizza_profilo_voce(dati_proxycurl: dict, nome: str) -> dict:
         return {"tono_prevalente": "", "settore": "", "bio_breve": ""}
 
 
+def genera_piano_editoriale(analisi: dict, settimane: int = 4, post_settimana: int = 3) -> list:
+    """
+    Genera il piano editoriale personalizzato basato sull'analisi del profilo.
+    Restituisce lista di post pianificati con tema, formato, hook, obiettivo.
+    """
+    nome = analisi.get('nome', '') or ''
+    settore = analisi.get('settore', '') or ''
+    headline = analisi.get('headline_attuale', '') or ''
+    punti_forza = analisi.get('punti_forza', [])
+    keyword = analisi.get('keyword_mancanti', [])
+    analisi_contenuti = analisi.get('analisi_contenuti', {}) or {}
+
+    totale_post = settimane * post_settimana
+
+    pf_str = ', '.join(punti_forza) if isinstance(punti_forza, list) else str(punti_forza)
+    kw_str = ', '.join(keyword) if isinstance(keyword, list) else str(keyword)
+    val_str = analisi_contenuti.get('valutazione', 'Nessuna analisi disponibile') if isinstance(analisi_contenuti, dict) else str(analisi_contenuti)
+
+    prompt = f"""Sei un esperto di content marketing LinkedIn con profonda conoscenza dell'algoritmo.
+
+PROFILO:
+Nome: {nome}
+Settore: {settore}
+Headline: {headline}
+Punti di forza: {pf_str}
+Keyword strategiche: {kw_str}
+Analisi contenuti attuali: {val_str}
+
+PIANO RICHIESTO: {totale_post} post in {settimane} settimane ({post_settimana} post/settimana)
+
+LINEE GUIDA ALGORITMO LINKEDIN DA RISPETTARE:
+- Caroselli e documenti PDF hanno il maggiore organic reach
+- I video nativi (non YouTube) ottengono 5x piu reach dei link esterni
+- I sondaggi generano alto engagement ma non devono essere usati piu di 1 volta ogni 2 settimane
+- Post solo testo con hook forte nelle prime 2 righe performano meglio dei post con link esterni
+- Mai inserire link nel testo del post — mettili sempre nel primo commento
+- Rispondere ai commenti nelle prime 2 ore e fondamentale per l'algoritmo
+- Mix ottimale: 30% caroselli, 25% testo, 20% documenti, 15% video, 10% sondaggi
+- Alternare contenuti di autorevolezza (35%), visibilita personale (25%), engagement (20%), conversione (20%)
+- Pubblicare martedi/mercoledi/giovedi tra 8-9, 12-13, 17-18
+
+Genera SOLO un JSON array con {totale_post} oggetti, uno per post:
+[
+  {{
+    "settimana": 1,
+    "giorno": "martedi|mercoledi|giovedi",
+    "formato": "carosello|post_testo|documento_pdf|video_nativo|sondaggio",
+    "obiettivo": "autorevolezza|visibilita|engagement|conversione",
+    "tema": "titolo breve del tema (max 60 caratteri)",
+    "hook": "prime 2 righe del post — devono fermare lo scroll (max 120 caratteri)",
+    "perche": "1 riga che spiega perche questo post funzionera con l'algoritmo",
+    "emoji": "1 emoji che rappresenta il tema"
+  }}
+]
+
+Il piano deve essere coerente con il settore {settore} e costruire progressivamente l'autorevolezza del profilo.
+Solo JSON valido, nessun testo aggiuntivo."""
+
+    payload = {
+        "model":      CLAUDE_MODEL,
+        "max_tokens": 3000,
+        "messages":   [{"role": "user", "content": clean_text(prompt)}],
+    }
+    try:
+        risposta = _chiama_api("genera_piano_editoriale", payload)
+        testo = risposta.content[0].text.strip()
+        if testo.startswith("```"):
+            testo = testo.split("```")[1]
+            if testo.startswith("json"):
+                testo = testo[4:]
+        return json.loads(testo)
+    except Exception as e:
+        logger.error("[AI] genera_piano_editoriale fallita: %s", e)
+        raise
+
+
+def genera_post_da_piano(post_info: dict, profilo_info: dict) -> str:
+    """
+    Genera il testo completo di un post LinkedIn dal piano editoriale.
+    post_info: dict con formato, tema, hook, obiettivo
+    profilo_info: dict con nome, settore, headline, tono
+    """
+    formato = post_info.get('formato', 'post_testo')
+    tema = post_info.get('tema', '')
+    hook = post_info.get('hook_suggerito') or post_info.get('hook', '')
+    obiettivo = post_info.get('obiettivo', '')
+    nome = profilo_info.get('nome', '')
+    settore = profilo_info.get('settore', '')
+    tono = profilo_info.get('tono_prevalente', 'professionale e diretto')
+
+    istruzioni_formato = {
+        'carosello': "Scrivi il testo di accompagnamento per un carosello LinkedIn. "
+                     "Indica tra parentesi quadre il contenuto di ogni slide [Slide 1: ...]. "
+                     "Il testo deve invitare a scorrere.",
+        'post_testo': "Scrivi un post solo testo, con hook forte nelle prime 2 righe. "
+                      "Struttura: hook → sviluppo → conclusione con CTA.",
+        'documento_pdf': "Scrivi il testo di accompagnamento per un documento PDF da condividere. "
+                         "Il testo deve incuriosire e spingere a scaricare/leggere il documento.",
+        'video_nativo': "Scrivi il testo di accompagnamento per un video nativo LinkedIn. "
+                        "Deve descrivere cosa si vedra nel video e invitare a guardarlo.",
+        'sondaggio': "Scrivi la domanda del sondaggio, 3-4 opzioni di risposta tra parentesi quadre, "
+                     "e un breve testo introduttivo che stimoli la partecipazione.",
+    }
+
+    prompt = f"""Sei {nome}, un professionista nel settore {settore}.
+Il tuo tono di scrittura su LinkedIn e: {tono}.
+
+Scrivi un post LinkedIn completo su questo tema:
+Tema: {tema}
+Hook suggerito: {hook}
+Obiettivo: {obiettivo}
+
+{istruzioni_formato.get(formato, istruzioni_formato['post_testo'])}
+
+REGOLE:
+- Apri con un hook che ferma lo scroll (usa l'hook suggerito come ispirazione)
+- Scrivi in prima persona
+- Tra 150 e 300 parole
+- Usa emoji con moderazione (max 3-4)
+- Termina con 3-5 hashtag pertinenti
+- NON inserire link nel testo (vanno nel primo commento)
+- Scrivi in italiano
+
+Rispondi SOLO con il testo del post, senza intestazioni o spiegazioni."""
+
+    payload = {
+        "model":      CLAUDE_MODEL,
+        "max_tokens": 1500,
+        "messages":   [{"role": "user", "content": clean_text(prompt)}],
+    }
+    try:
+        risposta = _chiama_api("genera_post_da_piano", payload)
+        return risposta.content[0].text.strip()
+    except Exception as e:
+        logger.error("[AI] genera_post_da_piano fallita: %s", e)
+        raise
+
+
 def analizza_profilo_personale(testo_profilo: str) -> dict:
     """
     Analizza un profilo LinkedIn per personal branding.
