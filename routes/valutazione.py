@@ -37,6 +37,7 @@ def analizza():
     testo_profilo = dati.get("testo_profilo", "").strip()
     tipo_profilo = dati.get("tipo_profilo", "A")
     candidato_id = dati.get("candidato_id")
+    profilo_target_id = dati.get("profilo_target_id")
 
     if not testo_profilo:
         return jsonify({"errore": "Inserire il testo del profilo LinkedIn"}), 400
@@ -50,8 +51,20 @@ def analizza():
     if _limite is not None:
         return _limite
 
+    # Carica impostazioni dal profilo target (include scopo)
+    impostazioni = None
+    if profilo_target_id:
+        try:
+            _db = get_db()
+            _pt = _db.execute("SELECT * FROM profili_target WHERE id = ?", (profilo_target_id,)).fetchone()
+            _db.close()
+            if _pt:
+                impostazioni = dict(_pt)
+        except Exception:
+            pass
+
     # Chiama Claude per l'analisi
-    risultato = analizza_profilo_linkedin(testo_profilo, tipo_profilo)
+    risultato = analizza_profilo_linkedin(testo_profilo, tipo_profilo, impostazioni)
 
     spunti_json = json.dumps(risultato["spunti_contatto"], ensure_ascii=False)
     # Anteprima: prime 120 caratteri del testo profilo
