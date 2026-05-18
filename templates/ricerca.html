@@ -881,6 +881,8 @@ function avviaAnalisiDiretta(persona) {
                             var salvaCallback = function(nuoviDati) { _salvaAnalisiRicerca(nuoviDati, p); };
                             _mostraReportNelModal(ev.risultato, candidatoInfo, salvaCallback);
                             _salvaAnalisiRicerca(ev.risultato, p);
+                            // Aggiorna subito la card nella cronologia (senza aspettare il salvataggio)
+                            _aggiornaProfiloCard(p.profilo_ricerca_id, ev.risultato.punteggio);
                         } else if (ev.type === 'errore') {
                             document.getElementById('modal-report-spinner').style.display = 'none';
                             document.getElementById('modal-report-status').textContent =
@@ -1043,9 +1045,9 @@ function _renderProfiliRicerca(container, profili, ricercaId) {
         } else if (analizzato) {
             azioniHtml = '<button class="btn btn-primary btn-xs" onclick="event.stopPropagation(); aggiungiAPipeline(' + p.id + ', this)">&#43; Pipeline</button>';
         } else {
-            azioniHtml = '<button class="btn btn-primary btn-xs" onclick="event.stopPropagation(); avviaAnalisiDaRicerca(' + p.id + ', this)">' +
+            azioniHtml = '<button class="btn btn-primary btn-xs btn-analizza-profilo" onclick="event.stopPropagation(); avviaAnalisiDaRicerca(' + p.id + ', this)">' +
                 '&#11088; Analizza</button>' +
-                '<button class="btn btn-outline btn-xs" disabled title="Analizza prima" style="opacity:0.5;cursor:not-allowed;">&#43; Pipeline</button>';
+                '<button class="btn btn-outline btn-xs btn-pipeline-profilo" disabled title="Analizza prima" style="opacity:0.5;cursor:not-allowed;">&#43; Pipeline</button>';
         }
 
         var linkedinHtml = p.linkedin_url
@@ -1094,9 +1096,9 @@ function aggiungiAPipeline(profiloRicercaId, btn) {
 }
 
 function avviaAnalisiDaRicerca(profiloRicercaId, btn) {
-    // Carica dati profilo e avvia analisi AI
+    // Carica dati profilo e avvia analisi AI nel modal
     btn.disabled = true;
-    btn.innerHTML = '<span class="spinner"></span>';
+    btn.innerHTML = '<span class="spinner"></span> Analisi...';
     fetch('/ricerca/profili-singolo/' + profiloRicercaId)
         .then(function(r) { return r.json(); })
         .then(function(p) {
@@ -1107,9 +1109,9 @@ function avviaAnalisiDaRicerca(profiloRicercaId, btn) {
                 linkedin: p.linkedin_url, sommario: '',
                 profilo_ricerca_id: p.id
             };
+            // Avvia analisi nel modal — il bottone resta in stato "Analisi..."
+            // finché _salvaAnalisiRicerca() aggiorna la UI al completamento
             avviaAnalisiDiretta(persona);
-            btn.disabled = false;
-            btn.innerHTML = '&#11088; Analizza';
         })
         .catch(function(e) {
             btn.disabled = false;
@@ -1180,38 +1182,52 @@ function _salvaAnalisiRicerca(dati, p) {
                     _reportGlobale.candidatoInfo.candidato_id = resp.candidato_id;
                 }
                 // Aggiorna badge punteggio e bottoni nella riga profilo (cronologia)
-                var profiloRicercaId = p.profilo_ricerca_id;
-                if (profiloRicercaId && dati.punteggio) {
-                    var rigaProfilo = document.querySelector('[data-profilo-id="' + profiloRicercaId + '"]');
-                    if (rigaProfilo) {
-                        var badgeAnalisi = rigaProfilo.querySelector('.badge-analisi');
-                        if (badgeAnalisi) {
-                            var colore = dati.punteggio >= 7 ? '#10b981' : dati.punteggio >= 5 ? '#f59e0b' : '#ef4444';
-                            badgeAnalisi.innerHTML = '<span style="background:' + colore + '20; color:' + colore + '; padding:2px 8px; border-radius:4px; font-weight:600; font-size:0.8rem;">' + dati.punteggio + '/10</span>';
-                        }
-                        // Abilita bottone pipeline, nascondi bottone analizza
-                        var btnPipeline = rigaProfilo.querySelector('.btn-outline[disabled]');
-                        if (btnPipeline && btnPipeline.title === 'Analizza prima') {
-                            btnPipeline.disabled = false;
-                            btnPipeline.style.opacity = '1';
-                            btnPipeline.style.cursor = 'pointer';
-                            btnPipeline.title = '';
-                            btnPipeline.onclick = function(ev) { ev.stopPropagation(); aggiungiAPipeline(profiloRicercaId, btnPipeline); };
-                        }
-                        var btnAnalizza = rigaProfilo.querySelector('.btn-primary');
-                        if (btnAnalizza && btnAnalizza.textContent.indexOf('Analizza') >= 0) {
-                            btnAnalizza.style.display = 'none';
-                        }
-                    }
-                    // Invalida cache per forzare ricaricamento dati aggiornati
-                    _profiliCache = {};
-                }
+                _aggiornaProfiloCard(p.profilo_ricerca_id, dati.punteggio);
             }
         });
     })
     .catch(function(err) { console.error('[salva analisi ricerca]', err); });
 }
 
+function _aggiornaProfiloCard(profiloRicercaId, punteggio) {
+    if (!profiloRicercaId || !punteggio) return;
+
+    // Trova tutte le card con questo profilo_ricerca_id (possono essere in più liste espanse)
+    var righe = document.querySelectorAll('[data-profilo-id="' + profiloRicercaId + '"]');
+    righe.forEach(function(riga) {
+        // 1. Aggiorna badge punteggio
+        var badge = riga.querySelector('.badge-analisi');
+        if (badge) {
+            var colore = punteggio >= 7 ? '#10b981' : punteggio >= 5 ? '#f59e0b' : '#ef4444';
+            var bg = punteggio >= 7 ? '#d1fae5' : punteggio >= 5 ? '#fef3c7' : '#fee2e2';
+            badge.innerHTML = '<span class="score-badge score-badge-' +
+                (punteggio >= 8 ? 'alto' : (punteggio >= 5 ? 'medio' : 'basso')) +
+                '">' + punteggio + '/10</span>';
+        }
+
+        // 2. Nascondi bottone Analizza
+        var btnAnalizza = riga.querySelector('.btn-analizza-profilo');
+        if (btnAnalizza) {
+            btnAnalizza.style.display = 'none';
+        }
+
+        // 3. Abilita bottone Pipeline
+        var btnPipeline = riga.querySelector('.btn-pipeline-profilo');
+        if (btnPipeline) {
+            btnPipeline.disabled = false;
+            btnPipeline.style.opacity = '1';
+            btnPipeline.style.cursor = 'pointer';
+            btnPipeline.title = '';
+            btnPipeline.onclick = function(ev) {
+                ev.stopPropagation();
+                aggiungiAPipeline(profiloRicercaId, btnPipeline);
+            };
+        }
+    });
+
+    // Invalida cache per forzare ricaricamento dati aggiornati
+    _profiliCache = {};
+}
 
 </script>
 {% endblock %}
