@@ -110,12 +110,20 @@ def _build_scopo_prompt(scopo: str, scopo_dettaglio: str) -> str:
     if scopo == 'sales':
         return (
             f"\nSCOPO: Sales — stai cercando potenziali clienti per vendere un prodotto/servizio.\n"
-            f"Prodotto/servizio: {scopo_dettaglio}\n"
-            "NON stai cercando di assumere questa persona.\n"
-            "Valuta quanto questo profilo corrisponde al cliente ideale per questo prodotto.\n"
-            "Considera: ha il problema che il prodotto risolve? Ha budget decisionale? È il giusto interlocutore?\n"
-            "Il messaggio di outreach deve parlare del valore del prodotto per lui, "
-            "NON di opportunità di lavoro. Deve essere un messaggio di vendita consultiva, "
+            f"Prodotto/servizio: {scopo_dettaglio}\n\n"
+            "ISTRUZIONE CRITICA: Stai valutando questo profilo come POTENZIALE CLIENTE, non come candidato.\n"
+            "NON fare MAI riferimento a: cambio lavoro, opportunita di carriera, seniority per ruoli diversi, "
+            "ambizioni professionali, crescita professionale, nuove sfide lavorative.\n"
+            "Valuta ESCLUSIVAMENTE:\n"
+            "1. Ha il problema che il nostro prodotto risolve?\n"
+            "2. Ha potere decisionale o budget per acquistare?\n"
+            "3. E il giusto interlocutore (decision maker vs influencer)?\n"
+            "4. Qual e il miglior aggancio commerciale basato sul suo profilo?\n\n"
+            "Il punteggio indica quanto questo profilo e un buon prospect commerciale.\n"
+            "L'analisi_percorso deve valutare il potenziale come cliente, NON come candidato.\n"
+            "Gli spunti_contatto devono essere agganci commerciali, NON di recruiting.\n"
+            "Il messaggio di outreach deve parlare SOLO del valore del prodotto per lui, "
+            "mai di lavoro. Deve essere un messaggio di vendita consultiva, "
             "non aggressivo, che apre una conversazione sul problema che il prodotto risolve.\n"
         )
     elif scopo == 'partnership':
@@ -201,8 +209,30 @@ def analizza_profilo_linkedin(testo_profilo: str, tipo_profilo: str, impostazion
             "Non fare riferimento a criteri generici o settori non specificati.\n"
         )
 
+    # Adatta ruolo e istruzioni JSON in base allo scopo
+    if scopo == 'sales':
+        ruolo_sistema = "Sei un esperto di sales B2B e business development italiano."
+        analisi_label = "analisi dettagliata in 3-4 frasi sul potenziale come cliente"
+        spunti_label = "aggancio commerciale personalizzato"
+        msg_label = "bozza messaggio di vendita consultiva su LinkedIn, max 300 caratteri"
+    elif scopo == 'partnership':
+        ruolo_sistema = "Sei un esperto di business development e partnership italiano."
+        analisi_label = "analisi dettagliata in 3-4 frasi sul potenziale come partner"
+        spunti_label = "spunto per proporre collaborazione"
+        msg_label = "bozza messaggio di partnership su LinkedIn, max 300 caratteri"
+    elif scopo == 'network':
+        ruolo_sistema = "Sei un esperto di networking professionale italiano."
+        analisi_label = "analisi dettagliata in 3-4 frasi sull'interesse di connettersi"
+        spunti_label = "spunto per connettersi"
+        msg_label = "bozza messaggio di networking su LinkedIn, max 300 caratteri"
+    else:
+        ruolo_sistema = "Sei un esperto recruiter e business developer italiano."
+        analisi_label = "analisi dettagliata in 3-4 frasi, coerente con lo scopo della ricerca"
+        spunti_label = "spunto personalizzato per il primo contatto, coerente con lo scopo"
+        msg_label = "bozza completa del messaggio personalizzato su LinkedIn, coerente con lo scopo, tono professionale ma umano, max 300 caratteri"
+
     prompt = (
-        "Sei un esperto recruiter e business developer italiano.\n"
+        f"{ruolo_sistema}\n"
         "Analizza il seguente profilo LinkedIn per valutarne la compatibilita con questo target:\n\n"
         f"{descrizione_profilo}{istr_punteggio}\n"
         f"{scopo_prompt}\n"
@@ -216,13 +246,13 @@ def analizza_profilo_linkedin(testo_profilo: str, tipo_profilo: str, impostazion
         '  "azienda": "<nome dell\'azienda attuale estratto dal testo, o null>",\n'
         '  "anni_esperienza": <numero intero degli anni totali di esperienza professionale stimati dal testo, o null>,\n'
         '  "punteggio": <numero da 1 a 10>,\n'
-        '  "analisi_percorso": "<analisi dettagliata in 3-4 frasi, coerente con lo scopo della ricerca>",\n'
+        f'  "analisi_percorso": "<{analisi_label}>",\n'
         '  "spunti_contatto": [\n'
-        '    "<spunto personalizzato 1 per il primo contatto, coerente con lo scopo>",\n'
-        '    "<spunto personalizzato 2>",\n'
-        '    "<spunto personalizzato 3>"\n'
+        f'    "<{spunti_label} 1>",\n'
+        f'    "<{spunti_label} 2>",\n'
+        f'    "<{spunti_label} 3>"\n'
         '  ],\n'
-        '  "messaggio_outreach": "<bozza completa del messaggio personalizzato su LinkedIn, coerente con lo scopo, tono professionale ma umano, max 300 caratteri>"\n'
+        f'  "messaggio_outreach": "<{msg_label}>"\n'
         "}"
     )
 
@@ -384,8 +414,30 @@ def analizza_profilo_linkedin_stream(
             "Non fare riferimento a criteri generici o settori non specificati.\n"
         )
 
+    # Adatta ruolo e istruzioni JSON in base allo scopo (come versione non-streaming)
+    if scopo_s == 'sales':
+        ruolo_sistema_s = "Sei un esperto di sales B2B e business development italiano."
+        analisi_label_s = "analisi dettagliata in 3-4 frasi sul potenziale come cliente"
+        spunti_label_s = "aggancio commerciale personalizzato"
+        msg_label_s = "bozza messaggio di vendita consultiva su LinkedIn, max 300 caratteri"
+    elif scopo_s == 'partnership':
+        ruolo_sistema_s = "Sei un esperto di business development e partnership italiano."
+        analisi_label_s = "analisi dettagliata in 3-4 frasi sul potenziale come partner"
+        spunti_label_s = "spunto per proporre collaborazione"
+        msg_label_s = "bozza messaggio di partnership su LinkedIn, max 300 caratteri"
+    elif scopo_s == 'network':
+        ruolo_sistema_s = "Sei un esperto di networking professionale italiano."
+        analisi_label_s = "analisi dettagliata in 3-4 frasi sull'interesse di connettersi"
+        spunti_label_s = "spunto per connettersi"
+        msg_label_s = "bozza messaggio di networking su LinkedIn, max 300 caratteri"
+    else:
+        ruolo_sistema_s = "Sei un esperto recruiter e business developer italiano."
+        analisi_label_s = "analisi dettagliata in 3-4 frasi, coerente con lo scopo della ricerca"
+        spunti_label_s = "spunto personalizzato per il primo contatto, coerente con lo scopo"
+        msg_label_s = "bozza completa del messaggio personalizzato su LinkedIn, coerente con lo scopo, tono professionale ma umano, max 300 caratteri"
+
     prompt = (
-        "Sei un esperto recruiter e business developer italiano.\n"
+        f"{ruolo_sistema_s}\n"
         "Analizza il seguente profilo LinkedIn per valutarne la compatibilita con questo target:\n\n"
         f"{descrizione_profilo}{istr_punteggio}\n"
         f"{scopo_prompt_s}\n"
@@ -399,9 +451,13 @@ def analizza_profilo_linkedin_stream(
         '  "azienda": "<nome azienda attuale, o null>",\n'
         '  "anni_esperienza": <numero intero o null>,\n'
         '  "punteggio": <numero da 1 a 10>,\n'
-        '  "analisi_percorso": "<analisi dettagliata in 3-4 frasi, coerente con lo scopo>",\n'
-        '  "spunti_contatto": ["<spunto 1>","<spunto 2>","<spunto 3>"],\n'
-        '  "messaggio_outreach": "<bozza messaggio LinkedIn coerente con lo scopo, max 300 caratteri>"\n'
+        f'  "analisi_percorso": "<{analisi_label_s}>",\n'
+        '  "spunti_contatto": [\n'
+        f'    "<{spunti_label_s} 1>",\n'
+        f'    "<{spunti_label_s} 2>",\n'
+        f'    "<{spunti_label_s} 3>"\n'
+        '  ],\n'
+        f'  "messaggio_outreach": "<{msg_label_s}>"\n'
         "}"
     )
 

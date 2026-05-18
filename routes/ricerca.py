@@ -1410,6 +1410,27 @@ def analizza_candidato():
         ).fetchone()
         imp = dict(imp_row) if imp_row else None
 
+        # Se tipo_profilo è 'pt_N', carica scopo/scopo_dettaglio da profili_target
+        if tipo_profilo and tipo_profilo.startswith('pt_'):
+            try:
+                pt_id = int(tipo_profilo[3:])
+                pt_row = db.execute(
+                    "SELECT * FROM profili_target WHERE id = ?", (pt_id,)
+                ).fetchone()
+                if pt_row:
+                    pt = dict(pt_row)
+                    if imp is None:
+                        imp = pt
+                    else:
+                        # Merge: profili_target sovrascrive i campi condivisi
+                        for k in ('scopo', 'scopo_dettaglio', 'ruoli_target', 'settori',
+                                  'eta_min', 'eta_max', 'anni_esperienza_min',
+                                  'keyword_positive', 'keyword_negative'):
+                            if pt.get(k):
+                                imp[k] = pt[k]
+            except (ValueError, TypeError):
+                pass
+
         try:
             risultato = analizza_profilo_linkedin(testo_profilo, tipo_profilo, imp)
         except Exception as e:
