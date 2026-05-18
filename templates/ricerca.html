@@ -1034,7 +1034,10 @@ function _renderProfiliRicerca(container, profili, ricercaId) {
         var scoreHtml = '';
         if (analizzato) {
             var scoreClass = punteggio >= 8 ? 'alto' : (punteggio >= 5 ? 'medio' : 'basso');
-            scoreHtml = '<span class="score-badge score-badge-' + scoreClass + '">' + punteggio + '/10</span>';
+            scoreHtml = '<span class="score-badge score-badge-' + scoreClass + '" ' +
+                'style="cursor:pointer;" title="Clicca per vedere l\'analisi" ' +
+                'onclick="event.stopPropagation(); caricaAnalisiEsistente(' + p.id + ')">' +
+                punteggio + '/10</span>';
         } else {
             scoreHtml = '<span style="font-size:0.78rem;color:var(--grigio-testo);">Non analizzato</span>';
         }
@@ -1227,6 +1230,43 @@ function _aggiornaProfiloCard(profiloRicercaId, punteggio) {
 
     // Invalida cache per forzare ricaricamento dati aggiornati
     _profiliCache = {};
+}
+
+function caricaAnalisiEsistente(profiloId) {
+    // Apre il modal report con l'analisi già salvata per questo profilo
+    var titolo = document.getElementById('modal-report-titolo');
+    var streaming = document.getElementById('modal-report-streaming');
+    var body = document.getElementById('modal-report-body');
+    var saved = document.getElementById('modal-report-saved');
+    var status = document.getElementById('modal-report-status');
+    var spinner = document.getElementById('modal-report-spinner');
+
+    // Reset e mostra modal con spinner
+    titolo.textContent = 'Analisi AI';
+    streaming.classList.remove('hidden');
+    body.classList.add('hidden');
+    body.innerHTML = '';
+    saved.classList.add('hidden');
+    status.textContent = 'Caricamento analisi...';
+    document.getElementById('modal-report-stream-text').textContent = '';
+    spinner.style.display = '';
+    document.getElementById('modal-report').classList.remove('hidden');
+
+    fetch('/ricerca/analisi-esistente/' + profiloId)
+        .then(function(r) { return r.json(); })
+        .then(function(dati) {
+            if (dati.errore) {
+                spinner.style.display = 'none';
+                status.textContent = dati.errore;
+                return;
+            }
+            titolo.textContent = 'Analisi AI: ' + (dati.nome || 'Profilo');
+            _mostraReportNelModal(dati, null, null);
+        })
+        .catch(function(e) {
+            spinner.style.display = 'none';
+            status.textContent = 'Errore: ' + e;
+        });
 }
 
 </script>

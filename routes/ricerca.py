@@ -1244,6 +1244,43 @@ def profilo_singolo(profilo_id):
     return jsonify(dict(p))
 
 
+@ricerca_bp.route("/ricerca/analisi-esistente/<int:profilo_id>")
+def analisi_esistente(profilo_id):
+    """API JSON: restituisce l'analisi salvata per un profilo_ricerca."""
+    db = get_db()
+    p = db.execute(
+        "SELECT id, nome, cognome, ruolo, azienda, location, linkedin_url, "
+        "punteggio, analisi, spunti, messaggio_outreach FROM profili_ricerca WHERE id = ?",
+        (profilo_id,)
+    ).fetchone()
+    db.close()
+    if not p:
+        return jsonify({"errore": "Profilo non trovato"}), 404
+    p = dict(p)
+    if not p.get("punteggio"):
+        return jsonify({"errore": "Nessuna analisi disponibile per questo profilo"}), 404
+
+    # Parse spunti JSON
+    spunti = []
+    if p.get("spunti"):
+        try:
+            spunti = json.loads(p["spunti"])
+        except (json.JSONDecodeError, TypeError):
+            spunti = []
+
+    return jsonify({
+        "nome": " ".join(filter(None, [p.get("nome"), p.get("cognome")])),
+        "ruolo": p.get("ruolo"),
+        "azienda": p.get("azienda"),
+        "location": p.get("location"),
+        "linkedin_url": p.get("linkedin_url"),
+        "punteggio": p.get("punteggio"),
+        "analisi_percorso": p.get("analisi"),
+        "spunti_contatto": spunti,
+        "messaggio_outreach": p.get("messaggio_outreach"),
+    })
+
+
 @ricerca_bp.route("/ricerca/aggiungi-pipeline", methods=["POST"])
 def aggiungi_pipeline():
     """Aggiunge un profilo_ricerca alla pipeline (tabella candidati)."""

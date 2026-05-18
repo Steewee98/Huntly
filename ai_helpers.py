@@ -147,11 +147,10 @@ def _build_prompt_completo(scopo: str, scopo_dettaglio: str, impostazioni: dict,
         )
 
     # ── Regole assolute per il punteggio ──
-    regole = (
+    regole_base = (
         "REGOLE ASSOLUTE PER IL PUNTEGGIO:\n"
         "1. Se keyword negative sono presenti nel profilo → punteggio massimo 4/10\n"
         "2. Se ruoli target NON corrispondono affatto al profilo → punteggio massimo 3/10\n"
-        "3. Profilo incompleto o con informazioni insufficienti → penalizza il punteggio\n"
     )
 
     # ══════════════════════════════════════════════════════════════
@@ -179,10 +178,20 @@ def _build_prompt_completo(scopo: str, scopo_dettaglio: str, impostazioni: dict,
             "- 6-7: Settore giusto, ruolo rilevante ma seniority media o potere decisionale incerto\n"
             "- 4-5: Settore correlato ma non core, oppure ruolo troppo operativo\n"
             "- 1-3: Settore completamente diverso o nessun legame con il prodotto\n\n"
-            + regole
-            + "4. Se scopo e SALES e il profilo e chiaramente nel settore target → punteggio minimo 6/10\n"
-            "5. Se scopo e SALES e il profilo ha ruolo decisionale nel settore target → punteggio minimo 8/10\n"
-            "6. NON menzionare mai cambio lavoro, carriera, opportunita professionali\n\n"
+            "REGOLA CRITICA SUI DATI DISPONIBILI:\n"
+            "I profili possono arrivare da scraping con solo headline e nome (dati limitati).\n"
+            "NON penalizzare MAI per 'profilo incompleto' o 'informazioni insufficienti'.\n"
+            "Valuta con quello che hai a disposizione:\n"
+            "- Se l'headline contiene parole come 'recruiter', 'HR', 'talent acquisition', "
+            "'head hunter', 'selezione', 'recruiting', 'risorse umane' e questi sono nel settore target "
+            "→ questo e SUFFICIENTE per dare 7+/10\n"
+            "- Un profilo con headline chiara nel settore target vale 7-8/10 anche senza altri dati\n"
+            "- Dai il beneficio del dubbio: se il ruolo e nel settore target, punteggio minimo 6/10\n"
+            "- Non richiedere informazioni aggiuntive per dare un punteggio alto\n\n"
+            + regole_base
+            + "3. Se il profilo e chiaramente nel settore target → punteggio minimo 6/10\n"
+            "4. Se il profilo ha ruolo decisionale nel settore target → punteggio minimo 8/10\n"
+            "5. NON menzionare mai cambio lavoro, carriera, opportunita professionali\n\n"
             f"PROFILO LINKEDIN DA ANALIZZARE:\n{testo_profilo}\n\n"
             + _json_schema(
                 "1-10, qualita del lead commerciale",
@@ -220,7 +229,8 @@ def _build_prompt_completo(scopo: str, scopo_dettaglio: str, impostazioni: dict,
             "- 6-7: Settore giusto e competenze rilevanti, sovrapposizione parziale\n"
             "- 4-5: Qualche punto di contatto ma partnership non ovvia\n"
             "- 1-3: Nessuna sinergia evidente o competitor diretto\n\n"
-            + regole + "\n"
+            + regole_base
+            + "3. Profilo incompleto o con informazioni insufficienti → penalizza il punteggio\n\n"
             f"PROFILO LINKEDIN DA ANALIZZARE:\n{testo_profilo}\n\n"
             + _json_schema(
                 "1-10, potenziale come partner",
@@ -254,7 +264,8 @@ def _build_prompt_completo(scopo: str, scopo_dettaglio: str, impostazioni: dict,
             "- 6-7: Settore rilevante, potenziale scambio di valore\n"
             "- 4-5: Qualche punto in comune ma connessione non prioritaria\n"
             "- 1-3: Nessun punto di contatto evidente\n\n"
-            + regole + "\n"
+            + regole_base
+            + "3. Profilo incompleto o con informazioni insufficienti → penalizza il punteggio\n\n"
             f"PROFILO LINKEDIN DA ANALIZZARE:\n{testo_profilo}\n\n"
             + _json_schema(
                 "1-10, interesse nel connettersi",
@@ -305,8 +316,9 @@ def _build_prompt_completo(scopo: str, scopo_dettaglio: str, impostazioni: dict,
         "- 4-5: Match parziale — alcuni criteri soddisfatti ma gap significativi\n"
         "- 1-3: Match scarso — profilo non adatto ai criteri richiesti\n"
         + istr_pesi + "\n"
-        + regole
-        + "4. Valuta ESCLUSIVAMENTE idoneita al ruolo cercato\n\n"
+        + regole_base
+        + "3. Profilo incompleto o con informazioni insufficienti → penalizza il punteggio\n"
+        "4. Valuta ESCLUSIVAMENTE idoneita al ruolo cercato\n\n"
         f"PROFILO LINKEDIN DA ANALIZZARE:\n{testo_profilo}\n\n"
         + _json_schema(
             "1-10, idoneita come candidato",
