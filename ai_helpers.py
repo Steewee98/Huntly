@@ -105,56 +105,209 @@ def test_connessione_api() -> dict:
         return {"ok": False, "errore": str(e)}
 
 
-def _build_scopo_prompt(scopo: str, scopo_dettaglio: str) -> str:
-    """Costruisce la sezione scopo del prompt in base al tipo di ricerca."""
+def _build_prompt_completo(scopo: str, scopo_dettaglio: str, impostazioni: dict, testo_profilo: str) -> str:
+    """
+    Costruisce il prompt completo per analisi profilo LinkedIn.
+    Ogni scopo ha il suo prompt dedicato — nessuna sovrapposizione.
+    """
+    imp = impostazioni or {}
+    ruoli = imp.get('ruoli_target', '')
+    settori = imp.get('settori', '')
+    kw_pos = imp.get('keyword_positive', '')
+    kw_neg = imp.get('keyword_negative', '')
+    anni_min = imp.get('anni_esperienza_min', 0)
+
+    # ── SALES ──────────────────────────────────────────────────────
     if scopo == 'sales':
+        criteri = ""
+        if ruoli:
+            criteri += f"Ruoli target (chi compra il prodotto): {ruoli}\n"
+        if settori:
+            criteri += f"Settori target: {settori}\n"
+        if kw_pos:
+            criteri += f"Segnali positivi (indicano che e un buon prospect): {kw_pos}\n"
+        if kw_neg:
+            criteri += f"Segnali negativi (indicano che NON e un prospect): {kw_neg}\n"
+
         return (
-            f"\nSCOPO: Sales — stai cercando potenziali clienti per vendere un prodotto/servizio.\n"
-            f"Prodotto/servizio: {scopo_dettaglio}\n\n"
-            "ISTRUZIONE CRITICA — MODALITA SALES:\n"
-            "Stai valutando questo profilo come POTENZIALE CLIENTE, non come candidato.\n\n"
-            "NON fare MAI riferimento a: cambio lavoro, opportunita di carriera, seniority per ruoli diversi, "
-            "ambizioni professionali, crescita professionale, nuove sfide lavorative.\n\n"
-            "Il punteggio (1-10) deve misurare la QUALITA DEL LEAD:\n"
-            "- 8-10: Decision maker attivo nel settore, chiaramente ha il problema che il prodotto risolve\n"
-            "- 6-7: Profilo rilevante ma ruolo non completamente chiarissimo o seniority media\n"
-            "- 4-5: Nel settore giusto ma potere decisionale incerto\n"
-            "- 1-3: Settore sbagliato o nessuna indicazione che abbia il problema\n\n"
-            f"Per '{scopo_dettaglio}':\n"
-            "- Se il profilo lavora nel settore target del prodotto ed ha un ruolo decisionale → punteggio ALTO (7-9)\n"
-            "- Se il profilo e nel settore giusto ma ruolo operativo → punteggio MEDIO (5-7)\n"
-            "- Se il profilo e in un settore completamente diverso → punteggio BASSO (1-4)\n\n"
-            "NON valutare: carriera, ambizioni, disponibilita al cambio lavoro.\n"
-            "VALUTA SOLO: e un buon prospect per questo prodotto?\n\n"
-            "L'analisi_percorso deve valutare il potenziale come cliente, NON come candidato.\n"
-            "Gli spunti_contatto devono essere agganci commerciali, NON di recruiting.\n"
-            "Il messaggio di outreach deve parlare SOLO del valore del prodotto per lui, "
-            "mai di lavoro. Deve essere un messaggio di vendita consultiva, "
-            "non aggressivo, che apre una conversazione sul problema che il prodotto risolve.\n"
+            "Sei un esperto di sales B2B e lead qualification italiano.\n\n"
+            "COMPITO: Valuta questo profilo LinkedIn come POTENZIALE CLIENTE.\n"
+            "NON stai facendo recruiting. NON valutare carriera, ambizioni, cambio lavoro.\n\n"
+            f"PRODOTTO/SERVIZIO DA VENDERE: {scopo_dettaglio}\n\n"
+            + (f"CRITERI DI QUALIFICAZIONE:\n{criteri}\n" if criteri else "")
+            + "SCALA PUNTEGGIO (qualita del lead, 1-10):\n"
+            "- 8-10: Decision maker nel settore target, ruolo con budget/potere d'acquisto, "
+            "chiaramente ha il problema che il prodotto risolve\n"
+            "- 6-7: Settore giusto, ruolo rilevante ma seniority media o potere decisionale incerto\n"
+            "- 4-5: Settore correlato ma non core, oppure ruolo troppo operativo per decidere acquisti\n"
+            "- 1-3: Settore completamente diverso, nessun legame con il prodotto\n\n"
+            "IMPORTANTE: Un profilo nel settore target con ruolo senior/manageriale e SEMPRE un buon lead (7+).\n"
+            "Non penalizzare per eta, anni di esperienza o percorso di carriera — non sono rilevanti per il Sales.\n\n"
+            f"PROFILO LINKEDIN:\n{testo_profilo}\n\n"
+            "Rispondi ESCLUSIVAMENTE con questo JSON valido:\n"
+            "{\n"
+            '  "nome_contatto": "<nome e cognome, o null>",\n'
+            '  "ruolo_attuale": "<ruolo professionale attuale, o null>",\n'
+            '  "azienda": "<azienda attuale, o null>",\n'
+            '  "anni_esperienza": <numero intero o null>,\n'
+            '  "punteggio": <1-10, qualita del lead>,\n'
+            '  "analisi_percorso": "<3-4 frasi: perche e o non e un buon prospect per questo prodotto>",\n'
+            '  "spunti_contatto": [\n'
+            '    "<aggancio commerciale 1>",\n'
+            '    "<aggancio commerciale 2>",\n'
+            '    "<aggancio commerciale 3>"\n'
+            '  ],\n'
+            '  "messaggio_outreach": "<messaggio di vendita consultiva LinkedIn, max 300 caratteri, '
+            'apre conversazione sul problema che il prodotto risolve, MAI parlare di lavoro/carriera>"\n'
+            "}"
         )
-    elif scopo == 'partnership':
+
+    # ── PARTNERSHIP ────────────────────────────────────────────────
+    if scopo == 'partnership':
+        criteri = ""
+        if ruoli:
+            criteri += f"Ruoli ideali per partnership: {ruoli}\n"
+        if settori:
+            criteri += f"Settori complementari: {settori}\n"
+        if kw_pos:
+            criteri += f"Segnali di compatibilita: {kw_pos}\n"
+        if kw_neg:
+            criteri += f"Segnali di incompatibilita: {kw_neg}\n"
+
         return (
-            f"\nSCOPO: Partnership — stai cercando collaboratori o partner commerciali.\n"
-            f"Tipo di collaborazione: {scopo_dettaglio}\n"
-            "Valuta quanto questo profilo è adatto per una collaborazione.\n"
-            "Il messaggio di outreach deve proporre una collaborazione win-win, "
-            "spiegando il vantaggio reciproco.\n"
+            "Sei un esperto di business development e partnership strategiche italiano.\n\n"
+            "COMPITO: Valuta questo profilo LinkedIn come POTENZIALE PARTNER commerciale.\n"
+            "NON stai facendo recruiting. NON valutare se questa persona cerca lavoro.\n\n"
+            f"TIPO DI PARTNERSHIP CERCATA: {scopo_dettaglio}\n\n"
+            + (f"CRITERI:\n{criteri}\n" if criteri else "")
+            + "SCALA PUNTEGGIO (potenziale come partner, 1-10):\n"
+            "- 8-10: Competenze complementari perfette, rete di contatti nel settore target, "
+            "esperienza in collaborazioni simili\n"
+            "- 6-7: Settore giusto e competenze rilevanti, ma sovrapposizione parziale o "
+            "rete di contatti meno evidente\n"
+            "- 4-5: Qualche punto di contatto ma partnership non ovvia\n"
+            "- 1-3: Nessuna sinergia evidente\n\n"
+            f"PROFILO LINKEDIN:\n{testo_profilo}\n\n"
+            "Rispondi ESCLUSIVAMENTE con questo JSON valido:\n"
+            "{\n"
+            '  "nome_contatto": "<nome e cognome, o null>",\n'
+            '  "ruolo_attuale": "<ruolo professionale attuale, o null>",\n'
+            '  "azienda": "<azienda attuale, o null>",\n'
+            '  "anni_esperienza": <numero intero o null>,\n'
+            '  "punteggio": <1-10, potenziale come partner>,\n'
+            '  "analisi_percorso": "<3-4 frasi: che sinergie ci sono, cosa puo portare alla partnership>",\n'
+            '  "spunti_contatto": [\n'
+            '    "<spunto per proporre collaborazione 1>",\n'
+            '    "<spunto per proporre collaborazione 2>",\n'
+            '    "<spunto per proporre collaborazione 3>"\n'
+            '  ],\n'
+            '  "messaggio_outreach": "<messaggio LinkedIn che propone collaborazione win-win, '
+            'max 300 caratteri, spiega il vantaggio reciproco>"\n'
+            "}"
         )
-    elif scopo == 'network':
+
+    # ── NETWORK ────────────────────────────────────────────────────
+    if scopo == 'network':
+        criteri = ""
+        if ruoli:
+            criteri += f"Ruoli di interesse: {ruoli}\n"
+        if settori:
+            criteri += f"Settori di interesse: {settori}\n"
+        if kw_pos:
+            criteri += f"Interessi in comune: {kw_pos}\n"
+
         return (
-            f"\nSCOPO: Network — stai costruendo la tua rete professionale.\n"
-            f"Motivo: {scopo_dettaglio or 'espansione rete professionale'}\n"
-            "Valuta l'interesse di connettersi con questo profilo.\n"
-            "Il messaggio di outreach deve essere leggero, genuino, "
-            "focalizzato su interessi comuni o settore condiviso.\n"
+            "Sei un esperto di networking professionale italiano.\n\n"
+            "COMPITO: Valuta questo profilo LinkedIn per capire se vale la pena connettersi.\n"
+            "NON stai facendo recruiting ne vendita.\n\n"
+            f"MOTIVO DEL NETWORKING: {scopo_dettaglio or 'espansione rete professionale'}\n\n"
+            + (f"CRITERI:\n{criteri}\n" if criteri else "")
+            + "SCALA PUNTEGGIO (interesse nel connettersi, 1-10):\n"
+            "- 8-10: Persona molto influente nel settore, interessi fortemente allineati, "
+            "contenuti LinkedIn di valore\n"
+            "- 6-7: Settore rilevante, potenziale scambio di valore\n"
+            "- 4-5: Qualche punto in comune ma connessione non prioritaria\n"
+            "- 1-3: Nessun punto di contatto evidente\n\n"
+            f"PROFILO LINKEDIN:\n{testo_profilo}\n\n"
+            "Rispondi ESCLUSIVAMENTE con questo JSON valido:\n"
+            "{\n"
+            '  "nome_contatto": "<nome e cognome, o null>",\n'
+            '  "ruolo_attuale": "<ruolo professionale attuale, o null>",\n'
+            '  "azienda": "<azienda attuale, o null>",\n'
+            '  "anni_esperienza": <numero intero o null>,\n'
+            '  "punteggio": <1-10, interesse nel connettersi>,\n'
+            '  "analisi_percorso": "<3-4 frasi: perche e interessante connettersi, cosa avete in comune>",\n'
+            '  "spunti_contatto": [\n'
+            '    "<spunto per connettersi 1>",\n'
+            '    "<spunto per connettersi 2>",\n'
+            '    "<spunto per connettersi 3>"\n'
+            '  ],\n'
+            '  "messaggio_outreach": "<messaggio LinkedIn leggero e genuino, max 300 caratteri, '
+            'focalizzato su interessi comuni>"\n'
+            "}"
         )
-    else:  # recruiting (default)
-        return (
-            "\nSCOPO: Recruiting — stai cercando candidati da assumere.\n"
-            + (f"Posizione cercata: {scopo_dettaglio}\n" if scopo_dettaglio else "")
-            + "Valuta quanto questo profilo è adatto per essere assunto.\n"
-            "Il messaggio di outreach deve parlare di opportunità di carriera e crescita professionale.\n"
+
+    # ── RECRUITING (default) ──────────────────────────────────────
+    criteri = ""
+    if ruoli:
+        criteri += f"Ruoli target: {ruoli}\n"
+    if settori:
+        criteri += f"Settori di provenienza accettati: {settori}\n"
+    if anni_min:
+        criteri += f"Anni di esperienza minimi: {anni_min}\n"
+    if imp.get('eta_min') or imp.get('eta_max'):
+        criteri += f"Range eta: {imp.get('eta_min', 25)}-{imp.get('eta_max', 60)} anni\n"
+    if kw_pos:
+        criteri += f"Segnali positivi: {kw_pos}\n"
+    if kw_neg:
+        criteri += f"Segnali negativi: {kw_neg}\n"
+
+    # Pesi per il punteggio (solo recruiting li usa)
+    istr_pesi = ""
+    if impostazioni:
+        p_eta = imp.get('peso_eta', 5)
+        p_esp = imp.get('peso_esperienza', 5)
+        p_set = imp.get('peso_settore', 5)
+        p_ruo = imp.get('peso_ruolo', 5)
+        p_kw  = imp.get('peso_keyword', 5)
+        istr_pesi = (
+            "\nPer il punteggio finale usa questi pesi (scala 0-10, 0=ignora, 10=determinante):\n"
+            f"- Eta nel range target: {p_eta}/10\n"
+            f"- Anni di esperienza: {p_esp}/10\n"
+            f"- Settore di provenienza: {p_set}/10\n"
+            f"- Corrispondenza ruolo target: {p_ruo}/10\n"
+            f"- Parole chiave positive/negative: {p_kw}/10\n"
         )
+
+    return (
+        "Sei un esperto recruiter e talent acquisition italiano.\n\n"
+        "COMPITO: Valuta questo profilo LinkedIn come POTENZIALE CANDIDATO da assumere.\n\n"
+        + (f"POSIZIONE CERCATA: {scopo_dettaglio}\n\n" if scopo_dettaglio else "")
+        + (f"CRITERI DI SELEZIONE:\n{criteri}\n" if criteri else "")
+        + "SCALA PUNTEGGIO (idoneita come candidato, 1-10):\n"
+        "- 8-10: Match eccellente — ruolo, settore, esperienza e competenze perfettamente allineati\n"
+        "- 6-7: Buon match — la maggior parte dei criteri soddisfatti, qualche gap minore\n"
+        "- 4-5: Match parziale — alcuni criteri soddisfatti ma gap significativi\n"
+        "- 1-3: Match scarso — profilo non adatto ai criteri richiesti\n"
+        + istr_pesi
+        + f"\nPROFILO LINKEDIN:\n{testo_profilo}\n\n"
+        "Rispondi ESCLUSIVAMENTE con questo JSON valido:\n"
+        "{\n"
+        '  "nome_contatto": "<nome e cognome, o null>",\n'
+        '  "ruolo_attuale": "<ruolo professionale attuale, o null>",\n'
+        '  "azienda": "<azienda attuale, o null>",\n'
+        '  "anni_esperienza": <numero intero o null>,\n'
+        '  "punteggio": <1-10, idoneita come candidato>,\n'
+        '  "analisi_percorso": "<3-4 frasi: analisi competenze, percorso, fit con la posizione>",\n'
+        '  "spunti_contatto": [\n'
+        '    "<spunto per il primo contatto 1>",\n'
+        '    "<spunto per il primo contatto 2>",\n'
+        '    "<spunto per il primo contatto 3>"\n'
+        '  ],\n'
+        '  "messaggio_outreach": "<messaggio LinkedIn professionale, max 300 caratteri, '
+        'parla di opportunita di carriera e crescita professionale>"\n'
+        "}"
+    )
 
 
 def analizza_profilo_linkedin(testo_profilo: str, tipo_profilo: str, impostazioni: dict = None) -> dict:
@@ -163,104 +316,10 @@ def analizza_profilo_linkedin(testo_profilo: str, tipo_profilo: str, impostazion
     tipo_profilo: 'A' = Senior, 'B' = Under 35
     """
     testo_profilo = clean_text(testo_profilo)
-
     scopo = (impostazioni or {}).get('scopo', 'recruiting')
     scopo_dettaglio = (impostazioni or {}).get('scopo_dettaglio', '')
 
-    if impostazioni:
-        descrizione_profilo = (
-            f"Profilo target: età tra {impostazioni.get('eta_min', 25)} e "
-            f"{impostazioni.get('eta_max', 60)} anni, almeno "
-            f"{impostazioni.get('anni_esperienza_min', 2)} anni di esperienza. "
-            f"Settori di provenienza accettati: {impostazioni.get('settori', '')}. "
-            f"Ruoli target: {impostazioni.get('ruoli_target', '')}. "
-            f"Segnali positivi (favoriscono la valutazione): {impostazioni.get('keyword_positive', '')}. "
-            f"Segnali negativi (penalizzano la valutazione): {impostazioni.get('keyword_negative', '')}."
-        )
-        p_eta = impostazioni.get('peso_eta', 5)
-        p_esp = impostazioni.get('peso_esperienza', 5)
-        p_set = impostazioni.get('peso_settore', 5)
-        p_ruo = impostazioni.get('peso_ruolo', 5)
-        p_kw  = impostazioni.get('peso_keyword', 5)
-        istr_punteggio = (
-            f"\nPer il punteggio finale (1-10) usa questi pesi (scala 0-10, 0=ignora, 10=determinante):\n"
-            f"- Eta nel range target: {p_eta}/10\n"
-            f"- Anni di esperienza: {p_esp}/10\n"
-            f"- Settore di provenienza: {p_set}/10\n"
-            f"- Corrispondenza ruolo target: {p_ruo}/10\n"
-            f"- Parole chiave positive/negative: {p_kw}/10"
-        )
-    else:
-        descrizione_profilo = (
-            "Profilo target generico: professionista con esperienza rilevante, "
-            "valuta competenze, percorso e coerenza con un ruolo di responsabilità."
-        )
-        istr_punteggio = ""
-
-    scopo_prompt = _build_scopo_prompt(scopo, scopo_dettaglio)
-
-    # Sezione profilo target esplicita per evitare analisi generiche
-    profilo_target_prompt = ""
-    if impostazioni:
-        profilo_target_prompt = (
-            "\nPROFILO TARGET CERCATO:\n"
-            f"- Scopo: {impostazioni.get('scopo', 'recruiting')}\n"
-            f"- Dettaglio scopo: {impostazioni.get('scopo_dettaglio', '')}\n"
-            f"- Ruoli cercati: {impostazioni.get('ruoli_target', '')}\n"
-            f"- Settori: {impostazioni.get('settori', '')}\n"
-            f"- Anni esperienza minimi: {impostazioni.get('anni_esperienza_min', 0)}\n"
-            f"- Keyword positive: {impostazioni.get('keyword_positive', '')}\n"
-            f"- Keyword negative: {impostazioni.get('keyword_negative', '')}\n\n"
-            "Valuta ESCLUSIVAMENTE quanto questo profilo corrisponde ai criteri sopra.\n"
-            "Non fare riferimento a criteri generici o settori non specificati.\n"
-        )
-
-    # Adatta ruolo e istruzioni JSON in base allo scopo
-    if scopo == 'sales':
-        ruolo_sistema = "Sei un esperto di sales B2B e business development italiano."
-        analisi_label = "analisi dettagliata in 3-4 frasi sul potenziale come cliente"
-        spunti_label = "aggancio commerciale personalizzato"
-        msg_label = "bozza messaggio di vendita consultiva su LinkedIn, max 300 caratteri"
-    elif scopo == 'partnership':
-        ruolo_sistema = "Sei un esperto di business development e partnership italiano."
-        analisi_label = "analisi dettagliata in 3-4 frasi sul potenziale come partner"
-        spunti_label = "spunto per proporre collaborazione"
-        msg_label = "bozza messaggio di partnership su LinkedIn, max 300 caratteri"
-    elif scopo == 'network':
-        ruolo_sistema = "Sei un esperto di networking professionale italiano."
-        analisi_label = "analisi dettagliata in 3-4 frasi sull'interesse di connettersi"
-        spunti_label = "spunto per connettersi"
-        msg_label = "bozza messaggio di networking su LinkedIn, max 300 caratteri"
-    else:
-        ruolo_sistema = "Sei un esperto recruiter e business developer italiano."
-        analisi_label = "analisi dettagliata in 3-4 frasi, coerente con lo scopo della ricerca"
-        spunti_label = "spunto personalizzato per il primo contatto, coerente con lo scopo"
-        msg_label = "bozza completa del messaggio personalizzato su LinkedIn, coerente con lo scopo, tono professionale ma umano, max 300 caratteri"
-
-    prompt = (
-        f"{ruolo_sistema}\n"
-        "Analizza il seguente profilo LinkedIn per valutarne la compatibilita con questo target:\n\n"
-        f"{descrizione_profilo}{istr_punteggio}\n"
-        f"{scopo_prompt}\n"
-        f"{profilo_target_prompt}"
-        "PROFILO LINKEDIN:\n"
-        f"{testo_profilo}\n\n"
-        "Fornisci la tua analisi ESCLUSIVAMENTE nel seguente formato JSON valido, senza testo aggiuntivo:\n"
-        "{\n"
-        '  "nome_contatto": "<nome e cognome della persona estratto dal testo, o null se non identificabile>",\n'
-        '  "ruolo_attuale": "<ruolo/titolo professionale attuale estratto dal testo, o null>",\n'
-        '  "azienda": "<nome dell\'azienda attuale estratto dal testo, o null>",\n'
-        '  "anni_esperienza": <numero intero degli anni totali di esperienza professionale stimati dal testo, o null>,\n'
-        '  "punteggio": <numero da 1 a 10>,\n'
-        f'  "analisi_percorso": "<{analisi_label}>",\n'
-        '  "spunti_contatto": [\n'
-        f'    "<{spunti_label} 1>",\n'
-        f'    "<{spunti_label} 2>",\n'
-        f'    "<{spunti_label} 3>"\n'
-        '  ],\n'
-        f'  "messaggio_outreach": "<{msg_label}>"\n'
-        "}"
-    )
+    prompt = _build_prompt_completo(scopo, scopo_dettaglio, impostazioni, testo_profilo)
 
     payload = {
         "model":      CLAUDE_MODEL,
@@ -368,104 +427,11 @@ def analizza_profilo_linkedin_stream(
     print(f"=== ANALISI START: linkedin_url={linkedin_url} ===", flush=True)
     testo_profilo = clean_text(testo_profilo)
 
-    # Stessa logica di costruzione prompt di analizza_profilo_linkedin
     scopo_s = (impostazioni or {}).get('scopo', 'recruiting')
     scopo_dettaglio_s = (impostazioni or {}).get('scopo_dettaglio', '')
 
-    if impostazioni:
-        descrizione_profilo = (
-            f"Profilo target: età tra {impostazioni.get('eta_min', 25)} e "
-            f"{impostazioni.get('eta_max', 60)} anni, almeno "
-            f"{impostazioni.get('anni_esperienza_min', 2)} anni di esperienza. "
-            f"Settori di provenienza accettati: {impostazioni.get('settori', '')}. "
-            f"Ruoli target: {impostazioni.get('ruoli_target', '')}. "
-            f"Segnali positivi: {impostazioni.get('keyword_positive', '')}. "
-            f"Segnali negativi: {impostazioni.get('keyword_negative', '')}."
-        )
-        p_eta = impostazioni.get('peso_eta', 5)
-        p_esp = impostazioni.get('peso_esperienza', 5)
-        p_set = impostazioni.get('peso_settore', 5)
-        p_ruo = impostazioni.get('peso_ruolo', 5)
-        p_kw  = impostazioni.get('peso_keyword', 5)
-        istr_punteggio = (
-            f"\nPer il punteggio finale (1-10) usa questi pesi (scala 0-10):\n"
-            f"- Eta nel range target: {p_eta}/10\n"
-            f"- Anni di esperienza: {p_esp}/10\n"
-            f"- Settore di provenienza: {p_set}/10\n"
-            f"- Corrispondenza ruolo target: {p_ruo}/10\n"
-            f"- Parole chiave positive/negative: {p_kw}/10"
-        )
-    else:
-        descrizione_profilo = (
-            "Profilo target generico: professionista con esperienza rilevante, "
-            "valuta competenze, percorso e coerenza con un ruolo di responsabilità."
-        )
-        istr_punteggio = ""
-
-    scopo_prompt_s = _build_scopo_prompt(scopo_s, scopo_dettaglio_s)
-
-    # Sezione profilo target esplicita per evitare analisi generiche
-    profilo_target_prompt = ""
-    if impostazioni:
-        profilo_target_prompt = (
-            "\nPROFILO TARGET CERCATO:\n"
-            f"- Scopo: {impostazioni.get('scopo', 'recruiting')}\n"
-            f"- Dettaglio scopo: {impostazioni.get('scopo_dettaglio', '')}\n"
-            f"- Ruoli cercati: {impostazioni.get('ruoli_target', '')}\n"
-            f"- Settori: {impostazioni.get('settori', '')}\n"
-            f"- Anni esperienza minimi: {impostazioni.get('anni_esperienza_min', 0)}\n"
-            f"- Keyword positive: {impostazioni.get('keyword_positive', '')}\n"
-            f"- Keyword negative: {impostazioni.get('keyword_negative', '')}\n\n"
-            "Valuta ESCLUSIVAMENTE quanto questo profilo corrisponde ai criteri sopra.\n"
-            "Non fare riferimento a criteri generici o settori non specificati.\n"
-        )
-
-    # Adatta ruolo e istruzioni JSON in base allo scopo (come versione non-streaming)
-    if scopo_s == 'sales':
-        ruolo_sistema_s = "Sei un esperto di sales B2B e business development italiano."
-        analisi_label_s = "analisi dettagliata in 3-4 frasi sul potenziale come cliente"
-        spunti_label_s = "aggancio commerciale personalizzato"
-        msg_label_s = "bozza messaggio di vendita consultiva su LinkedIn, max 300 caratteri"
-    elif scopo_s == 'partnership':
-        ruolo_sistema_s = "Sei un esperto di business development e partnership italiano."
-        analisi_label_s = "analisi dettagliata in 3-4 frasi sul potenziale come partner"
-        spunti_label_s = "spunto per proporre collaborazione"
-        msg_label_s = "bozza messaggio di partnership su LinkedIn, max 300 caratteri"
-    elif scopo_s == 'network':
-        ruolo_sistema_s = "Sei un esperto di networking professionale italiano."
-        analisi_label_s = "analisi dettagliata in 3-4 frasi sull'interesse di connettersi"
-        spunti_label_s = "spunto per connettersi"
-        msg_label_s = "bozza messaggio di networking su LinkedIn, max 300 caratteri"
-    else:
-        ruolo_sistema_s = "Sei un esperto recruiter e business developer italiano."
-        analisi_label_s = "analisi dettagliata in 3-4 frasi, coerente con lo scopo della ricerca"
-        spunti_label_s = "spunto personalizzato per il primo contatto, coerente con lo scopo"
-        msg_label_s = "bozza completa del messaggio personalizzato su LinkedIn, coerente con lo scopo, tono professionale ma umano, max 300 caratteri"
-
-    prompt = (
-        f"{ruolo_sistema_s}\n"
-        "Analizza il seguente profilo LinkedIn per valutarne la compatibilita con questo target:\n\n"
-        f"{descrizione_profilo}{istr_punteggio}\n"
-        f"{scopo_prompt_s}\n"
-        f"{profilo_target_prompt}"
-        "PROFILO LINKEDIN:\n"
-        f"{testo_profilo}\n\n"
-        "Fornisci la tua analisi ESCLUSIVAMENTE nel seguente formato JSON valido, senza testo aggiuntivo:\n"
-        "{\n"
-        '  "nome_contatto": "<nome e cognome, o null>",\n'
-        '  "ruolo_attuale": "<ruolo/titolo professionale attuale, o null>",\n'
-        '  "azienda": "<nome azienda attuale, o null>",\n'
-        '  "anni_esperienza": <numero intero o null>,\n'
-        '  "punteggio": <numero da 1 a 10>,\n'
-        f'  "analisi_percorso": "<{analisi_label_s}>",\n'
-        '  "spunti_contatto": [\n'
-        f'    "<{spunti_label_s} 1>",\n'
-        f'    "<{spunti_label_s} 2>",\n'
-        f'    "<{spunti_label_s} 3>"\n'
-        '  ],\n'
-        f'  "messaggio_outreach": "<{msg_label_s}>"\n'
-        "}"
-    )
+    # Usa lo stesso prompt builder della versione non-streaming
+    prompt = _build_prompt_completo(scopo_s, scopo_dettaglio_s, impostazioni, testo_profilo)
 
     payload = {
         "model":      CLAUDE_MODEL,
