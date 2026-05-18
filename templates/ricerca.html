@@ -1052,12 +1052,12 @@ function _renderProfiliRicerca(container, profili, ricercaId) {
             ? '<a href="' + escHtml(p.linkedin_url) + '" target="_blank" class="btn btn-outline btn-xs" onclick="event.stopPropagation();">LI</a>'
             : '';
 
-        html += '<div class="profilo-card">' +
+        html += '<div class="profilo-card" data-profilo-id="' + p.id + '">' +
             '<div class="profilo-card-info">' +
                 '<div class="nome">' + escHtml(nome) + '</div>' +
                 '<div class="meta">' + escHtml(p.ruolo || '') + (p.azienda ? ' — ' + escHtml(p.azienda) : '') +
                     (p.location ? ' · ' + escHtml(p.location) : '') + '</div>' +
-                '<div style="margin-top:3px;">' + sourceBadge + ' ' + scoreHtml + '</div>' +
+                '<div style="margin-top:3px;">' + sourceBadge + ' <span class="badge-analisi">' + scoreHtml + '</span></div>' +
             '</div>' +
             '<div class="profilo-card-actions">' + linkedinHtml + ' ' + azioniHtml + '</div>' +
         '</div>';
@@ -1178,6 +1178,33 @@ function _salvaAnalisiRicerca(dati, p) {
                 savedEl.classList.remove('hidden');
                 if (resp.candidato_id && _reportGlobale && _reportGlobale.candidatoInfo) {
                     _reportGlobale.candidatoInfo.candidato_id = resp.candidato_id;
+                }
+                // Aggiorna badge punteggio e bottoni nella riga profilo (cronologia)
+                var profiloRicercaId = p.profilo_ricerca_id;
+                if (profiloRicercaId && dati.punteggio) {
+                    var rigaProfilo = document.querySelector('[data-profilo-id="' + profiloRicercaId + '"]');
+                    if (rigaProfilo) {
+                        var badgeAnalisi = rigaProfilo.querySelector('.badge-analisi');
+                        if (badgeAnalisi) {
+                            var colore = dati.punteggio >= 7 ? '#10b981' : dati.punteggio >= 5 ? '#f59e0b' : '#ef4444';
+                            badgeAnalisi.innerHTML = '<span style="background:' + colore + '20; color:' + colore + '; padding:2px 8px; border-radius:4px; font-weight:600; font-size:0.8rem;">' + dati.punteggio + '/10</span>';
+                        }
+                        // Abilita bottone pipeline, nascondi bottone analizza
+                        var btnPipeline = rigaProfilo.querySelector('.btn-outline[disabled]');
+                        if (btnPipeline && btnPipeline.title === 'Analizza prima') {
+                            btnPipeline.disabled = false;
+                            btnPipeline.style.opacity = '1';
+                            btnPipeline.style.cursor = 'pointer';
+                            btnPipeline.title = '';
+                            btnPipeline.onclick = function(ev) { ev.stopPropagation(); aggiungiAPipeline(profiloRicercaId, btnPipeline); };
+                        }
+                        var btnAnalizza = rigaProfilo.querySelector('.btn-primary');
+                        if (btnAnalizza && btnAnalizza.textContent.indexOf('Analizza') >= 0) {
+                            btnAnalizza.style.display = 'none';
+                        }
+                    }
+                    // Invalida cache per forzare ricaricamento dati aggiornati
+                    _profiliCache = {};
                 }
             }
         });
