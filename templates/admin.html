@@ -221,21 +221,23 @@
         <canvas id="storico-canvas" height="200"></canvas>
     </div>
 
-    <!-- Card 4: Utilizzo per organizzazione -->
+    <!-- Card 4: Utilizzo per utente -->
     <div class="card" style="margin-bottom:1rem;overflow-x:auto;">
-        <div style="padding:0.75rem 0.75rem 0;font-size:0.85rem;font-weight:600;">Utilizzo per organizzazione</div>
+        <div style="padding:0.75rem 0.75rem 0;font-size:0.85rem;font-weight:600;">Utilizzo per utente</div>
         <table class="admin-table" style="margin-top:0.5rem;">
             <thead>
                 <tr>
-                    <th>Organizzazione</th>
+                    <th>Nome</th>
+                    <th>Email</th>
                     <th>Piano</th>
                     <th style="text-align:right;">Ricerche</th>
                     <th style="text-align:right;">Analisi</th>
                     <th style="text-align:right;">Costo stimato</th>
+                    <th>Registrato il</th>
                 </tr>
             </thead>
-            <tbody id="tbody-utilizzo-org">
-                <tr><td colspan="5" style="text-align:center;color:var(--grigio-testo);">Caricamento...</td></tr>
+            <tbody id="tbody-utilizzo-utenti">
+                <tr><td colspan="7" style="text-align:center;color:var(--grigio-testo);">Caricamento...</td></tr>
             </tbody>
         </table>
     </div>
@@ -623,27 +625,30 @@ function _aggiornaValori(d) {
     // Storico chart
     if (d.storico && d.storico.length) _initStoricoChart(d.storico);
 
-    // Tabella utilizzo per org
-    if (d.utilizzo_per_org) _aggiornaUtilizzoOrg(d.utilizzo_per_org);
+    // Tabella utilizzo per utente
+    if (d.utilizzo_per_utente) _aggiornaUtilizzoUtenti(d.utilizzo_per_utente);
 }
 
-function _aggiornaUtilizzoOrg(orgs) {
-    var tbody = document.getElementById('tbody-utilizzo-org');
+function _aggiornaUtilizzoUtenti(utenti) {
+    var tbody = document.getElementById('tbody-utilizzo-utenti');
     if (!tbody) return;
-    if (!orgs || !orgs.length) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--grigio-testo);">Nessun utilizzo</td></tr>';
+    if (!utenti || !utenti.length) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--grigio-testo);">Nessun utilizzo</td></tr>';
         return;
     }
     var html = '';
-    for (var i = 0; i < orgs.length; i++) {
-        var o = orgs[i];
-        var piano = o.piano || 'free';
+    for (var i = 0; i < utenti.length; i++) {
+        var u = utenti[i];
+        var piano = u.piano || 'free';
+        var dataReg = u.creato_il ? new Date(u.creato_il).toLocaleDateString('it-IT') : '\u2014';
         html += '<tr>' +
-            '<td style="font-weight:500;">' + (o.nome || '\u2014') + '</td>' +
+            '<td style="font-weight:500;">' + (u.nome || '\u2014') + '</td>' +
+            '<td><a href="mailto:' + u.email + '" style="color:var(--azzurro);text-decoration:none;">' + u.email + '</a></td>' +
             '<td><span class="admin-badge piano-badge-' + piano + '">' + piano.toUpperCase() + '</span></td>' +
-            '<td style="text-align:right;">' + o.ricerche + '</td>' +
-            '<td style="text-align:right;">' + o.analisi + '</td>' +
-            '<td style="text-align:right;font-weight:600;">\u20AC' + o.costo_stimato.toFixed(2) + '</td>' +
+            '<td style="text-align:right;">' + u.ricerche + '</td>' +
+            '<td style="text-align:right;">' + u.analisi + '</td>' +
+            '<td style="text-align:right;font-weight:600;">\u20AC' + u.costo_stimato.toFixed(2) + '</td>' +
+            '<td>' + dataReg + '</td>' +
             '</tr>';
     }
     tbody.innerHTML = html;
@@ -656,6 +661,7 @@ async function aggiornaDati() {
     try {
         var resp = await fetch('/admin/contabilita-realtime?mese=' + encodeURIComponent(mese));
         var d = await resp.json();
+        console.log('[contabilita] dati ricevuti:', d);
         _aggiornaValori(d);
     } catch(e) {
         console.error('Errore aggiornamento contabilita:', e);
