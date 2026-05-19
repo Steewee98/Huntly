@@ -221,7 +221,26 @@
         <canvas id="storico-canvas" height="200"></canvas>
     </div>
 
-    <!-- Card 4: Previsioni -->
+    <!-- Card 4: Utilizzo per organizzazione -->
+    <div class="card" style="margin-bottom:1rem;overflow-x:auto;">
+        <div style="padding:0.75rem 0.75rem 0;font-size:0.85rem;font-weight:600;">Utilizzo per organizzazione</div>
+        <table class="admin-table" style="margin-top:0.5rem;">
+            <thead>
+                <tr>
+                    <th>Organizzazione</th>
+                    <th>Piano</th>
+                    <th style="text-align:right;">Ricerche</th>
+                    <th style="text-align:right;">Analisi</th>
+                    <th style="text-align:right;">Costo stimato</th>
+                </tr>
+            </thead>
+            <tbody id="tbody-utilizzo-org">
+                <tr><td colspan="5" style="text-align:center;color:var(--grigio-testo);">Caricamento...</td></tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Card 5: Previsioni -->
     <div class="card" style="margin-bottom:1rem;overflow-x:auto;">
         <div style="padding:0.75rem 0.75rem 0;font-size:0.85rem;font-weight:600;">Previsioni</div>
         <table class="admin-table" style="margin-top:0.5rem;">
@@ -525,36 +544,34 @@ var _storicoChart = null;
 function _initStoricoChart(storico) {
     var ctx = document.getElementById('storico-canvas');
     if (!ctx) return;
-    if (_storicoChart) _storicoChart.destroy();
+    if (_storicoChart) {
+        _storicoChart.destroy();
+        _storicoChart = null;
+    }
 
-    var labels = storico.map(function(s) { return s.mese; });
-    var costiData = storico.map(function(s) { return s.costi; });
-    var mrrData = storico.map(function(s) { return s.mrr; });
-
-    _storicoChart = new Chart(ctx, {
+    _storicoChart = new Chart(ctx.getContext('2d'), {
         type: 'bar',
         data: {
-            labels: labels,
+            labels: storico.map(function(s) { return s.mese; }),
             datasets: [
                 {
-                    label: 'MRR',
-                    data: mrrData,
-                    backgroundColor: 'rgba(34,197,94,0.7)',
-                    borderRadius: 4,
-                    order: 2
+                    label: 'Entrate (\u20AC)',
+                    data: storico.map(function(s) { return s.mrr || 0; }),
+                    backgroundColor: 'rgba(16,185,129,0.7)',
+                    borderRadius: 4
                 },
                 {
-                    label: 'Costi',
-                    data: costiData,
+                    label: 'Costi (\u20AC)',
+                    data: storico.map(function(s) { return s.costi || 0; }),
                     backgroundColor: 'rgba(239,68,68,0.7)',
-                    borderRadius: 4,
-                    order: 1
+                    borderRadius: 4
                 }
             ]
         },
         options: {
             responsive: true,
-            maintainAspectRatio: false,
+            maintainAspectRatio: true,
+            animation: false,
             plugins: {
                 legend: { position: 'top', labels: { font: { size: 11 } } }
             },
@@ -605,6 +622,31 @@ function _aggiornaValori(d) {
 
     // Storico chart
     if (d.storico && d.storico.length) _initStoricoChart(d.storico);
+
+    // Tabella utilizzo per org
+    if (d.utilizzo_per_org) _aggiornaUtilizzoOrg(d.utilizzo_per_org);
+}
+
+function _aggiornaUtilizzoOrg(orgs) {
+    var tbody = document.getElementById('tbody-utilizzo-org');
+    if (!tbody) return;
+    if (!orgs || !orgs.length) {
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--grigio-testo);">Nessun utilizzo</td></tr>';
+        return;
+    }
+    var html = '';
+    for (var i = 0; i < orgs.length; i++) {
+        var o = orgs[i];
+        var piano = o.piano || 'free';
+        html += '<tr>' +
+            '<td style="font-weight:500;">' + (o.nome || '\u2014') + '</td>' +
+            '<td><span class="admin-badge piano-badge-' + piano + '">' + piano.toUpperCase() + '</span></td>' +
+            '<td style="text-align:right;">' + o.ricerche + '</td>' +
+            '<td style="text-align:right;">' + o.analisi + '</td>' +
+            '<td style="text-align:right;font-weight:600;">\u20AC' + o.costo_stimato.toFixed(2) + '</td>' +
+            '</tr>';
+    }
+    tbody.innerHTML = html;
 }
 
 async function aggiornaDati() {
@@ -626,11 +668,11 @@ function cambiaMese(val) {
     aggiornaDati();
 }
 
-// Carica dati iniziali via API per avere lo storico chart
-aggiornaDati();
-
-// Auto-refresh ogni 5 minuti
-setInterval(aggiornaDati, 5 * 60 * 1000);
+// Carica dati al DOM ready + auto-refresh ogni 5 minuti
+document.addEventListener('DOMContentLoaded', function() {
+    aggiornaDati();
+    setInterval(aggiornaDati, 5 * 60 * 1000);
+});
 
 // Salva costi configurabili
 async function salvaCosti() {

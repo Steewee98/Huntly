@@ -393,6 +393,18 @@ def _get_contabilita_realtime(db, mese=None):
         costi_m = round(r * costo_apify + a * costo_claude + e * costo_proxycurl + costo_railway, 2)
         storico.append({"mese": m, "ricerche": r, "analisi": a, "arricchimenti": e, "costi": costi_m, "mrr": mrr})
 
+    # Utilizzo per organizzazione
+    utilizzo_per_org = db.execute(
+        "SELECT o.nome, o.piano, "
+        "COALESCE(um.ricerche, 0) AS ricerche, "
+        "COALESCE(um.analisi_ai, 0) AS analisi, "
+        "ROUND(COALESCE(um.ricerche, 0) * ? + COALESCE(um.analisi_ai, 0) * ?, 2) AS costo_stimato "
+        "FROM organizzazioni o "
+        "LEFT JOIN utilizzo_mensile um ON um.organizzazione_id = o.id AND um.mese = ? "
+        "ORDER BY costo_stimato DESC",
+        (costo_apify, costo_claude, mese),
+    ).fetchall()
+
     return {
         "mese": mese,
         "ricerche_mese": ricerche_mese,
@@ -411,6 +423,11 @@ def _get_contabilita_realtime(db, mese=None):
         "margine": margine,
         "margine_pct": round((margine / mrr * 100) if mrr > 0 else 0, 1),
         "storico": storico,
+        "utilizzo_per_org": [
+            {"nome": r["nome"], "piano": r["piano"], "ricerche": r["ricerche"],
+             "analisi": r["analisi"], "costo_stimato": float(r["costo_stimato"])}
+            for r in utilizzo_per_org
+        ],
     }
 
 
