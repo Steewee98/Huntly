@@ -7,7 +7,8 @@ import csv
 import io
 import logging
 from functools import wraps
-from datetime import datetime
+from datetime import datetime, date
+from dateutil.relativedelta import relativedelta
 from flask import Blueprint, render_template, request, jsonify, session, redirect, Response
 from database import get_db
 
@@ -153,6 +154,12 @@ def index():
             "utenti_paganti": round(pro_prev + bus_prev),
         }
 
+    # Ultimi 6 mesi per il selettore
+    storico_mesi = [
+        (date.today().replace(day=1) - relativedelta(months=i)).strftime("%Y-%m")
+        for i in range(5, -1, -1)
+    ]
+
     return render_template(
         "admin.html",
         totale_org=totale_org,
@@ -180,6 +187,7 @@ def index():
         attivita=attivita,
         utenti_free=utenti_free,
         utenti_paganti=utenti_paganti,
+        storico_mesi=storico_mesi,
     )
 
 
@@ -310,3 +318,107 @@ def salva_costi():
     db.close()
     log.info("[admin] Costi aggiornati: %s", dati)
     return jsonify({"ok": True})
+
+
+# ─────────────────────────────────────────────
+# Contabilità in tempo reale
+# ─────────────────────────────────────────────
+
+def _get_contabilita_realtime(db, mese=None):
+    """Calcola contabilità basata su dati reali del DB."""
+    if not mese:
+        mese = datetime.now().strftime("%Y-%m")
+
+    costi = _load_costi(db)
+    costo_apify = costi.get("costo_apify_per_ricerca", 0.24)
+    costo_claude = costi.get("costo_anthropic_per_analisi", 0.01)
+    costo_proxycurl = costi.get("costo_enrichlayer_per_arricchimento", 0.10)
+    costo_railway = costi.get("costo_railway_mensile", 0)
+
+    # Ricerche completate questo mese
+    ricerche_mese = db.execute(
+        "SELECT COUNT(*) AS n FROM ricerche_automatiche "
+        "WHERE TO_CHAR(data_ricerca, 'YYYY-MM') = ? AND stato = 'completata'",
+        (mese,)
+    ).fetchone()["n"] or 0
+
+    # Analisi AI questo mese
+    analisi_mese = db.execute(
+        "SELECT COALESCE(SUM(analisi_ai), 0) AS n FROM utilizzo_mensile WHERE mese = ?",
+        (mese,)
+    ).fetchone()["n"] or 0
+
+    # Arricchimenti Proxycurl questo mese
+    arricchimenti_mese = db.execute(
+        "SELECT COUNT(*) AS n FROM candidati "
+        "WHERE dati_proxycurl IS NOT NULL AND TO_CHAR(data_inserimento, 'YYYY-MM') = ?",
+        (mese,)
+    ).fetchone()["n"] or 0
+
+    # Calcolo costi
+    tot_apify = round(ricerche_mese * costo_apify, 2)
+    tot_claude = round(analisi_mese * costo_claude, 2)
+    tot_proxycurl = round(arricchimenti_mese * costo_proxycurl, 2)
+    tot_railway = round(costo_railway, 2)
+    totale_costi = round(tot_apify + tot_claude + tot_proxycurl + tot_railway, 2)
+
+    # Entrate
+    org_pro = db.execute(
+        "SELECT COUNT(*) AS n FROM organizzazioni WHERE piano = 'pro'"
+    ).fetchone()["n"] or 0
+    org_business = db.execute(
+        "SELECT COUNT(*) AS n FROM organizzazioni WHERE piano = 'business'"
+    ).fetchone()["n"] or 0
+    mrr = (org_pro * 49) + (org_business * 149)
+    margine = round(mrr - totale_costi, 2)
+
+    # Storico ultimi 6 mesi
+    storico = []
+    for i in range(5, -1, -1):
+        m = (date.today().replace(day=1) - relativedelta(months=i)).strftime("%Y-%m")
+        r = db.execute(
+            "SELECT COUNT(*) AS n FROM ricerche_automatiche "
+            "WHERE TO_CHAR(data_ricerca, 'YYYY-MM') = ? AND stato = 'completata'",
+            (m,)
+        ).fetchone()["n"] or 0
+        a = db.execute(
+            "SELECT COALESCE(SUM(analisi_ai), 0) AS n FROM utilizzo_mensile WHERE mese = ?",
+            (m,)
+        ).fetchone()["n"] or 0
+        e = db.execute(
+            "SELECT COUNT(*) AS n FROM candidati "
+            "WHERE dati_proxycurl IS NOT NULL AND TO_CHAR(data_inserimento, 'YYYY-MM') = ?",
+            (m,)
+        ).fetchone()["n"] or 0
+        costi_m = round(r * costo_apify + a * costo_claude + e * costo_proxycurl + costo_railway, 2)
+        storico.append({"mese": m, "ricerche": r, "analisi": a, "arricchimenti": e, "costi": costi_m, "mrr": mrr})
+
+    return {
+        "mese": mese,
+        "ricerche_mese": ricerche_mese,
+        "analisi_mese": analisi_mese,
+        "arricchimenti_mese": arricchimenti_mese,
+        "costi": {
+            "apify": tot_apify, "claude": tot_claude,
+            "proxycurl": tot_proxycurl, "railway": tot_railway,
+            "totale": totale_costi,
+        },
+        "costi_unitari": {
+            "apify": costo_apify, "claude": costo_claude,
+            "proxycurl": costo_proxycurl,
+        },
+        "entrate": {"mrr": mrr, "org_pro": org_pro, "org_business": org_business},
+        "margine": margine,
+        "margine_pct": round((margine / mrr * 100) if mrr > 0 else 0, 1),
+        "storico": storico,
+    }
+
+
+@admin_bp.route("/admin/contabilita-realtime")
+@admin_required
+def contabilita_realtime():
+    mese = request.args.get("mese", datetime.now().strftime("%Y-%m"))
+    db = get_db()
+    dati = _get_contabilita_realtime(db, mese)
+    db.close()
+    return jsonify(dati)

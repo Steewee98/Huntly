@@ -105,7 +105,17 @@
 
 <!-- ===== SEZIONE: Contabilita ===== -->
 <section id="contabilita">
-    <h2 style="font-size:1rem;margin-bottom:0.75rem;">Contabilita</h2>
+    <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:0.75rem;">
+        <h2 style="font-size:1rem;margin:0;">Contabilita</h2>
+        <select id="mese-selector" class="form-input form-select"
+                style="font-size:0.78rem;padding:0.25rem 0.5rem;width:auto;"
+                onchange="cambiaMese(this.value)">
+            {% for ms in storico_mesi %}
+            <option value="{{ ms }}" {{ 'selected' if ms == mese }}>{{ ms }}</option>
+            {% endfor %}
+        </select>
+        <span id="contab-loading" style="font-size:0.72rem;color:var(--grigio-testo);display:none;">Aggiornamento...</span>
+    </div>
 
     <!-- Card 1: Configura costi -->
     <div class="card" style="background:#1e293b;color:#fff;margin-bottom:1rem;padding:1rem;">
@@ -158,16 +168,16 @@
         </div>
     </div>
 
-    <!-- Card 2: Mese corrente -->
+    <!-- Card 2: Mese corrente (dati dinamici) -->
     <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-bottom:1rem;">
         <!-- Entrate -->
         <div class="card" style="background:#052e16;color:#fff;padding:1rem;">
             <div style="font-size:0.78rem;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;color:#86efac;margin-bottom:0.6rem;">Entrate</div>
             <div>
                 <div style="font-size:0.75rem;color:#bbf7d0;">MRR</div>
-                <div style="font-size:1.5rem;font-weight:700;">&euro;{{ mrr }}</div>
+                <div style="font-size:1.5rem;font-weight:700;" id="val-mrr">&euro;{{ mrr }}</div>
             </div>
-            <div style="margin-top:0.5rem;font-size:0.75rem;color:#86efac;">
+            <div style="margin-top:0.5rem;font-size:0.75rem;color:#86efac;" id="val-mrr-dettaglio">
                 Pro: {{ org_pro }} &times; &euro;49 = &euro;{{ org_pro * 49 }}<br>
                 Business: {{ org_business }} &times; &euro;149 = &euro;{{ org_business * 149 }}
             </div>
@@ -175,39 +185,43 @@
 
         <!-- Costi -->
         <div class="card" style="background:#450a0a;color:#fff;padding:1rem;">
-            <div style="font-size:0.78rem;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;color:#fca5a5;margin-bottom:0.6rem;">Costi &mdash; {{ mese }}</div>
-            <div style="font-size:0.78rem;color:#fecaca;display:flex;flex-direction:column;gap:0.3rem;">
-                <div>Apify: {{ tot_ricerche_mese }} &times; &euro;{{ "%.4f"|format(costi_cfg.get('costo_apify_per_ricerca', 0)) }} = <strong>&euro;{{ "%.2f"|format(costo_apify) }}</strong></div>
-                <div>Claude: {{ tot_analisi_mese }} &times; &euro;{{ "%.4f"|format(costi_cfg.get('costo_anthropic_per_analisi', 0)) }} = <strong>&euro;{{ "%.2f"|format(costo_anthropic) }}</strong></div>
-                <div>Proxycurl: {{ arricchimenti_mese }} &times; &euro;{{ "%.4f"|format(costi_cfg.get('costo_enrichlayer_per_arricchimento', 0)) }} = <strong>&euro;{{ "%.2f"|format(costo_enrichlayer) }}</strong></div>
-                <div>Railway: <strong>&euro;{{ "%.2f"|format(costo_railway) }}</strong> (fisso)</div>
+            <div style="font-size:0.78rem;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;color:#fca5a5;margin-bottom:0.6rem;">Costi &mdash; <span id="val-mese-label">{{ mese }}</span></div>
+            <div style="font-size:0.78rem;color:#fecaca;display:flex;flex-direction:column;gap:0.3rem;" id="val-costi-dettaglio">
+                <div>Apify: <span id="val-ricerche">{{ tot_ricerche_mese }}</span> &times; &euro;<span id="val-costo-unit-apify">{{ "%.4f"|format(costi_cfg.get('costo_apify_per_ricerca', 0)) }}</span> = <strong>&euro;<span id="val-costo-apify">{{ "%.2f"|format(costo_apify) }}</span></strong></div>
+                <div>Claude: <span id="val-analisi">{{ tot_analisi_mese }}</span> &times; &euro;<span id="val-costo-unit-claude">{{ "%.4f"|format(costi_cfg.get('costo_anthropic_per_analisi', 0)) }}</span> = <strong>&euro;<span id="val-costo-claude">{{ "%.2f"|format(costo_anthropic) }}</span></strong></div>
+                <div>Proxycurl: <span id="val-arricchimenti">{{ arricchimenti_mese }}</span> &times; &euro;<span id="val-costo-unit-proxycurl">{{ "%.4f"|format(costi_cfg.get('costo_enrichlayer_per_arricchimento', 0)) }}</span> = <strong>&euro;<span id="val-costo-proxycurl">{{ "%.2f"|format(costo_enrichlayer) }}</span></strong></div>
+                <div>Railway: <strong>&euro;<span id="val-costo-railway">{{ "%.2f"|format(costo_railway) }}</span></strong> (fisso)</div>
             </div>
             <div style="margin-top:0.5rem;border-top:1px solid #7f1d1d;padding-top:0.4rem;">
                 <div style="font-size:0.75rem;color:#fca5a5;">Totale</div>
-                <div style="font-size:1.3rem;font-weight:700;">&euro;{{ "%.2f"|format(costi_totali) }}</div>
+                <div style="font-size:1.3rem;font-weight:700;" id="val-costi-totali">&euro;{{ "%.2f"|format(costi_totali) }}</div>
             </div>
         </div>
 
         <!-- Margine -->
-        <div class="card" style="background:{% if margine >= 0 %}#172554{% else %}#7f1d1d{% endif %};color:#fff;padding:1rem;">
-            <div style="font-size:0.78rem;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;color:{% if margine >= 0 %}#93c5fd{% else %}#fca5a5{% endif %};margin-bottom:0.6rem;">
+        <div class="card" id="card-margine" style="background:{% if margine >= 0 %}#172554{% else %}#7f1d1d{% endif %};color:#fff;padding:1rem;">
+            <div id="val-margine-header" style="font-size:0.78rem;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;color:{% if margine >= 0 %}#93c5fd{% else %}#fca5a5{% endif %};margin-bottom:0.6rem;">
                 {% if margine >= 0 %}Margine{% else %}Margine &#9888;{% endif %}
             </div>
             <div>
-                <div style="font-size:0.75rem;color:{% if margine >= 0 %}#bfdbfe{% else %}#fecaca{% endif %};">Margine mese</div>
-                <div style="font-size:1.5rem;font-weight:700;">&euro;{{ "%.2f"|format(margine) }}</div>
+                <div style="font-size:0.75rem;" id="val-margine-sublabel" class="{% if margine >= 0 %}text-blue{% else %}text-red{% endif %}">Margine mese</div>
+                <div style="font-size:1.5rem;font-weight:700;" id="val-margine">&euro;{{ "%.2f"|format(margine) }}</div>
             </div>
             <div style="margin-top:0.5rem;">
-                <div style="font-size:0.75rem;color:{% if margine >= 0 %}#bfdbfe{% else %}#fecaca{% endif %};">Margine %</div>
-                <div style="font-size:1.3rem;font-weight:700;">{{ margine_pct }}%</div>
+                <div style="font-size:0.75rem;" id="val-margine-pct-label" class="{% if margine >= 0 %}text-blue{% else %}text-red{% endif %}">Margine %</div>
+                <div style="font-size:1.3rem;font-weight:700;" id="val-margine-pct">{{ margine_pct }}%</div>
             </div>
-            {% if margine < 0 %}
-            <div style="margin-top:0.5rem;font-size:0.75rem;color:#fca5a5;font-weight:600;">Costi superiori alle entrate</div>
-            {% endif %}
+            <div id="val-margine-warning" style="margin-top:0.5rem;font-size:0.75rem;color:#fca5a5;font-weight:600;display:{% if margine < 0 %}block{% else %}none{% endif %};">Costi superiori alle entrate</div>
         </div>
     </div>
 
-    <!-- Card 3: Previsioni -->
+    <!-- Card 3: Storico 6 mesi -->
+    <div class="card" style="margin-bottom:1rem;padding:1rem;">
+        <div style="font-size:0.85rem;font-weight:600;margin-bottom:0.75rem;">Storico 6 mesi</div>
+        <canvas id="storico-canvas" height="200"></canvas>
+    </div>
+
+    <!-- Card 4: Previsioni -->
     <div class="card" style="margin-bottom:1rem;overflow-x:auto;">
         <div style="padding:0.75rem 0.75rem 0;font-size:0.85rem;font-weight:600;">Previsioni</div>
         <table class="admin-table" style="margin-top:0.5rem;">
@@ -255,6 +269,7 @@
         I costi API sono stime basate su utilizzo registrato. Verifica i costi reali su
         <a href="https://console.apify.com/billing" target="_blank" style="color:var(--azzurro);">Apify billing</a> e
         <a href="https://console.anthropic.com/settings/billing" target="_blank" style="color:var(--azzurro);">Anthropic billing</a>.
+        <span style="margin-left:0.5rem;color:#94a3b8;">Aggiornamento automatico ogni 5 min.</span>
     </p>
 </section>
 
@@ -478,6 +493,7 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 <script>
 // Sidebar scroll tracking
 function scrollAdmin(e, id) {
@@ -502,6 +518,120 @@ var _adminObs = new IntersectionObserver(function(entries) {
 }, { rootMargin: '-20% 0px -60% 0px' });
 _adminSections.forEach(function(s) { _adminObs.observe(s); });
 
+// ── Contabilità in tempo reale ──
+
+var _storicoChart = null;
+
+function _initStoricoChart(storico) {
+    var ctx = document.getElementById('storico-canvas');
+    if (!ctx) return;
+    if (_storicoChart) _storicoChart.destroy();
+
+    var labels = storico.map(function(s) { return s.mese; });
+    var costiData = storico.map(function(s) { return s.costi; });
+    var mrrData = storico.map(function(s) { return s.mrr; });
+
+    _storicoChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'MRR',
+                    data: mrrData,
+                    backgroundColor: 'rgba(34,197,94,0.7)',
+                    borderRadius: 4,
+                    order: 2
+                },
+                {
+                    label: 'Costi',
+                    data: costiData,
+                    backgroundColor: 'rgba(239,68,68,0.7)',
+                    borderRadius: 4,
+                    order: 1
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'top', labels: { font: { size: 11 } } }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: { callback: function(v) { return '\u20AC' + v; }, font: { size: 11 } }
+                },
+                x: { ticks: { font: { size: 11 } } }
+            }
+        }
+    });
+}
+
+function _aggiornaValori(d) {
+    // Mese label
+    var lbl = document.getElementById('val-mese-label');
+    if (lbl) lbl.textContent = d.mese;
+
+    // Entrate
+    document.getElementById('val-mrr').textContent = '\u20AC' + d.entrate.mrr;
+    document.getElementById('val-mrr-dettaglio').innerHTML =
+        'Pro: ' + d.entrate.org_pro + ' &times; &euro;49 = &euro;' + (d.entrate.org_pro * 49) + '<br>' +
+        'Business: ' + d.entrate.org_business + ' &times; &euro;149 = &euro;' + (d.entrate.org_business * 149);
+
+    // Costi dettaglio
+    document.getElementById('val-ricerche').textContent = d.ricerche_mese;
+    document.getElementById('val-analisi').textContent = d.analisi_mese;
+    document.getElementById('val-arricchimenti').textContent = d.arricchimenti_mese;
+    document.getElementById('val-costo-unit-apify').textContent = d.costi_unitari.apify.toFixed(4);
+    document.getElementById('val-costo-unit-claude').textContent = d.costi_unitari.claude.toFixed(4);
+    document.getElementById('val-costo-unit-proxycurl').textContent = d.costi_unitari.proxycurl.toFixed(4);
+    document.getElementById('val-costo-apify').textContent = d.costi.apify.toFixed(2);
+    document.getElementById('val-costo-claude').textContent = d.costi.claude.toFixed(2);
+    document.getElementById('val-costo-proxycurl').textContent = d.costi.proxycurl.toFixed(2);
+    document.getElementById('val-costo-railway').textContent = d.costi.railway.toFixed(2);
+    document.getElementById('val-costi-totali').textContent = '\u20AC' + d.costi.totale.toFixed(2);
+
+    // Margine
+    var positivo = d.margine >= 0;
+    var cardM = document.getElementById('card-margine');
+    cardM.style.background = positivo ? '#172554' : '#7f1d1d';
+    document.getElementById('val-margine-header').style.color = positivo ? '#93c5fd' : '#fca5a5';
+    document.getElementById('val-margine-header').textContent = positivo ? 'Margine' : 'Margine \u26A0';
+    document.getElementById('val-margine').textContent = '\u20AC' + d.margine.toFixed(2);
+    document.getElementById('val-margine-pct').textContent = d.margine_pct + '%';
+    document.getElementById('val-margine-warning').style.display = positivo ? 'none' : 'block';
+
+    // Storico chart
+    if (d.storico && d.storico.length) _initStoricoChart(d.storico);
+}
+
+async function aggiornaDati() {
+    var mese = document.getElementById('mese-selector').value;
+    var loading = document.getElementById('contab-loading');
+    loading.style.display = 'inline';
+    try {
+        var resp = await fetch('/admin/contabilita-realtime?mese=' + encodeURIComponent(mese));
+        var d = await resp.json();
+        _aggiornaValori(d);
+    } catch(e) {
+        console.error('Errore aggiornamento contabilita:', e);
+    } finally {
+        loading.style.display = 'none';
+    }
+}
+
+function cambiaMese(val) {
+    aggiornaDati();
+}
+
+// Carica dati iniziali via API per avere lo storico chart
+aggiornaDati();
+
+// Auto-refresh ogni 5 minuti
+setInterval(aggiornaDati, 5 * 60 * 1000);
+
 // Salva costi configurabili
 async function salvaCosti() {
     var esito = document.getElementById('cfg-esito');
@@ -520,7 +650,11 @@ async function salvaCosti() {
         });
         var d = await resp.json();
         if (d.errore) { esito.textContent = d.errore; esito.style.color = '#ef4444'; }
-        else { esito.textContent = 'Salvato — ricarica per aggiornare i totali'; esito.style.color = '#4ade80'; }
+        else {
+            esito.textContent = 'Salvato';
+            esito.style.color = '#4ade80';
+            aggiornaDati();
+        }
     } catch(e) { esito.textContent = 'Errore: ' + e; esito.style.color = '#ef4444'; }
 }
 
