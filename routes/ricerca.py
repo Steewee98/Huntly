@@ -1247,11 +1247,17 @@ def profilo_singolo(profilo_id):
 
 @ricerca_bp.route("/ricerca/analisi-esistente/<int:profilo_id>")
 def analisi_esistente(profilo_id):
-    """API JSON: restituisce l'analisi salvata per un profilo_ricerca."""
+    """API JSON: restituisce l'analisi salvata per un profilo_ricerca (con fallback su candidati)."""
     db = get_db()
     p = db.execute(
-        "SELECT id, nome, cognome, ruolo, azienda, location, linkedin_url, "
-        "punteggio, analisi, spunti, messaggio_outreach FROM profili_ricerca WHERE id = ?",
+        "SELECT pr.id, pr.nome, pr.cognome, pr.ruolo, pr.azienda, pr.location, pr.linkedin_url, "
+        "COALESCE(c.punteggio, pr.punteggio) AS punteggio, "
+        "COALESCE(c.analisi, pr.analisi) AS analisi, "
+        "COALESCE(c.spunti, pr.spunti) AS spunti, "
+        "COALESCE(c.messaggio_outreach, pr.messaggio_outreach) AS messaggio_outreach "
+        "FROM profili_ricerca pr "
+        "LEFT JOIN candidati c ON c.id = pr.candidato_id "
+        "WHERE pr.id = ?",
         (profilo_id,)
     ).fetchone()
     db.close()
