@@ -1423,13 +1423,17 @@ def analizza_candidato():
         if not pr:
             db.close()
             return jsonify({"errore": "Profilo non trovato"}), 404
-        testo_profilo = pr["testo_profilo"] or ""
         nome          = pr["nome"] or ""
         cognome       = pr["cognome"] or ""
         ruolo         = pr["ruolo"] or ""
         azienda       = pr["azienda"] or ""
         linkedin      = pr["linkedin_url"] or ""
         ricerca_id    = pr["ricerca_id"]
+        # testo_profilo: usa DB se disponibile, altrimenti fallback al testo inviato dal frontend
+        testo_profilo = pr["testo_profilo"] or dati.get("testo_profilo", "").strip() or ""
+        if not testo_profilo:
+            # Ultimo fallback: ricostruisci dai campi del profilo
+            testo_profilo = f"Nome: {nome} {cognome}\nRuolo: {ruolo}\nAzienda: {azienda}\n"
 
     else:
         # Caso 3: dati testuali diretti (ricerca.html, vecchio flusso)
