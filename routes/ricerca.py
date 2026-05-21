@@ -1222,6 +1222,7 @@ def profili_ricerca(ricerca_id):
                COALESCE(c.punteggio, pr.punteggio) AS punteggio,
                c.stato,
                COALESCE(c.analisi, pr.analisi) AS analisi,
+               COALESCE(c.spunti, pr.spunti) AS spunti,
                COALESCE(c.messaggio_outreach, pr.messaggio_outreach) AS messaggio_outreach
         FROM profili_ricerca pr
         LEFT JOIN candidati c ON c.id = pr.candidato_id

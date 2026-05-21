@@ -230,7 +230,9 @@ def _build_prompt_completo(scopo: str, scopo_dettaglio: str, impostazioni: dict,
             "- 4-5: Qualche punto di contatto ma partnership non ovvia\n"
             "- 1-3: Nessuna sinergia evidente o competitor diretto\n\n"
             + regole_base
-            + "3. Profilo incompleto o con informazioni insufficienti → penalizza il punteggio\n\n"
+            + "3. Se i dati del profilo sono limitati (solo headline e nome), "
+            "NON dire che il profilo e incompleto. Valuta con quello che hai "
+            "e dai comunque un'analisi utile basata sul ruolo e sull'azienda.\n\n"
             f"PROFILO LINKEDIN DA ANALIZZARE:\n{testo_profilo}\n\n"
             + _json_schema(
                 "1-10, potenziale come partner",
@@ -265,7 +267,9 @@ def _build_prompt_completo(scopo: str, scopo_dettaglio: str, impostazioni: dict,
             "- 4-5: Qualche punto in comune ma connessione non prioritaria\n"
             "- 1-3: Nessun punto di contatto evidente\n\n"
             + regole_base
-            + "3. Profilo incompleto o con informazioni insufficienti → penalizza il punteggio\n\n"
+            + "3. Se i dati del profilo sono limitati (solo headline e nome), "
+            "NON dire che il profilo e incompleto. Valuta con quello che hai "
+            "e dai comunque un'analisi utile basata sul ruolo e sull'azienda.\n\n"
             f"PROFILO LINKEDIN DA ANALIZZARE:\n{testo_profilo}\n\n"
             + _json_schema(
                 "1-10, interesse nel connettersi",
@@ -309,7 +313,7 @@ def _build_prompt_completo(scopo: str, scopo_dettaglio: str, impostazioni: dict,
         "- Keyword positive trovate nel profilo? → +punti\n"
         "- Keyword negative trovate? → -punti\n"
         "- Settore corrispondente? → +punti\n"
-        "- Profilo incompleto o informazioni insufficienti? → -punti\n\n"
+        "- Se i dati sono limitati (solo headline/nome), valuta con quello che hai senza penalizzare\n\n"
         "SCALA PUNTEGGIO (1-10):\n"
         "- 8-10: Match eccellente — ruolo, settore, esperienza e competenze perfettamente allineati\n"
         "- 6-7: Buon match — la maggior parte dei criteri soddisfatti, qualche gap minore\n"
@@ -317,7 +321,9 @@ def _build_prompt_completo(scopo: str, scopo_dettaglio: str, impostazioni: dict,
         "- 1-3: Match scarso — profilo non adatto ai criteri richiesti\n"
         + istr_pesi + "\n"
         + regole_base
-        + "3. Profilo incompleto o con informazioni insufficienti → penalizza il punteggio\n"
+        + "3. Se i dati del profilo sono limitati (solo headline e nome), "
+        "NON dire che il profilo e incompleto. Valuta con quello che hai "
+        "e dai comunque un'analisi utile basata sul ruolo e sull'azienda.\n"
         "4. Valuta ESCLUSIVAMENTE idoneita al ruolo cercato\n\n"
         f"PROFILO LINKEDIN DA ANALIZZARE:\n{testo_profilo}\n\n"
         + _json_schema(

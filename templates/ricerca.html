@@ -1201,11 +1201,11 @@ function _aggiornaProfiloCard(profiloRicercaId, punteggio) {
         // 1. Aggiorna badge punteggio
         var badge = riga.querySelector('.badge-analisi');
         if (badge) {
-            var colore = punteggio >= 7 ? '#10b981' : punteggio >= 5 ? '#f59e0b' : '#ef4444';
-            var bg = punteggio >= 7 ? '#d1fae5' : punteggio >= 5 ? '#fef3c7' : '#fee2e2';
-            badge.innerHTML = '<span class="score-badge score-badge-' +
-                (punteggio >= 8 ? 'alto' : (punteggio >= 5 ? 'medio' : 'basso')) +
-                '">' + punteggio + '/10</span>';
+            var scoreClass = punteggio >= 8 ? 'alto' : (punteggio >= 5 ? 'medio' : 'basso');
+            badge.innerHTML = '<span class="score-badge score-badge-' + scoreClass + '" ' +
+                'style="cursor:pointer;" title="Clicca per vedere l\'analisi" ' +
+                'onclick="event.stopPropagation(); caricaAnalisiEsistente(' + profiloRicercaId + ')">' +
+                punteggio + '/10</span>';
         }
 
         // 2. Nascondi bottone Analizza
