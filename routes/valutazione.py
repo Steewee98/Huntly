@@ -148,14 +148,11 @@ def analizza_stream():
     Endpoint SSE: streama l'analisi profilo LinkedIn chunk per chunk.
     Se punteggio >= 6 e c'è un URL LinkedIn, arricchisce con Proxycurl.
     """
-    import sys
-    print(f"=== ROUTE HIT: {request.path} ===", flush=True)
     dati          = request.get_json()
     testo_profilo = dati.get("testo_profilo", "").strip()
     tipo_profilo  = dati.get("tipo_profilo", "A")
     candidato_id  = dati.get("candidato_id")
     profilo_target_id = dati.get("profilo_target_id")
-    print(f"=== STREAM PARAMS: tipo={tipo_profilo} candidato_id={candidato_id} profilo_target_id={profilo_target_id} linkedin_url={dati.get('linkedin_url')} testo_len={len(testo_profilo)} ===", flush=True)
 
     # Carica impostazioni dal profilo target (include scopo)
     impostazioni_stream = None
@@ -166,13 +163,8 @@ def analizza_stream():
             _db.close()
             if _pt:
                 impostazioni_stream = dict(_pt)
-                print(f"=== PROFILO TARGET CARICATO: id={profilo_target_id} scopo={_pt.get('scopo')} ===", flush=True)
-            else:
-                print(f"=== PROFILO TARGET NON TROVATO: id={profilo_target_id} ===", flush=True)
-        except Exception as e_pt:
-            print(f"=== PROFILO TARGET ERRORE: {e_pt} ===", flush=True)
-    else:
-        print(f"=== PROFILO TARGET: None (tipo_profilo={tipo_profilo}) ===", flush=True)
+        except Exception:
+            pass
 
     if not testo_profilo:
         def _err():

@@ -1382,44 +1382,27 @@ def analizza_candidato():
     3. dati testuali diretti → crea record in profili_ricerca con analisi
     NON inserisce mai in candidati — il profilo va in pipeline solo via /aggiungi-pipeline.
     """
-    print(f"=== ROUTE HIT: {request.path} ===", flush=True)
-    try:
-        return _analizza_candidato_impl()
-    except Exception as e:
-        import traceback
-        print(f"=== ERRORE FATALE analizza_candidato: {e} ===", flush=True)
-        print(traceback.format_exc(), flush=True)
-        log.error("[analizza_candidato] Errore fatale: %s", e, exc_info=True)
-        return jsonify({"errore": f"Errore fatale: {e}"}), 500
-
-
-def _analizza_candidato_impl():
     dati = request.get_json()
-    print(f"=== PAYLOAD KEYS: {list(dati.keys())} profilo_ricerca_id={dati.get('profilo_ricerca_id')} candidato_id={dati.get('candidato_id')} has_precomputed={bool(dati.get('risultato_precomputed'))} ===", flush=True)
     candidato_id          = dati.get("candidato_id")
     profilo_ricerca_id    = dati.get("profilo_ricerca_id")
     tipo_profilo          = dati.get("tipo_profilo", "A")
     ricerca_id            = dati.get("ricerca_id")
-    risultato_precomputed = dati.get("risultato_precomputed")  # se già calcolato dal frontend (SSE)
-    dati_arricchiti_json  = dati.get("dati_arricchiti")        # JSON string con campi arricchiti
+    risultato_precomputed = dati.get("risultato_precomputed")
+    dati_arricchiti_json  = dati.get("dati_arricchiti")
 
     org_id = get_org_id()
-    print(f"=== STEP 1 org_id={org_id} ===", flush=True)
 
-    # Feature gating — limite analisi AI mensili
-    # Se risultato_precomputed è presente, il salvataggio NON è una nuova analisi:
-    # l'analisi AI è già stata fatta via SSE, qui stiamo solo persistendo il risultato.
+    # Feature gating — limite analisi AI mensili.
+    # Se risultato_precomputed è presente, salta: l'analisi AI è già stata fatta
+    # via SSE, qui stiamo solo persistendo il risultato.
     if not risultato_precomputed:
         _db_gate = get_db()
         _limite = _check_limite_analisi(_db_gate, org_id)
         _db_gate.close()
         if _limite is not None:
-            print(f"=== GATING BLOCCATO: limite raggiunto ===", flush=True)
             return _limite
-    print(f"=== STEP 2 gating OK (precomputed={bool(risultato_precomputed)}) ===", flush=True)
 
     db = get_db()
-    print(f"=== STEP 3 db OK ===", flush=True)
 
     if candidato_id:
         # Caso 1: candidato già in DB (pipeline)
@@ -1431,7 +1414,6 @@ def _analizza_candidato_impl():
             return jsonify({"errore": "Candidato non trovato"}), 404
         tipo_profilo  = c["tipo_profilo"]
         ricerca_id    = c["ricerca_id"]
-        # Cerca il testo profilo in profili_ricerca se disponibile
         pr = db.execute(
             "SELECT testo_profilo FROM profili_ricerca WHERE candidato_id = ? LIMIT 1",
             (candidato_id,)
@@ -1454,13 +1436,11 @@ def _analizza_candidato_impl():
 
     elif profilo_ricerca_id:
         # Caso 2: profilo già in profili_ricerca ma non ancora in pipeline
-        print(f"=== STEP 4 caso 2: profilo_ricerca_id={profilo_ricerca_id} ===", flush=True)
         pr = db.execute(
             "SELECT * FROM profili_ricerca WHERE id = ?", (profilo_ricerca_id,)
         ).fetchone()
         if not pr:
             db.close()
-            print(f"=== PROFILO NON TROVATO id={profilo_ricerca_id} ===", flush=True)
             return jsonify({"errore": "Profilo non trovato"}), 404
         nome          = pr["nome"] or ""
         cognome       = pr["cognome"] or ""
@@ -1468,12 +1448,9 @@ def _analizza_candidato_impl():
         azienda       = pr["azienda"] or ""
         linkedin      = pr["linkedin_url"] or ""
         ricerca_id    = pr["ricerca_id"]
-        # testo_profilo: usa DB se disponibile, altrimenti fallback al testo inviato dal frontend
         testo_profilo = pr["testo_profilo"] or dati.get("testo_profilo", "").strip() or ""
         if not testo_profilo:
-            # Ultimo fallback: ricostruisci dai campi del profilo
             testo_profilo = f"Nome: {nome} {cognome}\nRuolo: {ruolo}\nAzienda: {azienda}\n"
-        print(f"=== STEP 5 profilo caricato: {nome} {cognome} testo_len={len(testo_profilo)} ===", flush=True)
 
     else:
         # Caso 3: dati testuali diretti (ricerca.html, vecchio flusso)
@@ -1486,13 +1463,9 @@ def _analizza_candidato_impl():
 
     if not testo_profilo:
         db.close()
-        print(f"=== TESTO PROFILO MANCANTE — abort 400 ===", flush=True)
         return jsonify({"errore": "Testo profilo mancante"}), 400
 
-    print(f"=== STEP 6 testo_profilo OK len={len(testo_profilo)} ===", flush=True)
-
     if risultato_precomputed:
-        # Risultato già calcolato dal frontend tramite SSE streaming — salta la chiamata AI
         risultato = risultato_precomputed
     else:
         # Carica impostazioni per il tipo profilo selezionato
@@ -1510,38 +1483,29 @@ def _analizza_candidato_impl():
                 ).fetchone()
                 if pt_row:
                     pt = dict(pt_row)
-                    print(f"=== PROFILO TARGET CARICATO (analizza_candidato): id={pt_id} scopo={pt.get('scopo')} ===", flush=True)
                     if imp is None:
                         imp = pt
                     else:
-                        # Merge: profili_target sovrascrive i campi condivisi
                         for k in ('scopo', 'scopo_dettaglio', 'ruoli_target', 'settori',
                                   'eta_min', 'eta_max', 'anni_esperienza_min',
                                   'keyword_positive', 'keyword_negative'):
                             if pt.get(k):
                                 imp[k] = pt[k]
-                else:
-                    print(f"=== PROFILO TARGET NON TROVATO (analizza_candidato): pt_id={pt_id} ===", flush=True)
             except (ValueError, TypeError):
                 pass
-        else:
-            print(f"=== PROFILO TARGET: None (tipo_profilo={tipo_profilo}) ===", flush=True)
 
-        print(f"=== ANALISI AI: tipo_profilo={tipo_profilo} imp_keys={list(imp.keys()) if imp else None} ===", flush=True)
         try:
             risultato = analizza_profilo_linkedin(testo_profilo, tipo_profilo, imp)
         except Exception as e:
             db.close()
             return jsonify({"errore": str(e)}), 500
 
-    # Coercion tipi: ogni valore dal risultato AI deve essere del tipo giusto per PostgreSQL
+    # Coercion tipi
     def _s(v, fallback=None):
-        """Stringa o None."""
         if v in (None, "", {}, []):
             return fallback
         return str(v) if not isinstance(v, str) else (v or fallback)
     def _i(v):
-        """Intero o None."""
         try: return int(v) if v not in (None, "", {}, []) else None
         except (TypeError, ValueError): return None
 
@@ -1555,11 +1519,8 @@ def _analizza_candidato_impl():
     messaggio_str = _s(risultato.get("messaggio_outreach"), "") or ""
     anteprima     = testo_profilo[:120].replace("\n", " ").strip()
 
-    print(f"=== SALVATAGGIO: candidato_id={candidato_id} profilo_ricerca_id={profilo_ricerca_id} punteggio={punteggio} ===", flush=True)
-
     try:
         if candidato_id:
-            # Caso 1: candidato già in pipeline → aggiorna analisi su candidati
             db.execute(
                 """UPDATE candidati SET
                    punteggio=?, analisi=?, spunti=?, messaggio_outreach=?,
@@ -1572,10 +1533,7 @@ def _analizza_candidato_impl():
                     "UPDATE candidati SET dati_arricchiti = ? WHERE id = ? AND organizzazione_id = ?",
                     (dati_arricchiti_json, candidato_id, org_id)
                 )
-            print(f"=== SALVATO IN CANDIDATI id={candidato_id} ===", flush=True)
         else:
-            # Caso 2/3: profilo NON ancora in pipeline → salva analisi solo su profili_ricerca
-            # Il profilo andrà in candidati SOLO quando l'utente clicca "+ Pipeline"
             if profilo_ricerca_id:
                 db.execute(
                     """UPDATE profili_ricerca SET
@@ -1583,9 +1541,7 @@ def _analizza_candidato_impl():
                        WHERE id=?""",
                     (punteggio, analisi_str, spunti_json, messaggio_str, profilo_ricerca_id)
                 )
-                print(f"=== SALVATO IN PROFILI_RICERCA id={profilo_ricerca_id} punteggio={punteggio} ===", flush=True)
             else:
-                # Caso 3: dati diretti senza profilo_ricerca — crea record in profili_ricerca
                 cur_pr = db.execute(
                     """INSERT INTO profili_ricerca
                        (ricerca_id, nome, cognome, ruolo, azienda, linkedin_url,
@@ -1596,12 +1552,8 @@ def _analizza_candidato_impl():
                      testo_profilo, punteggio, analisi_str, spunti_json, messaggio_str, org_id)
                 )
                 profilo_ricerca_id = cur_pr.lastrowid
-                print(f"=== CREATO PROFILI_RICERCA id={profilo_ricerca_id} ===", flush=True)
 
-        # Fonte nella cronologia: "ricerca_[id]" se viene da una ricerca, "ricerca_manuale" altrimenti
         fonte = f"ricerca_{ricerca_id}" if ricerca_id else "ricerca_manuale"
-
-        # Salva nella cronologia valutazioni
         db.execute(
             """INSERT INTO valutazioni
                (nome_contatto, ruolo_attuale, azienda, tipo_profilo,
@@ -1613,19 +1565,7 @@ def _analizza_candidato_impl():
         )
 
         db.commit()
-        print(f"=== COMMIT OK ===", flush=True)
-
-        # Verifica post-commit: rileggi dal DB per confermare la scrittura
-        if profilo_ricerca_id and not candidato_id:
-            verifica = db.execute(
-                "SELECT punteggio FROM profili_ricerca WHERE id = ?", (profilo_ricerca_id,)
-            ).fetchone()
-            print(f"=== VERIFICA DB: profili_ricerca id={profilo_ricerca_id} punteggio={verifica['punteggio'] if verifica else 'RECORD MANCANTE'} ===", flush=True)
-
     except Exception as e_save:
-        import traceback as tb
-        print(f"=== ERRORE SALVATAGGIO: {e_save} ===", flush=True)
-        print(tb.format_exc(), flush=True)
         log.error("[analizza_candidato] Errore salvataggio: %s", e_save, exc_info=True)
         db.close()
         return jsonify({"errore": f"Errore salvataggio: {e_save}"}), 500
@@ -1633,7 +1573,6 @@ def _analizza_candidato_impl():
     db.close()
     _incrementa_analisi(org_id)
 
-    print(f"=== RISPOSTA OK: profilo_ricerca_id={profilo_ricerca_id} punteggio={punteggio} ===", flush=True)
     return jsonify({**risultato, "candidato_id": candidato_id, "profilo_ricerca_id": profilo_ricerca_id})
 
 

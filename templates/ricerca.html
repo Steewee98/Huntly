@@ -1129,7 +1129,6 @@ function avviaAnalisiDaRicerca(profiloRicercaId, btn) {
 
 
 function _salvaAnalisiRicerca(dati, p) {
-    console.log('=== SALVA ANALISI CHIAMATA ===', 'profilo_ricerca_id:', p.profilo_ricerca_id, 'punteggio:', dati.punteggio, 'keys:', Object.keys(dati));
     var testo = [
         'Nome: ' + [p.nome, p.cognome].filter(Boolean).join(' '),
         'Ruolo: ' + (p.ruolo || ''),
@@ -1156,28 +1155,24 @@ function _salvaAnalisiRicerca(dati, p) {
         });
     }
 
-    var payload = {
-        profilo_ricerca_id:    p.profilo_ricerca_id || null,
-        testo_profilo:         testo,
-        nome:                  p.nome || '',
-        cognome:               p.cognome || '',
-        ruolo:                 p.ruolo || '',
-        azienda:               p.azienda || '',
-        linkedin:              p.linkedin || '',
-        tipo_profilo:          tipoAnalisiSelezionato,
-        ricerca_id:            ricercaIdCorrente,
-        risultato_precomputed: dati,
-        dati_arricchiti:       datiArricchiti,
-    };
-    console.log('=== FETCH /ricerca/analizza_candidato ===', 'profilo_ricerca_id:', payload.profilo_ricerca_id, 'tipo:', payload.tipo_profilo, 'punteggio:', dati.punteggio);
-
     fetch('/ricerca/analizza_candidato', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(payload)
+        body: JSON.stringify({
+            profilo_ricerca_id:    p.profilo_ricerca_id || null,
+            testo_profilo:         testo,
+            nome:                  p.nome || '',
+            cognome:               p.cognome || '',
+            ruolo:                 p.ruolo || '',
+            azienda:               p.azienda || '',
+            linkedin:              p.linkedin || '',
+            tipo_profilo:          tipoAnalisiSelezionato,
+            ricerca_id:            ricercaIdCorrente,
+            risultato_precomputed: dati,
+            dati_arricchiti:       datiArricchiti,
+        })
     })
     .then(function(r) {
-        console.log('=== RISPOSTA SALVATAGGIO ===', 'status:', r.status);
         var savedEl = document.getElementById('modal-report-saved');
         if (r.status === 409) {
             return r.json().then(function() {
