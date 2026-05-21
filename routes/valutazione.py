@@ -166,8 +166,13 @@ def analizza_stream():
             _db.close()
             if _pt:
                 impostazioni_stream = dict(_pt)
-        except Exception:
-            pass
+                print(f"=== PROFILO TARGET CARICATO: id={profilo_target_id} scopo={_pt.get('scopo')} ===", flush=True)
+            else:
+                print(f"=== PROFILO TARGET NON TROVATO: id={profilo_target_id} ===", flush=True)
+        except Exception as e_pt:
+            print(f"=== PROFILO TARGET ERRORE: {e_pt} ===", flush=True)
+    else:
+        print(f"=== PROFILO TARGET: None (tipo_profilo={tipo_profilo}) ===", flush=True)
 
     if not testo_profilo:
         def _err():

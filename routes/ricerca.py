@@ -1468,6 +1468,7 @@ def analizza_candidato():
                 ).fetchone()
                 if pt_row:
                     pt = dict(pt_row)
+                    print(f"=== PROFILO TARGET CARICATO (analizza_candidato): id={pt_id} scopo={pt.get('scopo')} ===", flush=True)
                     if imp is None:
                         imp = pt
                     else:
@@ -1477,9 +1478,14 @@ def analizza_candidato():
                                   'keyword_positive', 'keyword_negative'):
                             if pt.get(k):
                                 imp[k] = pt[k]
+                else:
+                    print(f"=== PROFILO TARGET NON TROVATO (analizza_candidato): pt_id={pt_id} ===", flush=True)
             except (ValueError, TypeError):
                 pass
+        else:
+            print(f"=== PROFILO TARGET: None (tipo_profilo={tipo_profilo}) ===", flush=True)
 
+        print(f"=== ANALISI AI: tipo_profilo={tipo_profilo} imp_keys={list(imp.keys()) if imp else None} ===", flush=True)
         try:
             risultato = analizza_profilo_linkedin(testo_profilo, tipo_profilo, imp)
         except Exception as e:
