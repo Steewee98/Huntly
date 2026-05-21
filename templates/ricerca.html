@@ -1177,6 +1177,14 @@ function _salvaAnalisiRicerca(dati, p) {
                     'padding:0.75rem 1rem;margin-top:1rem;font-size:0.88rem;color:#92400e;display:block;';
             });
         }
+        if (!r.ok) {
+            return r.json().then(function(errResp) {
+                console.error('[salva analisi] Errore HTTP ' + r.status + ':', errResp);
+                savedEl.innerHTML = '&#10060; Errore salvataggio analisi: ' + (errResp.errore || 'errore sconosciuto');
+                savedEl.style.cssText = 'background:#fee2e2;border:1px solid #fca5a5;border-radius:var(--radius);' +
+                    'padding:0.75rem 1rem;margin-top:1rem;font-size:0.88rem;color:#991b1b;display:block;';
+            });
+        }
         return r.json().then(function(resp) {
             if (resp && !resp.errore) {
                 savedEl.style.cssText = '';
@@ -1186,10 +1194,23 @@ function _salvaAnalisiRicerca(dati, p) {
                 }
                 // Aggiorna badge punteggio e bottoni nella riga profilo (cronologia)
                 _aggiornaProfiloCard(p.profilo_ricerca_id, dati.punteggio);
+                // Invalida cache profili così la prossima espansione ricarica dal DB
+                _profiliCache = {};
+            } else if (resp && resp.errore) {
+                console.error('[salva analisi] Errore backend:', resp.errore);
+                savedEl.innerHTML = '&#10060; Errore: ' + resp.errore;
+                savedEl.style.cssText = 'background:#fee2e2;border:1px solid #fca5a5;border-radius:var(--radius);' +
+                    'padding:0.75rem 1rem;margin-top:1rem;font-size:0.88rem;color:#991b1b;display:block;';
             }
         });
     })
-    .catch(function(err) { console.error('[salva analisi ricerca]', err); });
+    .catch(function(err) {
+        console.error('[salva analisi ricerca]', err);
+        var savedEl = document.getElementById('modal-report-saved');
+        savedEl.innerHTML = '&#10060; Errore di rete nel salvataggio';
+        savedEl.style.cssText = 'background:#fee2e2;border:1px solid #fca5a5;border-radius:var(--radius);' +
+            'padding:0.75rem 1rem;margin-top:1rem;font-size:0.88rem;color:#991b1b;display:block;';
+    });
 }
 
 function _aggiornaProfiloCard(profiloRicercaId, punteggio) {

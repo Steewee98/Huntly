@@ -1364,8 +1364,9 @@ def analizza_candidato():
     3. dati testuali diretti → crea record in profili_ricerca con analisi
     NON inserisce mai in candidati — il profilo va in pipeline solo via /aggiungi-pipeline.
     """
-    print(f"=== ROUTE HIT: {request.path} ===")
+    print(f"=== ROUTE HIT: {request.path} ===", flush=True)
     dati = request.get_json()
+    print(f"=== PAYLOAD KEYS: {list(dati.keys())} profilo_ricerca_id={dati.get('profilo_ricerca_id')} candidato_id={dati.get('candidato_id')} has_precomputed={bool(dati.get('risultato_precomputed'))} ===", flush=True)
     candidato_id          = dati.get("candidato_id")
     profilo_ricerca_id    = dati.get("profilo_ricerca_id")
     tipo_profilo          = dati.get("tipo_profilo", "A")
@@ -1506,58 +1507,71 @@ def analizza_candidato():
     messaggio_str = _s(risultato.get("messaggio_outreach"), "") or ""
     anteprima     = testo_profilo[:120].replace("\n", " ").strip()
 
-    if candidato_id:
-        # Caso 1: candidato già in pipeline → aggiorna analisi su candidati
-        db.execute(
-            """UPDATE candidati SET
-               punteggio=?, analisi=?, spunti=?, messaggio_outreach=?,
-               stato='Da contattare', data_aggiornamento=CURRENT_TIMESTAMP
-               WHERE id=? AND organizzazione_id=?""",
-            (punteggio, analisi_str, spunti_json, messaggio_str, candidato_id, org_id)
-        )
-        if dati_arricchiti_json:
+    print(f"=== SALVATAGGIO: candidato_id={candidato_id} profilo_ricerca_id={profilo_ricerca_id} punteggio={punteggio} ===", flush=True)
+
+    try:
+        if candidato_id:
+            # Caso 1: candidato già in pipeline → aggiorna analisi su candidati
             db.execute(
-                "UPDATE candidati SET dati_arricchiti = ? WHERE id = ? AND organizzazione_id = ?",
-                (dati_arricchiti_json, candidato_id, org_id)
+                """UPDATE candidati SET
+                   punteggio=?, analisi=?, spunti=?, messaggio_outreach=?,
+                   stato='Da contattare', data_aggiornamento=CURRENT_TIMESTAMP
+                   WHERE id=? AND organizzazione_id=?""",
+                (punteggio, analisi_str, spunti_json, messaggio_str, candidato_id, org_id)
             )
-    else:
-        # Caso 2/3: profilo NON ancora in pipeline → salva analisi solo su profili_ricerca
-        # Il profilo andrà in candidati SOLO quando l'utente clicca "+ Pipeline"
-        if profilo_ricerca_id:
-            db.execute(
-                """UPDATE profili_ricerca SET
-                   punteggio=?, analisi=?, spunti=?, messaggio_outreach=?
-                   WHERE id=?""",
-                (punteggio, analisi_str, spunti_json, messaggio_str, profilo_ricerca_id)
-            )
+            if dati_arricchiti_json:
+                db.execute(
+                    "UPDATE candidati SET dati_arricchiti = ? WHERE id = ? AND organizzazione_id = ?",
+                    (dati_arricchiti_json, candidato_id, org_id)
+                )
+            print(f"=== SALVATO IN CANDIDATI id={candidato_id} ===", flush=True)
         else:
-            # Caso 3: dati diretti senza profilo_ricerca — crea record in profili_ricerca
-            cur_pr = db.execute(
-                """INSERT INTO profili_ricerca
-                   (ricerca_id, nome, cognome, ruolo, azienda, linkedin_url,
-                    testo_profilo, punteggio, analisi, spunti, messaggio_outreach,
-                    organizzazione_id)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-                (ricerca_id, nome, cognome, ruolo, azienda, linkedin,
-                 testo_profilo, punteggio, analisi_str, spunti_json, messaggio_str, org_id)
-            )
-            profilo_ricerca_id = cur_pr.lastrowid
+            # Caso 2/3: profilo NON ancora in pipeline → salva analisi solo su profili_ricerca
+            # Il profilo andrà in candidati SOLO quando l'utente clicca "+ Pipeline"
+            if profilo_ricerca_id:
+                db.execute(
+                    """UPDATE profili_ricerca SET
+                       punteggio=?, analisi=?, spunti=?, messaggio_outreach=?
+                       WHERE id=?""",
+                    (punteggio, analisi_str, spunti_json, messaggio_str, profilo_ricerca_id)
+                )
+                print(f"=== SALVATO IN PROFILI_RICERCA id={profilo_ricerca_id} punteggio={punteggio} ===", flush=True)
+            else:
+                # Caso 3: dati diretti senza profilo_ricerca — crea record in profili_ricerca
+                cur_pr = db.execute(
+                    """INSERT INTO profili_ricerca
+                       (ricerca_id, nome, cognome, ruolo, azienda, linkedin_url,
+                        testo_profilo, punteggio, analisi, spunti, messaggio_outreach,
+                        organizzazione_id)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (ricerca_id, nome, cognome, ruolo, azienda, linkedin,
+                     testo_profilo, punteggio, analisi_str, spunti_json, messaggio_str, org_id)
+                )
+                profilo_ricerca_id = cur_pr.lastrowid
+                print(f"=== CREATO PROFILI_RICERCA id={profilo_ricerca_id} ===", flush=True)
 
-    # Fonte nella cronologia: "ricerca_[id]" se viene da una ricerca, "ricerca_manuale" altrimenti
-    fonte = f"ricerca_{ricerca_id}" if ricerca_id else "ricerca_manuale"
+        # Fonte nella cronologia: "ricerca_[id]" se viene da una ricerca, "ricerca_manuale" altrimenti
+        fonte = f"ricerca_{ricerca_id}" if ricerca_id else "ricerca_manuale"
 
-    # Salva nella cronologia valutazioni
-    db.execute(
-        """INSERT INTO valutazioni
-           (nome_contatto, ruolo_attuale, azienda, tipo_profilo,
-            anteprima_testo, punteggio, analisi, spunti, messaggio_outreach,
-            candidato_id, fonte, organizzazione_id)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (nome_contatto, ruolo_ai, azienda_ai, tipo_profilo, anteprima,
-         punteggio, analisi_str, spunti_json, messaggio_str, candidato_id, fonte, org_id)
-    )
+        # Salva nella cronologia valutazioni
+        db.execute(
+            """INSERT INTO valutazioni
+               (nome_contatto, ruolo_attuale, azienda, tipo_profilo,
+                anteprima_testo, punteggio, analisi, spunti, messaggio_outreach,
+                candidato_id, fonte, organizzazione_id)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            (nome_contatto, ruolo_ai, azienda_ai, tipo_profilo, anteprima,
+             punteggio, analisi_str, spunti_json, messaggio_str, candidato_id, fonte, org_id)
+        )
 
-    db.commit()
+        db.commit()
+        print(f"=== COMMIT OK ===", flush=True)
+    except Exception as e_save:
+        print(f"=== ERRORE SALVATAGGIO: {e_save} ===", flush=True)
+        log.error("[analizza_candidato] Errore salvataggio: %s", e_save, exc_info=True)
+        db.close()
+        return jsonify({"errore": f"Errore salvataggio: {e_save}"}), 500
+
     db.close()
     _incrementa_analisi(org_id)
 
