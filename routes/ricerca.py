@@ -1383,6 +1383,17 @@ def analizza_candidato():
     NON inserisce mai in candidati — il profilo va in pipeline solo via /aggiungi-pipeline.
     """
     print(f"=== ROUTE HIT: {request.path} ===", flush=True)
+    try:
+        return _analizza_candidato_impl()
+    except Exception as e:
+        import traceback
+        print(f"=== ERRORE FATALE analizza_candidato: {e} ===", flush=True)
+        print(traceback.format_exc(), flush=True)
+        log.error("[analizza_candidato] Errore fatale: %s", e, exc_info=True)
+        return jsonify({"errore": f"Errore fatale: {e}"}), 500
+
+
+def _analizza_candidato_impl():
     dati = request.get_json()
     print(f"=== PAYLOAD KEYS: {list(dati.keys())} profilo_ricerca_id={dati.get('profilo_ricerca_id')} candidato_id={dati.get('candidato_id')} has_precomputed={bool(dati.get('risultato_precomputed'))} ===", flush=True)
     candidato_id          = dati.get("candidato_id")
