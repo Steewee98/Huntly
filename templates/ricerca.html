@@ -814,9 +814,14 @@ document.getElementById('modal-import').addEventListener('click', function(e) {
 /* ------------------------------------------------------------------ */
 /* Analisi AI — apre modal Report AI con streaming                     */
 /* ------------------------------------------------------------------ */
-function avviaAnalisiDiretta(persona) {
-    personaInAnalisi       = persona;
-    tipoAnalisiSelezionato = 'A';
+function avviaAnalisiDiretta(persona, overrideProfiloTargetId) {
+    personaInAnalisi = persona;
+
+    // Usa il profilo target specifico se passato (es. dalla cronologia),
+    // altrimenti usa quello attivo nel selettore
+    var ptId = (overrideProfiloTargetId !== undefined && overrideProfiloTargetId !== null)
+        ? overrideProfiloTargetId : profiloTargetIdAttivo;
+    tipoAnalisiSelezionato = ptId ? ('pt_' + ptId) : 'A';
 
     var p = persona;
     var nomeCompleto = [p.nome, p.cognome].filter(Boolean).join(' ') || 'candidato';
@@ -847,7 +852,7 @@ function avviaAnalisiDiretta(persona) {
             testo_profilo:     testo,
             tipo_profilo:      tipoAnalisiSelezionato,
             linkedin_url:      p.linkedin || null,
-            profilo_target_id: profiloTargetIdAttivo,
+            profilo_target_id: ptId,
         })
     })
     .then(function(response) {
@@ -876,7 +881,7 @@ function avviaAnalisiDiretta(persona) {
                             document.getElementById('modal-report-status').innerHTML =
                                 '&#11088; Arricchimento con dati LinkedIn in corso...';
                         } else if (ev.type === 'done') {
-                            var _scopo = profiloTargetIdAttivo ? (_profiloScopoMap[profiloTargetIdAttivo] || null) : null;
+                            var _scopo = ptId ? (_profiloScopoMap[ptId] || null) : null;
                             var candidatoInfo = { testo: testo, linkedin: p.linkedin || null, tipo: tipoAnalisiSelezionato, scopo: _scopo };
                             var salvaCallback = function(nuoviDati) { _salvaAnalisiRicerca(nuoviDati, p); };
                             _mostraReportNelModal(ev.risultato, candidatoInfo, salvaCallback);
@@ -1112,9 +1117,8 @@ function avviaAnalisiDaRicerca(profiloRicercaId, btn) {
                 linkedin: p.linkedin_url, sommario: '',
                 profilo_ricerca_id: p.id
             };
-            // Avvia analisi nel modal — il bottone resta in stato "Analisi..."
-            // finché _salvaAnalisiRicerca() aggiorna la UI al completamento
-            avviaAnalisiDiretta(persona);
+            // Usa il profilo target della ricerca originale, non il globale
+            avviaAnalisiDiretta(persona, p.profilo_target_id || null);
         })
         .catch(function(e) {
             btn.disabled = false;

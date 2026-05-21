@@ -1236,13 +1236,31 @@ def profili_ricerca(ricerca_id):
 
 @ricerca_bp.route("/ricerca/profili-singolo/<int:profilo_id>")
 def profilo_singolo(profilo_id):
-    """API JSON: singolo profilo_ricerca."""
+    """API JSON: singolo profilo_ricerca con profilo_target_id dalla ricerca collegata."""
     db = get_db()
     p = db.execute("SELECT * FROM profili_ricerca WHERE id = ?", (profilo_id,)).fetchone()
-    db.close()
     if not p:
+        db.close()
         return jsonify({"errore": "Profilo non trovato"}), 404
-    return jsonify(dict(p))
+
+    result = dict(p)
+
+    # Recupera tipo_profilo dalla ricerca collegata → estrai profilo_target_id numerico
+    pt_id = None
+    if p.get("ricerca_id"):
+        ra = db.execute(
+            "SELECT tipo_profilo FROM ricerche_automatiche WHERE id = ?",
+            (p["ricerca_id"],)
+        ).fetchone()
+        if ra and ra["tipo_profilo"] and str(ra["tipo_profilo"]).startswith("pt_"):
+            try:
+                pt_id = int(ra["tipo_profilo"][3:])
+            except (ValueError, TypeError):
+                pass
+    result["profilo_target_id"] = pt_id
+
+    db.close()
+    return jsonify(result)
 
 
 @ricerca_bp.route("/ricerca/analisi-esistente/<int:profilo_id>")
