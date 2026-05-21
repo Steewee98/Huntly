@@ -1404,15 +1404,19 @@ def _analizza_candidato_impl():
     dati_arricchiti_json  = dati.get("dati_arricchiti")        # JSON string con campi arricchiti
 
     org_id = get_org_id()
+    print(f"=== STEP 1 org_id={org_id} ===", flush=True)
 
     # Feature gating — limite analisi AI mensili
     _db_gate = get_db()
     _limite = _check_limite_analisi(_db_gate, org_id)
     _db_gate.close()
     if _limite is not None:
+        print(f"=== GATING BLOCCATO: limite raggiunto ===", flush=True)
         return _limite
+    print(f"=== STEP 2 gating OK ===", flush=True)
 
     db = get_db()
+    print(f"=== STEP 3 db OK ===", flush=True)
 
     if candidato_id:
         # Caso 1: candidato già in DB (pipeline)
@@ -1447,11 +1451,13 @@ def _analizza_candidato_impl():
 
     elif profilo_ricerca_id:
         # Caso 2: profilo già in profili_ricerca ma non ancora in pipeline
+        print(f"=== STEP 4 caso 2: profilo_ricerca_id={profilo_ricerca_id} ===", flush=True)
         pr = db.execute(
             "SELECT * FROM profili_ricerca WHERE id = ?", (profilo_ricerca_id,)
         ).fetchone()
         if not pr:
             db.close()
+            print(f"=== PROFILO NON TROVATO id={profilo_ricerca_id} ===", flush=True)
             return jsonify({"errore": "Profilo non trovato"}), 404
         nome          = pr["nome"] or ""
         cognome       = pr["cognome"] or ""
@@ -1464,6 +1470,7 @@ def _analizza_candidato_impl():
         if not testo_profilo:
             # Ultimo fallback: ricostruisci dai campi del profilo
             testo_profilo = f"Nome: {nome} {cognome}\nRuolo: {ruolo}\nAzienda: {azienda}\n"
+        print(f"=== STEP 5 profilo caricato: {nome} {cognome} testo_len={len(testo_profilo)} ===", flush=True)
 
     else:
         # Caso 3: dati testuali diretti (ricerca.html, vecchio flusso)
@@ -1476,7 +1483,10 @@ def _analizza_candidato_impl():
 
     if not testo_profilo:
         db.close()
+        print(f"=== TESTO PROFILO MANCANTE — abort 400 ===", flush=True)
         return jsonify({"errore": "Testo profilo mancante"}), 400
+
+    print(f"=== STEP 6 testo_profilo OK len={len(testo_profilo)} ===", flush=True)
 
     if risultato_precomputed:
         # Risultato già calcolato dal frontend tramite SSE streaming — salta la chiamata AI
@@ -1601,8 +1611,18 @@ def _analizza_candidato_impl():
 
         db.commit()
         print(f"=== COMMIT OK ===", flush=True)
+
+        # Verifica post-commit: rileggi dal DB per confermare la scrittura
+        if profilo_ricerca_id and not candidato_id:
+            verifica = db.execute(
+                "SELECT punteggio FROM profili_ricerca WHERE id = ?", (profilo_ricerca_id,)
+            ).fetchone()
+            print(f"=== VERIFICA DB: profili_ricerca id={profilo_ricerca_id} punteggio={verifica['punteggio'] if verifica else 'RECORD MANCANTE'} ===", flush=True)
+
     except Exception as e_save:
+        import traceback as tb
         print(f"=== ERRORE SALVATAGGIO: {e_save} ===", flush=True)
+        print(tb.format_exc(), flush=True)
         log.error("[analizza_candidato] Errore salvataggio: %s", e_save, exc_info=True)
         db.close()
         return jsonify({"errore": f"Errore salvataggio: {e_save}"}), 500
@@ -1610,6 +1630,7 @@ def _analizza_candidato_impl():
     db.close()
     _incrementa_analisi(org_id)
 
+    print(f"=== RISPOSTA OK: profilo_ricerca_id={profilo_ricerca_id} punteggio={punteggio} ===", flush=True)
     return jsonify({**risultato, "candidato_id": candidato_id, "profilo_ricerca_id": profilo_ricerca_id})
 
 
