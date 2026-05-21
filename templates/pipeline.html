@@ -439,7 +439,7 @@ function mostraReport(id) {
     ].filter(Boolean).join('\n');
 
     var candidatoInfo = { testo: testo, linkedin: c.profilo_linkedin || null, tipo: c.tipo_profilo || 'A', candidato_id: c.id };
-    var salvaCallback = function(nuoviDati) { _salvaPipelineArricchito(c.id, nuoviDati); };
+    var salvaCallback = function(nuoviDati) { _salvaPipelineAnalisi(c.id, nuoviDati); };
 
     _mostraReportNelModal(dati, candidatoInfo, salvaCallback);
 }
@@ -503,9 +503,9 @@ function analizzaCandidatoPipeline(id) {
                             document.getElementById('modal-report-status').innerHTML = '&#11088; Arricchimento con dati LinkedIn in corso...';
                         } else if (ev.type === 'done') {
                             var candidatoInfo = { testo: testo, linkedin: c.profilo_linkedin || null, tipo: c.tipo_profilo || 'A', candidato_id: c.id };
-                            var salvaCallback = function(nuoviDati) { _salvaPipelineArricchito(c.id, nuoviDati); };
+                            var salvaCallback = function(nuoviDati) { _salvaPipelineAnalisi(c.id, nuoviDati); };
                             _mostraReportNelModal(ev.risultato, candidatoInfo, salvaCallback);
-                            _salvaPipelineArricchito(c.id, ev.risultato);
+                            _salvaPipelineAnalisi(c.id, ev.risultato);
                         } else if (ev.type === 'errore') {
                             document.getElementById('modal-report-spinner').style.display = 'none';
                             document.getElementById('modal-report-status').textContent = 'Errore: ' + (ev.messaggio || 'sconosciuto');
@@ -523,22 +523,24 @@ function analizzaCandidatoPipeline(id) {
     });
 }
 
-function _salvaPipelineArricchito(candidatoId, dati) {
-    if (!dati.arricchito) return;
-    var datiArricchiti = JSON.stringify({
-        punteggio_compatibilita:   dati.punteggio_compatibilita,
-        indice_mobilita:           dati.indice_mobilita,
-        punteggio_qualita_profilo: dati.punteggio_qualita_profilo,
-        pattern_carriera:          dati.pattern_carriera,
-        momento_contatto:          dati.momento_contatto,
-        motivazione_probabile:     dati.motivazione_probabile,
-        segnali_positivi:          dati.segnali_positivi,
-        segnali_negativi:          dati.segnali_negativi,
-        rischi:                    dati.rischi,
-        analisi_attivita:          dati.analisi_attivita,
-        messaggio_personalizzato:  dati.messaggio_personalizzato,
-        sintesi:                   dati.sintesi,
-    });
+function _salvaPipelineAnalisi(candidatoId, dati) {
+    var datiArricchiti = null;
+    if (dati.arricchito) {
+        datiArricchiti = JSON.stringify({
+            punteggio_compatibilita:   dati.punteggio_compatibilita,
+            indice_mobilita:           dati.indice_mobilita,
+            punteggio_qualita_profilo: dati.punteggio_qualita_profilo,
+            pattern_carriera:          dati.pattern_carriera,
+            momento_contatto:          dati.momento_contatto,
+            motivazione_probabile:     dati.motivazione_probabile,
+            segnali_positivi:          dati.segnali_positivi,
+            segnali_negativi:          dati.segnali_negativi,
+            rischi:                    dati.rischi,
+            analisi_attivita:          dati.analisi_attivita,
+            messaggio_personalizzato:  dati.messaggio_personalizzato,
+            sintesi:                   dati.sintesi,
+        });
+    }
     fetch('/ricerca/analizza_candidato', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
@@ -549,14 +551,20 @@ function _salvaPipelineArricchito(candidatoId, dati) {
         })
     })
     .then(function(r) { return r.json(); })
-    .then(function() {
-        // Aggiorna dati_arricchiti in-memory
-        var idx = candidatiData.findIndex(function(x) { return x.id === candidatoId; });
-        if (idx >= 0) candidatiData[idx].dati_arricchiti = datiArricchiti;
+    .then(function(resp) {
+        if (datiArricchiti) {
+            var idx = candidatiData.findIndex(function(x) { return x.id === candidatoId; });
+            if (idx >= 0) candidatiData[idx].dati_arricchiti = datiArricchiti;
+        }
+        // Aggiorna punteggio in-memory
+        if (resp && resp.candidato_id) {
+            var idx2 = candidatiData.findIndex(function(x) { return x.id === candidatoId; });
+            if (idx2 >= 0 && dati.punteggio) candidatiData[idx2].punteggio = dati.punteggio;
+        }
         var savedEl = document.getElementById('modal-report-saved');
         if (savedEl) savedEl.classList.remove('hidden');
     })
-    .catch(function(err) { console.error('[salva pipeline arricchito]', err); });
+    .catch(function(err) { console.error('[salva pipeline analisi]', err); });
 }
 
 var followupCandidatoId = null;
