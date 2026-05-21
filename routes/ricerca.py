@@ -1407,13 +1407,16 @@ def _analizza_candidato_impl():
     print(f"=== STEP 1 org_id={org_id} ===", flush=True)
 
     # Feature gating — limite analisi AI mensili
-    _db_gate = get_db()
-    _limite = _check_limite_analisi(_db_gate, org_id)
-    _db_gate.close()
-    if _limite is not None:
-        print(f"=== GATING BLOCCATO: limite raggiunto ===", flush=True)
-        return _limite
-    print(f"=== STEP 2 gating OK ===", flush=True)
+    # Se risultato_precomputed è presente, il salvataggio NON è una nuova analisi:
+    # l'analisi AI è già stata fatta via SSE, qui stiamo solo persistendo il risultato.
+    if not risultato_precomputed:
+        _db_gate = get_db()
+        _limite = _check_limite_analisi(_db_gate, org_id)
+        _db_gate.close()
+        if _limite is not None:
+            print(f"=== GATING BLOCCATO: limite raggiunto ===", flush=True)
+            return _limite
+    print(f"=== STEP 2 gating OK (precomputed={bool(risultato_precomputed)}) ===", flush=True)
 
     db = get_db()
     print(f"=== STEP 3 db OK ===", flush=True)
