@@ -438,7 +438,9 @@ function mostraReport(id) {
         c.note ? 'Note: ' + c.note : '',
     ].filter(Boolean).join('\n');
 
-    var candidatoInfo = { testo: testo, linkedin: c.profilo_linkedin || null, tipo: c.tipo_profilo || 'A', candidato_id: c.id };
+    var _ptId = c.profilo_target_id || null;
+    var _tipo = _ptId ? ('pt_' + _ptId) : (c.tipo_profilo || 'A');
+    var candidatoInfo = { testo: testo, linkedin: c.profilo_linkedin || null, tipo: _tipo, candidato_id: c.id };
     var salvaCallback = function(nuoviDati) { _salvaPipelineAnalisi(c.id, nuoviDati); };
 
     _mostraReportNelModal(dati, candidatoInfo, salvaCallback);
@@ -469,14 +471,18 @@ function analizzaCandidatoPipeline(id) {
         c.testo_profilo ? 'Profilo:\n' + c.testo_profilo : '',
     ].filter(Boolean).join('\n');
 
+    var ptId = c.profilo_target_id || null;
+    var tipoProfilo = ptId ? ('pt_' + ptId) : (c.tipo_profilo || 'A');
+
     fetch('/valutazione/analizza_stream', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({
-            testo_profilo: testo,
-            tipo_profilo:  c.tipo_profilo || 'A',
-            candidato_id:  c.id,
-            linkedin_url:  c.profilo_linkedin || null,
+            testo_profilo:     testo,
+            tipo_profilo:      tipoProfilo,
+            profilo_target_id: ptId,
+            candidato_id:      c.id,
+            linkedin_url:      c.profilo_linkedin || null,
         })
     })
     .then(function(response) {
@@ -502,7 +508,7 @@ function analizzaCandidatoPipeline(id) {
                         } else if (ev.type === 'arricchimento_start') {
                             document.getElementById('modal-report-status').innerHTML = '&#11088; Arricchimento con dati LinkedIn in corso...';
                         } else if (ev.type === 'done') {
-                            var candidatoInfo = { testo: testo, linkedin: c.profilo_linkedin || null, tipo: c.tipo_profilo || 'A', candidato_id: c.id };
+                            var candidatoInfo = { testo: testo, linkedin: c.profilo_linkedin || null, tipo: tipoProfilo, candidato_id: c.id };
                             var salvaCallback = function(nuoviDati) { _salvaPipelineAnalisi(c.id, nuoviDati); };
                             _mostraReportNelModal(ev.risultato, candidatoInfo, salvaCallback);
                             _salvaPipelineAnalisi(c.id, ev.risultato);

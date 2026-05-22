@@ -1252,11 +1252,15 @@ def profilo_singolo(profilo_id):
             "SELECT tipo_profilo FROM ricerche_automatiche WHERE id = ?",
             (p["ricerca_id"],)
         ).fetchone()
-        if ra and ra["tipo_profilo"] and str(ra["tipo_profilo"]).startswith("pt_"):
-            try:
-                pt_id = int(ra["tipo_profilo"][3:])
-            except (ValueError, TypeError):
-                pass
+        if ra and ra["tipo_profilo"]:
+            tp = str(ra["tipo_profilo"])
+            if tp.startswith("pt_"):
+                try:
+                    pt_id = int(tp[3:])
+                except (ValueError, TypeError):
+                    pass
+            elif tp.isdigit():
+                pt_id = int(tp)
     result["profilo_target_id"] = pt_id
 
     db.close()
@@ -1341,17 +1345,23 @@ def aggiungi_pipeline():
 
     # Determina profilo_target_id dalla ricerca collegata
     profilo_target_id = None
+    ric = None
     if pr["ricerca_id"]:
         ric = db.execute(
             "SELECT tipo_profilo FROM ricerche_automatiche WHERE id = ?", (pr["ricerca_id"],)
         ).fetchone()
-        if ric and ric["tipo_profilo"] and ric["tipo_profilo"].startswith("pt_"):
-            try:
-                profilo_target_id = int(ric["tipo_profilo"][3:])
-            except (ValueError, TypeError):
-                pass
+        if ric and ric["tipo_profilo"]:
+            tp = str(ric["tipo_profilo"])
+            if tp.startswith("pt_"):
+                try:
+                    profilo_target_id = int(tp[3:])
+                except (ValueError, TypeError):
+                    pass
+            elif tp.isdigit():
+                # Vecchio formato: solo il numero (da ricerca manuale)
+                profilo_target_id = int(tp)
 
-    tipo_profilo = ric["tipo_profilo"] if (pr["ricerca_id"] and ric) else "A"
+    tipo_profilo = f"pt_{profilo_target_id}" if profilo_target_id else ((ric["tipo_profilo"] if (pr["ricerca_id"] and ric) else "A") or "A")
     ha_analisi = bool(pr.get("punteggio"))
     stato = "Da contattare" if ha_analisi else "Da valutare"
     cur = db.execute(
@@ -1413,6 +1423,9 @@ def analizza_candidato():
             db.close()
             return jsonify({"errore": "Candidato non trovato"}), 404
         tipo_profilo  = c["tipo_profilo"]
+        # Se il candidato ha profilo_target_id, assicura formato pt_N
+        if c.get("profilo_target_id") and not (tipo_profilo or "").startswith("pt_"):
+            tipo_profilo = f"pt_{c['profilo_target_id']}"
         ricerca_id    = c["ricerca_id"]
         pr = db.execute(
             "SELECT testo_profilo FROM profili_ricerca WHERE candidato_id = ? LIMIT 1",
@@ -1651,12 +1664,18 @@ def dettaglio_ricerca(ricerca_id):
     if tp.startswith('pt_'):
         try:
             profilo_target_id = int(tp[3:])
+        except (ValueError, TypeError):
+            pass
+    elif tp.isdigit():
+        profilo_target_id = int(tp)
+    if profilo_target_id:
+        try:
             db2 = get_db()
             _pt = db2.execute("SELECT scopo FROM profili_target WHERE id = ?", (profilo_target_id,)).fetchone()
             db2.close()
             if _pt:
                 profilo_scopo = _pt['scopo']
-        except (ValueError, TypeError):
+        except Exception:
             pass
 
     return render_template("ricerca_dettaglio.html",
@@ -1738,6 +1757,9 @@ def importa():
             profilo_target_id = int(tipo_profilo[3:])
         except (ValueError, TypeError):
             pass
+    elif tipo_profilo and tipo_profilo.isdigit():
+        profilo_target_id = int(tipo_profilo)
+        tipo_profilo = f"pt_{profilo_target_id}"
 
     _gestore = "Admin" if tipo_profilo == "A" else ("Recruiter" if tipo_profilo == "B" else "Non assegnato")
     org_id = get_org_id()

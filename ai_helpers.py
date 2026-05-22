@@ -345,6 +345,8 @@ def analizza_profilo_linkedin(testo_profilo: str, tipo_profilo: str, impostazion
     scopo = (impostazioni or {}).get('scopo', 'recruiting')
     scopo_dettaglio = (impostazioni or {}).get('scopo_dettaglio', '')
 
+    print(f"=== BUILD PROMPT: scopo={scopo} profilo_target_id={impostazioni.get('id') if impostazioni else 'NONE'} tipo_profilo={tipo_profilo} ===", flush=True)
+
     prompt = _build_prompt_completo(scopo, scopo_dettaglio, impostazioni, testo_profilo)
 
     payload = {
@@ -454,6 +456,8 @@ def analizza_profilo_linkedin_stream(
 
     scopo_s = (impostazioni or {}).get('scopo', 'recruiting')
     scopo_dettaglio_s = (impostazioni or {}).get('scopo_dettaglio', '')
+
+    print(f"=== BUILD PROMPT STREAM: scopo={scopo_s} profilo_target_id={impostazioni.get('id') if impostazioni else 'NONE'} tipo_profilo={tipo_profilo} ===", flush=True)
 
     # Usa lo stesso prompt builder della versione non-streaming
     prompt = _build_prompt_completo(scopo_s, scopo_dettaglio_s, impostazioni, testo_profilo)

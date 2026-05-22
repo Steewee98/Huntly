@@ -156,6 +156,7 @@ def analizza_stream():
 
     # Carica impostazioni dal profilo target (include scopo)
     impostazioni_stream = None
+    print(f"=== ANALIZZA_STREAM: tipo_profilo={tipo_profilo} profilo_target_id={profilo_target_id} candidato_id={candidato_id} ===", flush=True)
     if profilo_target_id:
         try:
             _db = get_db()
@@ -163,8 +164,13 @@ def analizza_stream():
             _db.close()
             if _pt:
                 impostazioni_stream = dict(_pt)
-        except Exception:
-            pass
+                print(f"=== PROFILO TARGET CARICATO: scopo={_pt.get('scopo')} nome={_pt.get('nome')} ===", flush=True)
+            else:
+                print(f"=== PROFILO TARGET NON TROVATO per id={profilo_target_id} ===", flush=True)
+        except Exception as e:
+            print(f"=== ERRORE CARICAMENTO PROFILO TARGET: {e} ===", flush=True)
+    else:
+        print("=== NESSUN profilo_target_id RICEVUTO — impostazioni=None ===", flush=True)
 
     if not testo_profilo:
         def _err():
