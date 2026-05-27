@@ -90,9 +90,9 @@
           <th>Ruolo / Azienda</th>
           <th>Profilo</th>
           <th>Punteggio</th>
+          <th>Stato</th>
           <th>Gestore</th>
           <th>Inserito</th>
-          <th></th>
         </tr>
       </thead>
       <tbody id="stato-tbody"></tbody>
@@ -428,24 +428,42 @@ function apriStato(card) {
         const ruolo   = c.ruolo_attuale || "\u2014";
         const azienda = c.azienda || "";
         const profilo = c.tipo_profilo || "\u2014";
-        const punt    = c.punteggio != null
-          ? "<b>" + c.punteggio + "</b>/100"
-          : "<span style='color:var(--grigio-testo)'>\u2014</span>";
         const gestore = c.gestore || "\u2014";
         const data_ins = (c.data_inserimento || "").slice(0, 10);
         const pBadge  = "<span class='badge badge-profilo" + profilo + "'>" + profilo + "</span>";
         const gShort  = gestore === "Admin" ? "Admin"
                       : gestore === "Recruiter" ? "Recruiter" : gestore;
+
+        // Punteggio con badge colorato
+        var puntBadge = "<span style='color:var(--grigio-testo)'>\u2014</span>";
+        if (c.punteggio != null) {
+          var pColor = c.punteggio >= 7 ? '#22C55E' : (c.punteggio >= 5 ? '#F59E0B' : '#EF4444');
+          puntBadge = "<span class='punt-badge' style='background:" + pColor + "15;color:" + pColor + ";border:1px solid " + pColor + "30'>" + c.punteggio + "/10</span>";
+        }
+
+        // Dropdown stato
+        var statiOpt = ['Da valutare','Da contattare','Richiesta Inviata','Messaggio Inviato','Risposto','In valutazione','Chiuso'];
+        var statoSel = "<select class='stato-select' data-candidato-id='" + c.id + "' onchange='cambiaStatoDash(this)'>";
+        statiOpt.forEach(function(s) {
+          statoSel += "<option value='" + s + "'" + (c.stato === s ? " selected" : "") + ">" + s + "</option>";
+        });
+        statoSel += "</select>";
+
         return "<tr>"
           + "<td><div class='candidato-nome'>" + nome + "</div></td>"
           + "<td><div>" + ruolo + "</div><div class='candidato-meta'>" + azienda + "</div></td>"
           + "<td>" + pBadge + "</td>"
-          + "<td>" + punt + "</td>"
+          + "<td>" + puntBadge + "</td>"
+          + "<td>" + statoSel + "</td>"
           + "<td>" + gShort + "</td>"
           + "<td class='candidato-meta'>" + data_ins + "</td>"
-          + "<td><a href='/pipeline' class='btn btn-sm btn-outline'>Pipeline &rarr;</a></td>"
           + "</tr>";
       }).join("");
+
+      // Colora i dropdown appena renderizzati
+      tbody.querySelectorAll('.stato-select').forEach(function(sel) {
+        _coloraStatoSelect(sel, sel.value);
+      });
 
       document.getElementById("stato-table").classList.remove("hidden");
     })
@@ -461,6 +479,39 @@ function chiudiPanel() {
   document.querySelectorAll(".dash-card--clickable").forEach(function(c) {
     c.classList.remove("dash-card--active");
   });
+}
+
+// ════════════════════════════════════════════════════════
+// CAMBIO STATO INLINE
+// ════════════════════════════════════════════════════════
+function _coloraStatoSelect(sel, stato) {
+  var col = STATO_COLORS[stato] || '#6B7A99';
+  sel.style.borderColor = col;
+  sel.style.color = col;
+}
+
+function cambiaStatoDash(sel) {
+  var candidatoId = sel.dataset.candidatoId;
+  var nuovoStato = sel.value;
+  sel.disabled = true;
+
+  fetch('/pipeline/aggiorna_stato', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ id: parseInt(candidatoId), stato: nuovoStato })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(resp) {
+    if (resp.successo) {
+      _coloraStatoSelect(sel, nuovoStato);
+      // Aggiorna contatori dopo breve delay
+      setTimeout(refresh, 300);
+    } else {
+      alert('Errore: ' + (resp.errore || 'sconosciuto'));
+    }
+  })
+  .catch(function() { alert('Errore di connessione'); })
+  .finally(function() { sel.disabled = false; });
 }
 </script>
 
@@ -649,6 +700,25 @@ function chiudiPanel() {
 .stato-table { margin: 0; }
 .stato-empty { padding: 1.5rem; text-align: center; color: var(--grigio-testo); }
 .hidden { display: none !important; }
+
+/* ── Dropdown stato inline ──────────────────────────────── */
+.stato-select {
+  border: 1.5px solid #e5e7eb; border-radius: 6px;
+  padding: 4px 8px; font-size: .78rem; font-weight: 600;
+  cursor: pointer; background: #fff;
+  transition: border-color .2s, color .2s;
+  outline: none; min-width: 130px;
+}
+.stato-select:hover { border-color: #94a3b8; }
+.stato-select:focus { box-shadow: 0 0 0 2px rgba(59,130,246,.15); }
+.stato-select:disabled { opacity: .5; cursor: wait; }
+
+/* ── Badge punteggio ────────────────────────────────────── */
+.punt-badge {
+  display: inline-block; padding: .2em .6em;
+  border-radius: 6px; font-size: .78rem; font-weight: 700;
+  white-space: nowrap;
+}
 </style>
 
 {% endblock %}
