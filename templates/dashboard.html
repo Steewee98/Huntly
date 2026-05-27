@@ -93,6 +93,7 @@
           <th>Stato</th>
           <th>Gestore</th>
           <th>Inserito</th>
+          <th></th>
         </tr>
       </thead>
       <tbody id="stato-tbody"></tbody>
@@ -374,6 +375,7 @@ setInterval(refresh, 60_000);
 // PANNELLO CANDIDATI PER STATO
 // ════════════════════════════════════════════════════════
 let _statoAttivo = null;
+let _dashCandidati = {};  // cache candidati per id
 
 function apriStato(card) {
   const stato = card.dataset.stato;
@@ -422,6 +424,9 @@ function apriStato(card) {
         return;
       }
 
+      // Salva candidati in cache per il report
+      data.candidati.forEach(function(c) { _dashCandidati[c.id] = c; });
+
       const tbody = document.getElementById("stato-tbody");
       tbody.innerHTML = data.candidati.map(function(c) {
         const nome    = [c.nome, c.cognome].filter(Boolean).join(" ") || "\u2014";
@@ -449,6 +454,11 @@ function apriStato(card) {
         });
         statoSel += "</select>";
 
+        // Bottone Report (solo se ha analisi)
+        var reportBtn = c.analisi
+          ? "<button onclick='apriReportDash(" + c.id + ")' class='btn btn-sm btn-outline' style='font-size:.75rem;padding:4px 10px'>Report</button>"
+          : "";
+
         return "<tr>"
           + "<td><div class='candidato-nome'>" + nome + "</div></td>"
           + "<td><div>" + ruolo + "</div><div class='candidato-meta'>" + azienda + "</div></td>"
@@ -457,6 +467,7 @@ function apriStato(card) {
           + "<td>" + statoSel + "</td>"
           + "<td>" + gShort + "</td>"
           + "<td class='candidato-meta'>" + data_ins + "</td>"
+          + "<td>" + reportBtn + "</td>"
           + "</tr>";
       }).join("");
 
@@ -488,6 +499,33 @@ function _coloraStatoSelect(sel, stato) {
   var col = STATO_COLORS[stato] || '#6B7A99';
   sel.style.borderColor = col;
   sel.style.color = col;
+}
+
+function apriReportDash(candidatoId) {
+  var c = _dashCandidati[candidatoId];
+  if (!c) return;
+
+  document.getElementById('modal-report-titolo').textContent = 'Report: ' + (c.nome || '') + ' ' + (c.cognome || '');
+  var streamEl = document.getElementById('modal-report-streaming');
+  var savedEl  = document.getElementById('modal-report-saved');
+  if (streamEl) streamEl.classList.add('hidden');
+  if (savedEl)  savedEl.classList.add('hidden');
+
+  var arricchiti = c.dati_arricchiti || null;
+  if (typeof arricchiti === 'string') { try { arricchiti = JSON.parse(arricchiti); } catch(e) { arricchiti = null; } }
+
+  var spunti = c.spunti || [];
+  if (typeof spunti === 'string') { try { spunti = JSON.parse(spunti); } catch(e) { spunti = []; } }
+
+  var dati = {
+    punteggio:          c.punteggio         || 0,
+    analisi_percorso:   c.analisi            || '',
+    spunti_contatto:    spunti,
+    messaggio_outreach: c.messaggio_outreach || '',
+  };
+  if (arricchiti) { Object.assign(dati, arricchiti); dati.arricchito = true; }
+
+  _mostraReportNelModal(dati, null, null);
 }
 
 function cambiaStatoDash(sel) {

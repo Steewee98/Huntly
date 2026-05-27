@@ -132,7 +132,9 @@ def candidati_per_stato(stato):
     db = get_db()
     rows = db.execute(
         """SELECT id, nome, cognome, ruolo_attuale, azienda,
-                  tipo_profilo, punteggio, gestore, data_inserimento
+                  tipo_profilo, punteggio, gestore, data_inserimento,
+                  stato, analisi, spunti, messaggio_outreach,
+                  profilo_target_id, dati_arricchiti, profilo_linkedin
            FROM candidati
            WHERE stato = ? AND organizzazione_id = ?
            ORDER BY punteggio DESC NULLS LAST, data_inserimento DESC""",
