@@ -141,9 +141,9 @@ def handle_exception(e):
     Evita il SyntaxError di Safari quando il browser si aspetta JSON ma riceve HTML.
     """
     from werkzeug.exceptions import HTTPException
-    # Errori HTTP normali (404, 405, ecc.) — lascia gestire a Flask senza loggare
+    # Errori HTTP normali (404, 405, ecc.) — ritorna la response standard
     if isinstance(e, HTTPException):
-        return e
+        return e.get_response()
     import traceback, logging
     logging.getLogger(__name__).error("Unhandled exception: %s", traceback.format_exc())
     from flask import request as flask_request
@@ -160,8 +160,8 @@ def handle_exception(e):
     )
     if is_ajax:
         return jsonify({"errore": str(e), "tipo": type(e).__name__}), 500
-    # Per pagine HTML rilancia l'eccezione normale di Flask
-    raise e
+    # Per pagine HTML: mostra pagina errore 500 generica
+    return "Internal Server Error", 500
 
 
 @app.route("/test/proxycurl")
