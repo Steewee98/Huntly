@@ -137,21 +137,19 @@ def admin_init_db():
 @app.errorhandler(Exception)
 def handle_exception(e):
     """
-    Restituisce sempre JSON invece di HTML in caso di errore non gestito.
-    Evita il SyntaxError di Safari quando il browser si aspetta JSON ma riceve HTML.
+    Gestisce eccezioni non catturate.
+    - HTTPException (404, 405): risposta standard senza log
+    - Eccezioni reali: logga traceback, rispondi JSON o HTML
     """
     from werkzeug.exceptions import HTTPException
-    # Errori HTTP normali (404, 405, ecc.) — ritorna la response standard
     if isinstance(e, HTTPException):
         return e.get_response()
-    import traceback, logging
-    logging.getLogger(__name__).error("Unhandled exception: %s", traceback.format_exc())
+
+    import traceback as tb
+    print(f"=== UNHANDLED EXCEPTION: {type(e).__name__}: {e} ===", flush=True)
+    print(tb.format_exc(), flush=True)
+
     from flask import request as flask_request
-    # Restituisce JSON per tutte le chiamate AJAX/fetch:
-    # - Content-Type: application/json (POST con corpo JSON)
-    # - X-Requested-With: XMLHttpRequest (jQuery legacy)
-    # - Accept: application/json
-    # - Metodi non-GET senza HTML nel Accept (DELETE, PUT, PATCH)
     is_ajax = (
         flask_request.is_json
         or flask_request.headers.get("X-Requested-With") == "XMLHttpRequest"
@@ -160,8 +158,7 @@ def handle_exception(e):
     )
     if is_ajax:
         return jsonify({"errore": str(e), "tipo": type(e).__name__}), 500
-    # Per pagine HTML: mostra pagina errore 500 generica
-    return "Internal Server Error", 500
+    return f"<h1>500 Internal Server Error</h1><pre>{tb.format_exc()}</pre>", 500
 
 
 @app.route("/test/proxycurl")
