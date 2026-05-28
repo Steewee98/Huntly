@@ -140,6 +140,10 @@ def handle_exception(e):
     Restituisce sempre JSON invece di HTML in caso di errore non gestito.
     Evita il SyntaxError di Safari quando il browser si aspetta JSON ma riceve HTML.
     """
+    from werkzeug.exceptions import HTTPException
+    # Errori HTTP normali (404, 405, ecc.) — lascia gestire a Flask senza loggare
+    if isinstance(e, HTTPException):
+        return e
     import traceback, logging
     logging.getLogger(__name__).error("Unhandled exception: %s", traceback.format_exc())
     from flask import request as flask_request
