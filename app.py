@@ -137,19 +137,17 @@ def admin_init_db():
 @app.errorhandler(Exception)
 def handle_exception(e):
     """
-    Gestisce eccezioni non catturate.
-    - HTTPException (404, 405): risposta standard senza log
-    - Eccezioni reali: logga traceback, rispondi JSON o HTML
+    Restituisce sempre JSON invece di HTML in caso di errore non gestito.
+    Evita il SyntaxError di Safari quando il browser si aspetta JSON ma riceve HTML.
     """
-    from werkzeug.exceptions import HTTPException
-    if isinstance(e, HTTPException):
-        return e.get_response()
-
-    import traceback as tb
-    print(f"=== UNHANDLED EXCEPTION: {type(e).__name__}: {e} ===", flush=True)
-    print(tb.format_exc(), flush=True)
-
+    import traceback, logging
+    logging.getLogger(__name__).error("Unhandled exception: %s", traceback.format_exc())
     from flask import request as flask_request
+    # Restituisce JSON per tutte le chiamate AJAX/fetch:
+    # - Content-Type: application/json (POST con corpo JSON)
+    # - X-Requested-With: XMLHttpRequest (jQuery legacy)
+    # - Accept: application/json
+    # - Metodi non-GET senza HTML nel Accept (DELETE, PUT, PATCH)
     is_ajax = (
         flask_request.is_json
         or flask_request.headers.get("X-Requested-With") == "XMLHttpRequest"
@@ -158,13 +156,8 @@ def handle_exception(e):
     )
     if is_ajax:
         return jsonify({"errore": str(e), "tipo": type(e).__name__}), 500
-    return (
-        f'<div style="margin:2rem auto;max-width:900px;font-family:monospace;'
-        f'background:#fef2f2;border:2px solid #ef4444;border-radius:12px;padding:2rem;">'
-        f'<h1 style="color:#dc2626;margin:0 0 1rem">&#9888; 500 — Errore Server</h1>'
-        f'<pre style="background:#1e1e1e;color:#f8f8f2;padding:1.2rem;border-radius:8px;'
-        f'overflow-x:auto;font-size:.85rem;line-height:1.5">{tb.format_exc()}</pre></div>'
-    ), 500
+    # Per pagine HTML rilancia l'eccezione normale di Flask
+    raise e
 
 
 @app.route("/test/proxycurl")
