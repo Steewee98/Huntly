@@ -158,7 +158,13 @@ def handle_exception(e):
     )
     if is_ajax:
         return jsonify({"errore": str(e), "tipo": type(e).__name__}), 500
-    return f"<h1>500 Internal Server Error</h1><pre>{tb.format_exc()}</pre>", 500
+    return (
+        f'<div style="margin:2rem auto;max-width:900px;font-family:monospace;'
+        f'background:#fef2f2;border:2px solid #ef4444;border-radius:12px;padding:2rem;">'
+        f'<h1 style="color:#dc2626;margin:0 0 1rem">&#9888; 500 — Errore Server</h1>'
+        f'<pre style="background:#1e1e1e;color:#f8f8f2;padding:1.2rem;border-radius:8px;'
+        f'overflow-x:auto;font-size:.85rem;line-height:1.5">{tb.format_exc()}</pre></div>'
+    ), 500
 
 
 @app.route("/test/proxycurl")
