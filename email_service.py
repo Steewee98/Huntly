@@ -54,8 +54,7 @@ def send_welcome_email(to: str, nome: str):
 
   <!-- Header -->
   <div style="background:#4F6EF7;padding:32px 40px;text-align:center;">
-    <div style="display:inline-block;width:44px;height:44px;background:rgba(255,255,255,.2);border-radius:10px;line-height:44px;color:#fff;font-weight:800;font-size:1.3rem;">H</div>
-    <div style="color:#fff;font-size:1.3rem;font-weight:700;margin-top:8px;">Huntly</div>
+    <img src="https://huntlyrecruiting.io/static/img/huntly-logo.png" alt="Huntly" width="160" style="display:inline-block;max-width:160px;height:auto;border-radius:8px;">
   </div>
 
   <!-- Body -->
