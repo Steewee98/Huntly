@@ -103,146 +103,45 @@
 </div>
 
 <!-- ════════════════════════════════════════════════════════
-     SEZIONE CENTRALE — DUE COLONNE
+     SEZIONE GRAFICI
 ════════════════════════════════════════════════════════ -->
-<div class="dash-grid">
+<div class="dash-charts-row">
 
-  <!-- ── COLONNA SINISTRA — Grafici ─────────────────────── -->
-  <div class="dash-col dash-col--left">
-
-    <!-- Distribuzione stati -->
-    <div class="card dash-chart-card">
-      <div class="card-header">
-        <span>Distribuzione per stato</span>
-      </div>
-      <div class="dash-chart-wrap">
-        <canvas id="chartStati" height="220"></canvas>
-      </div>
+  <!-- Distribuzione stati -->
+  <div class="card dash-chart-card">
+    <div class="card-header">
+      <span>Distribuzione per stato</span>
     </div>
-
-    <!-- Distribuzione profilo A vs B -->
-    <div class="card dash-chart-card">
-      <div class="card-header">
-        <span>Profilo A vs B</span>
-      </div>
-      <div class="dash-chart-wrap">
-        <canvas id="chartProfilo" height="120"></canvas>
-      </div>
-      <div class="dash-profilo-legend">
-        <span><b>A</b> {{ stats.per_profilo.get('A', 0) }} candidati</span>
-        <span><b>B</b> {{ stats.per_profilo.get('B', 0) }} candidati</span>
-      </div>
+    <div class="dash-chart-wrap">
+      <canvas id="chartStati" height="220"></canvas>
     </div>
-
-    <!-- Distribuzione per gestore -->
-    <div class="card dash-chart-card">
-      <div class="card-header">
-        <span>Per gestore</span>
-      </div>
-      <div class="dash-chart-wrap">
-        <canvas id="chartGestore" height="120"></canvas>
-      </div>
-    </div>
-
   </div>
 
-  <!-- ── COLONNA DESTRA — Liste ──────────────────────────── -->
-  <div class="dash-col dash-col--right">
-
-    <!-- Ultimi 5 candidati -->
-    <div class="card">
-      <div class="card-header">
-        <span>Ultimi candidati aggiunti</span>
-        <a href="{{ url_for('pipeline.index') }}" class="btn btn-sm">Vedi tutti</a>
-      </div>
-      <div id="lista-candidati">
-        {% if stats.ultimi_candidati %}
-        <ul class="dash-list">
-          {% for c in stats.ultimi_candidati %}
-          <li class="dash-list__item">
-            <div class="dash-list__main">
-              <span class="dash-list__name">{{ c.nome }} {{ c.cognome }}</span>
-              <span class="badge badge-profilo{{ c.tipo_profilo }}">{{ c.tipo_profilo }}</span>
-            </div>
-            <div class="dash-list__meta">
-              {{ c.ruolo_attuale or '—' }}
-              &mdash;
-              <span class="badge-stato-inline" style="color: var(--stato-color, #6B7A99)">{{ c.stato }}</span>
-              {% if c.punteggio %}
-              &mdash; <b>{{ c.punteggio }}/100</b>
-              {% endif %}
-            </div>
-            <div class="dash-list__date">{{ (c.data_inserimento or '')[:10] }}</div>
-          </li>
-          {% endfor %}
-        </ul>
-        {% else %}
-        <p class="dash-empty">Nessun candidato ancora inserito.</p>
-        {% endif %}
-      </div>
+  <!-- Distribuzione profilo A vs B -->
+  <div class="card dash-chart-card">
+    <div class="card-header">
+      <span>Profilo A vs B</span>
     </div>
-
-    <!-- Prossimi appuntamenti -->
-    <div class="card">
-      <div class="card-header">
-        <span>Prossimi appuntamenti</span>
-        <a href="{{ url_for('calendario.index') }}" class="btn btn-sm">Calendario</a>
-      </div>
-      <div id="lista-appuntamenti">
-        {% if stats.prossimi_appuntamenti %}
-        <ul class="dash-list">
-          {% for a in stats.prossimi_appuntamenti %}
-          <li class="dash-list__item">
-            <div class="dash-list__main">
-              <span class="dash-list__name">{{ a.candidato_nome }}</span>
-              <span class="badge badge-tipo-app">{{ a.tipo }}</span>
-            </div>
-            <div class="dash-list__meta">
-              {{ a.gestore }} &mdash; {{ (a.data_ora or '')[:16] | replace('T', ' ') }}
-            </div>
-          </li>
-          {% endfor %}
-        </ul>
-        {% else %}
-        <p class="dash-empty">Nessun appuntamento in programma.</p>
-        {% endif %}
-      </div>
+    <div class="dash-chart-wrap">
+      <canvas id="chartProfilo" height="120"></canvas>
     </div>
-
-    <!-- Ultime ricerche -->
-    <div class="card">
-      <div class="card-header">
-        <span>Ultime ricerche lanciate</span>
-        <a href="{{ url_for('ricerca.index') }}" class="btn btn-sm">Ricerca</a>
-      </div>
-      <div id="lista-ricerche">
-        {% if stats.ultime_ricerche %}
-        <ul class="dash-list">
-          {% for r in stats.ultime_ricerche %}
-          <li class="dash-list__item">
-            <div class="dash-list__main">
-              <span class="dash-list__name">
-                {{ r.parametri.get('ruolo') or r.parametri.get('keywords') or 'Ricerca automatica' }}
-              </span>
-              <span class="badge badge-profilo{{ r.tipo_profilo }}">{{ r.tipo_profilo }}</span>
-            </div>
-            <div class="dash-list__meta">
-              Trovati: <b>{{ r.profili_trovati or 0 }}</b> &mdash;
-              Importati: <b>{{ r.profili_importati or 0 }}</b> &mdash;
-              {{ r.stato }}
-            </div>
-            <div class="dash-list__date">{{ (r.data_ricerca or '')[:10] }}</div>
-          </li>
-          {% endfor %}
-        </ul>
-        {% else %}
-        <p class="dash-empty">Nessuna ricerca effettuata.</p>
-        {% endif %}
-      </div>
+    <div class="dash-profilo-legend">
+      <span><b>A</b> {{ stats.per_profilo.get('A', 0) }} candidati</span>
+      <span><b>B</b> {{ stats.per_profilo.get('B', 0) }} candidati</span>
     </div>
+  </div>
 
-  </div><!-- fine colonna destra -->
-</div><!-- fine dash-grid -->
+  <!-- Distribuzione per gestore -->
+  <div class="card dash-chart-card">
+    <div class="card-header">
+      <span>Per gestore</span>
+    </div>
+    <div class="dash-chart-wrap">
+      <canvas id="chartGestore" height="120"></canvas>
+    </div>
+  </div>
+
+</div>
 
 
 <!-- ════════════════════════════════════════════════════════
@@ -601,14 +500,12 @@ function cambiaStatoDash(sel) {
 }
 .dash-card__bar-fill { height: 3px; border-radius: 2px; transition: width .6s; }
 
-/* ── Grid ──────────────────────────────────────────────── */
-.dash-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1.25rem;
-  align-items: start;
+/* ── Charts row ────────────────────────────────────────── */
+.dash-charts-row {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
 }
-.dash-col { display: flex; flex-direction: column; gap: 1.1rem; }
 
 /* ── Chart cards ────────────────────────────────────────── */
 .dash-chart-card .card-header { border-bottom: 1px solid var(--grigio-bordo); }
@@ -619,29 +516,7 @@ function cambiaStatoDash(sel) {
 }
 .dash-profilo-legend b { color: var(--testo); }
 
-/* ── Liste ──────────────────────────────────────────────── */
-.dash-list { list-style: none; padding: 0; margin: 0; }
-.dash-list__item {
-  padding: .75rem 1.2rem;
-  border-bottom: 1px solid var(--grigio-bordo);
-}
-.dash-list__item:last-child { border-bottom: none; }
-.dash-list__main { display: flex; align-items: center; gap: .5rem; }
-.dash-list__name { font-weight: 600; font-size: .9rem; color: var(--testo); }
-.dash-list__meta { font-size: .78rem; color: var(--grigio-testo); margin-top: .2rem; }
-.dash-list__date { font-size: .72rem; color: var(--grigio-testo); margin-top: .1rem; }
-.dash-empty { padding: 1.2rem; color: var(--grigio-testo); font-size: .88rem; text-align: center; }
-
-.badge-tipo-app {
-  display: inline-block; padding: .15em .55em;
-  border-radius: 99px; font-size: .7rem; font-weight: 600;
-  background: var(--azzurro-light); color: var(--azzurro);
-}
-
 /* ── Responsive ─────────────────────────────────────────── */
-@media (max-width: 1100px) {
-  .dash-grid { grid-template-columns: 1fr; }
-}
 @media (max-width: 700px) {
   .dash-cards { grid-template-columns: repeat(2, 1fr); }
   .dash-header { flex-direction: column; }
