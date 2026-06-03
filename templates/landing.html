@@ -182,10 +182,23 @@ body.has-cursor,body.has-cursor a,body.has-cursor button{cursor:none}
   .final{padding:5rem 1.5rem}
   .foot{flex-direction:column;gap:1rem;text-align:center;padding:2rem 1.5rem}
   .cursor{display:none!important}
+
+  /* Come funziona — stack panels vertically */
+  #come-funziona{padding:3.5rem 1.5rem!important}
+  .cf-panel{grid-template-columns:1fr!important;gap:1.5rem!important}
+  .cf-panel>div:first-child{height:300px!important}
+  .cf-tab{padding:.6rem .4rem!important;font-size:.8rem}
+  .cf-tab div{font-size:.6rem!important}
+  /* Pipeline grid: 2 cols on mobile */
+  #cf3-cols{grid-template-columns:1fr 1fr!important;gap:6px!important}
+
+  /* Hero floating roles: show but subtler */
+  .hf{font-size:.6rem;padding:.3rem .7rem}
 }
 @media(max-width:480px){
   .hero-h{font-size:2.2rem}
-  .hf{display:none}
+  .cf-panel>div:first-child{height:260px!important}
+  .cf-panel>div:first-child *{font-size:90%}
 }
 @media(prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.01ms!important;animation-delay:0s!important;transition-duration:.01ms!important}
