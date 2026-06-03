@@ -8,6 +8,7 @@ import re
 from flask import Blueprint, render_template, request, redirect, url_for, session, flash
 from werkzeug.security import generate_password_hash, check_password_hash
 from database import get_db
+from email_service import send_welcome_email
 
 auth_bp = Blueprint("auth", __name__)
 
@@ -133,6 +134,9 @@ def register():
                     (org_id, email, pw_hash, nome_utente)
                 )
                 db.commit()
+
+                # Email di benvenuto (non blocca la registrazione se fallisce)
+                send_welcome_email(email, nome_utente)
 
                 # Login automatico
                 utente = db.execute(
