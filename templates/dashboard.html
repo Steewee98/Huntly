@@ -31,18 +31,15 @@
     <div class="dash-card__sub">nel database</div>
   </div>
 
+  {% set contattati_n = stats.per_stato.get("Richiesta Inviata", 0) + stats.per_stato.get("Messaggio Inviato", 0) %}
   {% set stati_cfg = [
-    ("Da valutare",      "#6B7A99", "c-da-valutare"),
-    ("Da contattare",    "#2E7CF6", "c-da-contattare"),
-    ("Richiesta Inviata","#F59E0B", "c-richiesta"),
-    ("Messaggio Inviato","#D97706", "c-messaggio"),
-    ("Risposto",         "#22C55E", "c-risposto"),
-    ("In valutazione",   "#8B5CF6", "c-in-valutazione"),
-    ("Chiuso",           "#EF4444", "c-chiuso"),
+    ("Da valutare",   "#2E7CF6", "c-da-valutare",   stats.per_stato.get("Da valutare", 0)),
+    ("Da contattare", "#F59E0B", "c-da-contattare",  stats.per_stato.get("Da contattare", 0)),
+    ("Contattati",    "#22C55E", "c-contattati",     contattati_n),
+    ("Chiuso",        "#EF4444", "c-chiuso",         stats.per_stato.get("Chiuso", 0)),
   ] %}
 
-  {% for stato, colore, css_id in stati_cfg %}
-  {% set n = stats.per_stato.get(stato, 0) %}
+  {% for stato, colore, css_id, n in stati_cfg %}
   {% set pct = ((n / stats.totale * 100) | round(1)) if stats.totale else 0 %}
   <div class="dash-card dash-card--clickable"
        style="--card-accent: {{ colore }}"
@@ -258,12 +255,11 @@ let _stats = {{ stats | tojson }};
 
 // ── Palette colori ────────────────────────────────────────────────────────────
 const STATO_COLORS = {
-  "Da valutare":      "#6B7A99",
-  "Da contattare":    "#2E7CF6",
-  "Richiesta Inviata":"#F59E0B",
-  "Messaggio Inviato":"#D97706",
-  "Risposto":         "#22C55E",
-  "In valutazione":   "#8B5CF6",
+  "Da valutare":      "#2E7CF6",
+  "Da contattare":    "#F59E0B",
+  "Contattati":       "#22C55E",
+  "Richiesta Inviata":"#16a34a",
+  "Messaggio Inviato":"#15803d",
   "Chiuso":           "#EF4444",
 };
 
@@ -271,9 +267,9 @@ const STATO_COLORS = {
 let chartStati, chartProfilo, chartGestore;
 
 function buildCharts(stats) {
-  const stati   = Object.keys(stats.per_stato);
-  const cntStati = stati.map(s => stats.per_stato[s]);
-  const colStati  = stati.map(s => STATO_COLORS[s] || "#6B7A99");
+  const statiList = ["Da valutare", "Da contattare", "Richiesta Inviata", "Messaggio Inviato", "Chiuso"];
+  const cntStati = statiList.map(s => stats.per_stato[s] || 0);
+  const colStati = statiList.map(s => STATO_COLORS[s] || "#6B7A99");
 
   const opts = {
     responsive: true, maintainAspectRatio: false,
@@ -285,7 +281,7 @@ function buildCharts(stats) {
   chartStati = new Chart(document.getElementById("chartStati"), {
     type: "doughnut",
     data: {
-      labels: stati,
+      labels: statiList,
       datasets: [{ data: cntStati, backgroundColor: colStati, borderWidth: 2, borderColor: "#fff" }]
     },
     options: { ...opts, cutout: "65%" }
@@ -333,22 +329,12 @@ function buildCharts(stats) {
 
 // ── Aggiorna cards ─────────────────────────────────────────────────────────────
 function updateCards(stats) {
-  const IDS = {
-    "totale":           "c-totale",
-    "Da valutare":      "c-da-valutare",
-    "Da contattare":    "c-da-contattare",
-    "Richiesta Inviata":"c-richiesta",
-    "Messaggio Inviato":"c-messaggio",
-    "Risposto":         "c-risposto",
-    "In valutazione":   "c-in-valutazione",
-    "Chiuso":           "c-chiuso",
-  };
   const el = id => document.getElementById(id);
   el("c-totale").textContent = stats.totale;
-  Object.entries(stats.per_stato).forEach(([stato, n]) => {
-    const id = IDS[stato];
-    if (id) el(id).textContent = n;
-  });
+  el("c-da-valutare").textContent = stats.per_stato["Da valutare"] || 0;
+  el("c-da-contattare").textContent = stats.per_stato["Da contattare"] || 0;
+  el("c-contattati").textContent = (stats.per_stato["Richiesta Inviata"] || 0) + (stats.per_stato["Messaggio Inviato"] || 0);
+  el("c-chiuso").textContent = stats.per_stato["Chiuso"] || 0;
   el("last-update").textContent = stats.aggiornato_alle;
 }
 
@@ -447,7 +433,7 @@ function apriStato(card) {
         }
 
         // Dropdown stato
-        var statiOpt = ['Da valutare','Da contattare','Richiesta Inviata','Messaggio Inviato','Risposto','In valutazione','Chiuso'];
+        var statiOpt = ['Da valutare','Da contattare','Richiesta Inviata','Messaggio Inviato','Chiuso'];
         var statoSel = "<select class='stato-select' data-candidato-id='" + c.id + "' onchange='cambiaStatoDash(this)'>";
         statiOpt.forEach(function(s) {
           statoSel += "<option value='" + s + "'" + (c.stato === s ? " selected" : "") + ">" + s + "</option>";

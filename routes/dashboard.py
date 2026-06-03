@@ -125,6 +125,26 @@ def stats():
 @dashboard_bp.route("/dashboard/candidati/<path:stato>")
 def candidati_per_stato(stato):
     """Restituisce in JSON i candidati di uno stato, ordinati per punteggio desc."""
+    if stato == "Contattati":
+        org_id = get_org_id()
+        db = get_db()
+        rows = db.execute(
+            """SELECT id, nome, cognome, ruolo_attuale, azienda,
+                      tipo_profilo, punteggio, gestore, data_inserimento,
+                      stato, analisi, spunti, messaggio_outreach,
+                      profilo_target_id, dati_arricchiti, profilo_linkedin
+               FROM candidati
+               WHERE (stato = ? OR stato = ?) AND organizzazione_id = ?
+               ORDER BY stato, punteggio DESC NULLS LAST, data_inserimento DESC""",
+            ("Richiesta Inviata", "Messaggio Inviato", org_id),
+        ).fetchall()
+        db.close()
+        return jsonify({
+            "stato": "Contattati",
+            "totale": len(rows),
+            "candidati": [dict(r) for r in rows],
+        })
+
     if stato not in STATI:
         return jsonify({"errore": "Stato non valido"}), 400
 
