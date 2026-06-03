@@ -117,27 +117,56 @@
     </div>
   </div>
 
-  <!-- Distribuzione profilo A vs B -->
-  <div class="card dash-chart-card">
+  <!-- Top candidati per punteggio -->
+  <div class="card">
     <div class="card-header">
-      <span>Profilo A vs B</span>
+      <span>Top candidati per punteggio</span>
+      <a href="{{ url_for('pipeline.index') }}" class="btn btn-sm">Pipeline</a>
     </div>
-    <div class="dash-chart-wrap">
-      <canvas id="chartProfilo" height="120"></canvas>
-    </div>
-    <div class="dash-profilo-legend">
-      <span><b>A</b> {{ stats.per_profilo.get('A', 0) }} candidati</span>
-      <span><b>B</b> {{ stats.per_profilo.get('B', 0) }} candidati</span>
-    </div>
+    {% if stats.top_candidati %}
+    <table class="data-table" style="margin:0">
+      <thead>
+        <tr><th>Candidato</th><th>Ruolo</th><th>Punteggio</th><th>Stato</th></tr>
+      </thead>
+      <tbody>
+        {% for c in stats.top_candidati %}
+        <tr>
+          <td style="font-weight:600">{{ c.nome }} {{ c.cognome }}</td>
+          <td style="font-size:.85rem;color:var(--grigio-testo)">{{ c.ruolo_attuale or '—' }}</td>
+          <td>
+            {% set pcolor = '#22C55E' if c.punteggio >= 7 else ('#F59E0B' if c.punteggio >= 5 else '#EF4444') %}
+            <span class="punt-badge" style="background:{{ pcolor }}15;color:{{ pcolor }};border:1px solid {{ pcolor }}30">{{ c.punteggio }}/10</span>
+          </td>
+          <td style="font-size:.82rem">{{ c.stato }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p style="padding:1.2rem;color:var(--grigio-testo);text-align:center;font-size:.88rem">Nessun candidato valutato.</p>
+    {% endif %}
   </div>
 
-  <!-- Distribuzione per gestore -->
-  <div class="card dash-chart-card">
-    <div class="card-header">
-      <span>Per gestore</span>
-    </div>
-    <div class="dash-chart-wrap">
-      <canvas id="chartGestore" height="120"></canvas>
+  <!-- Riepilogo rapido -->
+  <div class="card">
+    <div class="card-header"><span>Riepilogo</span></div>
+    <div class="dash-kpi-grid">
+      <div class="dash-kpi">
+        <div class="dash-kpi__value">{{ stats.punteggio_medio if stats.punteggio_medio is not none else '—' }}</div>
+        <div class="dash-kpi__label">Punteggio medio</div>
+      </div>
+      <div class="dash-kpi">
+        <div class="dash-kpi__value">{{ stats.candidati_top_count }}</div>
+        <div class="dash-kpi__label">Candidati top (&ge;7)</div>
+      </div>
+      <div class="dash-kpi">
+        <div class="dash-kpi__value">{{ stats.tot_ricerche }}</div>
+        <div class="dash-kpi__label">Ricerche lanciate</div>
+      </div>
+      <div class="dash-kpi">
+        <div class="dash-kpi__value">{{ stats.candidati_mese }}</div>
+        <div class="dash-kpi__label">Aggiunti questo mese</div>
+      </div>
     </div>
   </div>
 
@@ -163,7 +192,7 @@ const STATO_COLORS = {
 };
 
 // ── Inizializza grafici ───────────────────────────────────────────────────────
-let chartStati, chartProfilo, chartGestore;
+let chartStati;
 
 function buildCharts(stats) {
   const statiList = ["Da valutare", "Da contattare", "Richiesta Inviata", "Messaggio Inviato", "Chiuso"];
@@ -186,44 +215,6 @@ function buildCharts(stats) {
     options: { ...opts, cutout: "65%" }
   });
 
-  // Bar — profilo A vs B
-  if (chartProfilo) chartProfilo.destroy();
-  chartProfilo = new Chart(document.getElementById("chartProfilo"), {
-    type: "bar",
-    data: {
-      labels: ["Profilo A", "Profilo B"],
-      datasets: [{
-        data: [stats.per_profilo["A"] || 0, stats.per_profilo["B"] || 0],
-        backgroundColor: ["#2E7CF6", "#8B5CF6"],
-        borderRadius: 6,
-      }]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
-    }
-  });
-
-  // Bar — gestore
-  if (chartGestore) chartGestore.destroy();
-  const gestori = Object.keys(stats.per_gestore);
-  chartGestore = new Chart(document.getElementById("chartGestore"), {
-    type: "bar",
-    data: {
-      labels: gestori.map(g => g === "Non assegnato" ? "Non ass." : g.split(" ")[1] || g),
-      datasets: [{
-        data: gestori.map(g => stats.per_gestore[g] || 0),
-        backgroundColor: ["#2E7CF6", "#22C55E", "#DDE3EE"],
-        borderRadius: 6,
-      }]
-    },
-    options: {
-      responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { display: false } },
-      scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } }
-    }
-  });
 }
 
 // ── Aggiorna cards ─────────────────────────────────────────────────────────────
@@ -510,11 +501,23 @@ function cambiaStatoDash(sel) {
 /* ── Chart cards ────────────────────────────────────────── */
 .dash-chart-card .card-header { border-bottom: 1px solid var(--grigio-bordo); }
 .dash-chart-wrap { padding: 1rem; position: relative; }
-.dash-profilo-legend {
-  display: flex; gap: 1.5rem; padding: .5rem 1.2rem .9rem;
-  font-size: .85rem; color: var(--grigio-testo);
+
+/* ── KPI grid ──────────────────────────────────────────── */
+.dash-kpi-grid {
+  display: grid; grid-template-columns: 1fr 1fr;
+  gap: 1rem; padding: 1.2rem;
 }
-.dash-profilo-legend b { color: var(--testo); }
+.dash-kpi {
+  text-align: center; padding: .75rem;
+  background: #f8fafc; border-radius: 8px;
+}
+.dash-kpi__value {
+  font-size: 1.8rem; font-weight: 700;
+  color: var(--blu-scuro); line-height: 1;
+}
+.dash-kpi__label {
+  font-size: .78rem; color: var(--grigio-testo); margin-top: .35rem;
+}
 
 /* ── Responsive ─────────────────────────────────────────── */
 @media (max-width: 700px) {

@@ -91,6 +91,25 @@ def _get_stats():
 
     tot_ricerche = db.execute("SELECT COUNT(*) AS n FROM ricerche_automatiche WHERE organizzazione_id = ?", (org_id,)).fetchone()["n"] or 0
 
+    top_candidati = [dict(r) for r in db.execute(
+        """SELECT id, nome, cognome, ruolo_attuale, azienda, stato, punteggio,
+                  profilo_linkedin
+           FROM candidati
+           WHERE punteggio IS NOT NULL AND organizzazione_id = ?
+           ORDER BY punteggio DESC LIMIT 5""",
+        (org_id,)
+    ).fetchall()]
+
+    candidati_top_count = db.execute(
+        "SELECT COUNT(*) AS n FROM candidati WHERE punteggio >= 7 AND organizzazione_id = ?",
+        (org_id,)
+    ).fetchone()["n"] or 0
+
+    candidati_mese = db.execute(
+        "SELECT COUNT(*) AS n FROM candidati WHERE data_inserimento >= DATE_TRUNC('month', NOW()) AND organizzazione_id = ?",
+        (org_id,)
+    ).fetchone()["n"] or 0
+
     db.close()
 
     return {
@@ -103,6 +122,9 @@ def _get_stats():
         "ultimi_candidati": ultimi,
         "prossimi_appuntamenti": prossimi,
         "ultime_ricerche": ultime_ricerche,
+        "top_candidati": top_candidati,
+        "candidati_top_count": candidati_top_count,
+        "candidati_mese": candidati_mese,
         "aggiornato_alle": datetime.now().strftime("%H:%M:%S"),
     }
 
