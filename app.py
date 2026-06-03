@@ -5,7 +5,7 @@ Entry point dell'app, registra tutti i blueprint e inizializza il database.
 
 import os
 import time
-from flask import Flask, redirect, url_for, request, jsonify
+from flask import Flask, redirect, url_for, request, jsonify, render_template, session
 from ai_helpers import test_connessione_api, CLAUDE_MODEL
 from dotenv import load_dotenv
 from database import init_db, get_db
@@ -89,10 +89,21 @@ def add_cache_headers(response):
 
 
 @app.route("/")
-@login_required
 def home():
-    """Reindirizza alla dashboard principale."""
-    return redirect(url_for("dashboard.index"))
+    """Landing page pubblica, o redirect a dashboard se loggato."""
+    if session.get("user_id"):
+        return redirect(url_for("dashboard.index"))
+    return render_template("landing.html")
+
+
+@app.route("/privacy")
+def privacy():
+    return render_template("privacy.html")
+
+
+@app.route("/terms")
+def terms():
+    return render_template("terms.html")
 
 
 # Inizializza il database all'avvio dell'app
