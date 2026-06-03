@@ -11,6 +11,7 @@ import os
 import re
 import time
 import logging
+from decimal import Decimal
 import psycopg2
 import psycopg2.extras
 from datetime import datetime, date
@@ -53,6 +54,8 @@ def _serialize_row(row):
             result[k] = v.strftime("%Y-%m-%d %H:%M:%S")
         elif isinstance(v, date):
             result[k] = v.strftime("%Y-%m-%d")
+        elif isinstance(v, Decimal):
+            result[k] = float(v)
         else:
             result[k] = v
     return result
